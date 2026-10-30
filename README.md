@@ -10,8 +10,8 @@
 </p>
 
 <p align="center">
-  <b>Status: panel web berjalan.</b> Binary <code>runova</code> membawa API JSON dan panel web tertanam: login, daftar aplikasi, wizard deploy, detail aplikasi, database, aktivitas, pengguna, dan server.
-  Installer dan rilis belum ada. <a href="preview-dashboard.html">Preview tampilan</a> (buka file itu di browser) adalah acuan desainnya.
+  <b>Status: lengkap secara fungsi, belum diuji di server sungguhan.</b> Binary <code>runova</code> membawa API JSON dan panel web tertanam; installer, skrip rilis, dan uji end-to-end lokal sudah ada. Installer <b>belum diuji di Ubuntu Server 26.04 sungguhan</b> (lihat <a href="#status-pengujian">Status pengujian</a>).
+  <a href="preview-dashboard.html">Preview tampilan</a> (buka file itu di browser) adalah acuan desainnya.
 </p>
 
 <p align="center">
@@ -76,6 +76,66 @@ Runova memasang **PostgreSQL 18** di server yang sama (paket resmi Ubuntu 26.04)
 - Hanya pemilik yang bisa masuk ke database-nya. Akun pengguna tidak punya hak superuser, tidak bisa membuat role, dan dibatasi jumlah koneksinya.
 - Saat deploy, pengguna memilih database untuk aplikasinya (atau tanpa database). Runova mengisi `DATABASE_URL`, `SPRING_DATASOURCE_URL`, dan `PGHOST`/`PGPORT`/`PGUSER`/`PGPASSWORD`/`PGDATABASE` otomatis. Beberapa aplikasi milik pengguna yang sama boleh memakai database yang sama.
 - Host, port, nama database, dan password bisa dilihat dan disalin di halaman **Database**, misalnya untuk dibuka dari DBeaver dari jaringan yang diizinkan admin.
+
+## Instalasi
+
+Syarat: Ubuntu Server 26.04 LTS (amd64) polos, akses root, dan koneksi internet ke repositori apt Ubuntu. Installer memasang `docker.io`, `caddy`, `postgresql-18`, `ufw`, `jq`, dan `curl` dari apt resmi Ubuntu; tidak ada repositori pihak ketiga.
+
+```bash
+# unduh arsip rilis dan SHA256SUMS dari halaman rilis, lalu:
+sha256sum -c SHA256SUMS --ignore-missing
+tar xzf runova-0.1.0-linux-amd64.tar.gz
+cd runova-0.1.0-linux-amd64
+sudo ./install.sh --domain panel.contoh.id    # panel di https://panel.contoh.id
+sudo ./install.sh --port 8443                 # atau panel di https://<IP server>:8443
+```
+
+Opsi: `--domain <host>` atau `--port <n>` (tidak bisa bersamaan; tanpa keduanya bawaannya `--port 8443`), `--public-ip <ip>` (disimpan ke setelan; untuk server di belakang NAT), `--yes` (tanpa tanya, untuk instalasi tanpa terminal). Untuk `--domain`, arahkan DNS domain itu ke server dulu.
+
+Di akhir, installer mencetak alamat panel, username `admin`, dan password acak **sekali saja**. Bila hilang: `sudo -u runova env RUNOVA_DATA=/var/lib/runova runova admin reset-password admin`.
+
+Yang dilakukan installer: membuat user `runova` (grup `docker`), kunci enkripsi, `/etc/runova/runova.env`, dan unit systemd `runova.service`; menulis `/etc/caddy/Caddyfile` berisi `{ admin localhost:2019 }` dan menjalankan Caddy dengan `--resume`; membuat role PostgreSQL `runova` dan mengaktifkan `listen_addresses = '*'` serta `include_dir pg_hba.d`; menggabungkan `default-address-pools` (`172.31.0.0/16`) ke `/etc/docker/daemon.json`; membuka port 22 (atau port `sshd` sebenarnya), 80, 443, 20000-20999, 5432, dan port panel di `ufw`, lalu mengaktifkannya bila belum aktif.
+
+Bila `/etc/caddy/Caddyfile` sudah Anda ubah (bukan bawaan paket), installer berhenti sebelum mengubah apa pun. Pindahkan situs Anda dulu, atau jalankan ulang dengan `--yes` untuk menyalin cadangan ke `Caddyfile.runova-backup` lalu menggantinya.
+
+`runova check` memeriksa Docker, `docker-init`, Caddy, PostgreSQL, kunci, dan izin folder (keluar 1 bila ada yang gagal); installer menjalankannya di akhir.
+
+## Pembaruan
+
+Ekstrak rilis baru dan jalankan perintah yang sama lagi:
+
+```bash
+sudo ./install.sh
+```
+
+Installer idempoten: langkah yang sudah beres dilewati, binary dan unit diganti, layanan di-restart. Data, kunci, admin, aplikasi, dan alamat panel tidak disentuh, dan tidak ada password baru dicetak. Beri `--domain`/`--port` hanya bila ingin mengganti alamat panel.
+
+## Uninstall manual
+
+Belum ada perintah uninstall. Langkah manual (menghapus **semua** data Runova, termasuk aplikasi dan database pengguna):
+
+```bash
+sudo systemctl disable --now runova
+# hapus container aplikasi dan jaringan penggunanya
+sudo docker ps -aq --filter label=runova.app | xargs -r sudo docker rm -f
+sudo docker network ls --format '{{.Name}}' | grep -E '^runova-u[0-9]+$' | xargs -r sudo docker network rm
+# hapus database dan role PostgreSQL (satu role per pengguna Runova, ditambah role runova)
+sudo -u postgres psql -c '\l'    # catat database <pengguna>_<nama>, lalu DROP DATABASE satu per satu
+sudo -u postgres psql -c '\du'   # DROP ROLE untuk tiap pengguna Runova, lalu DROP ROLE runova
+sudo rm -f /etc/postgresql/18/main/conf.d/runova.conf
+sudo rm -rf /etc/postgresql/18/main/pg_hba.d      # dan hapus baris "include_dir pg_hba.d" dari pg_hba.conf
+sudo systemctl reload postgresql
+sudo rm -f /etc/systemd/system/runova.service /etc/systemd/system/caddy.service.d/runova.conf /usr/local/bin/runova
+sudo rm -rf /etc/runova /var/lib/runova
+sudo systemctl daemon-reload
+sudo userdel runova
+```
+
+Caddyfile (`{ admin localhost:2019 }`), `daemon.json`, aturan `ufw`, dan paket apt tidak dikembalikan; sesuaikan sendiri bila perlu.
+
+## Status pengujian
+
+Jujur: **installer belum diuji di Ubuntu Server 26.04 sungguhan.** Yang sudah dijalankan: uji `bats` untuk logika installer (dengan stub), `shellcheck` bersih, nama paket dan berkas `docker-init`, `Caddyfile`, dan template PostgreSQL dicocokkan dengan paket Ubuntu 26.04 di container, dan alur produk diuji end-to-end di mesin pengembangan (Docker nyata, `caddy:2`, `postgres:18`). Belum teruji: apt/systemd/ufw nyata, reboot server (unit memakai `Wants`/`After`, `Restart=on-failure`, dan Caddy `--resume`), aturan Docker-vs-ufw, dan sertifikat domain sungguhan. Coba di server percobaan dulu.
 
 ## Menghubungkan domain
 
@@ -161,6 +221,24 @@ node web/test/smoke-lifecycle.mjs # terminal, dialog, dan soket tidak melewati u
 ```
 
 Ikon dibuat dari `web/icons.txt` dengan `go run ./cmd/genicons` (hasilnya di-commit).
+
+### Uji installer dan uji end-to-end lokal
+
+Tanpa VM. Installer diuji dengan `bats` dan `shellcheck` di Docker (stub menggantikan `apt-get`, `systemctl`, `ufw`, dan lainnya, jadi tidak menyentuh mesin ini):
+
+```bash
+test/bats.sh
+```
+
+Alur produk (login, pengguna, database, deploy binary dan JAR, deploy tanpa jeda, isolasi antar-pengguna, restart Runova, backup dan restore) diuji dengan Runova dari source, Docker nyata, `caddy:2` dan `postgres:18` di container, tanpa root:
+
+```bash
+test/e2e/stack.sh up && test/e2e/run.sh && test/e2e/stack.sh down
+```
+
+`stack.sh up` memakai port panel 8443, Caddy admin 2019, PostgreSQL 55432, dan port akses IP 20000+ di mesin ini, jadi hentikan layanan lain yang memakainya. `RUNOVA_DEV_CHMOD=1` membuat folder data aplikasi 0777 sebagai pengganti `chown` (proses dev bukan root); ditolak untuk `RUNOVA_DATA=/var/lib/runova`. Tanpa `down`, sisa container `runova-*` dan folder `test/e2e/.cache/state` tertinggal; `run.sh` butuh stack yang baru dinaikkan. Pertama kali, `run.sh` membangun JAR Spring Boot contoh di `maven:3-eclipse-temurin-21` dan menyimpannya di `test/e2e/.cache/`.
+
+Membuat arsip rilis: `scripts/release.sh 0.1.0` menghasilkan `dist/runova-0.1.0-linux-amd64.tar.gz` dan `dist/SHA256SUMS`.
 
 ## Kredit
 
