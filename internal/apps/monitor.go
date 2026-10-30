@@ -132,6 +132,16 @@ func (s *Service) handleEvent(ctx context.Context, ev docker.Event) {
 	if s.consumeStop(app.ID) {
 		return
 	}
+	// The restart policy is on-failure: a clean exit is not restarted, and
+	// the app would stay "running" with a dead container.
+	if ev.Labels["exitCode"] == "0" {
+		if err := s.Store.SetAppStatus(ctx, app.ID, store.AppStopped); err != nil {
+			slog.Error("monitor: set app stopped", "app", app.Name, "err", err)
+			return
+		}
+		s.notify(ctx, app, store.LevelInfo, fmt.Sprintf("Aplikasi %s berhenti sendiri (exit 0)", app.Name), "")
+		return
+	}
 	if s.countCrash(app.ID) < crashLimit {
 		return
 	}

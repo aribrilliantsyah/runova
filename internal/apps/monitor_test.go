@@ -324,3 +324,28 @@ func TestReconcileInterruptedDeploy(t *testing.T) {
 		t.Errorf("host ports still held: %v", used)
 	}
 }
+
+// restart policy on-failure never restarts a container that exited 0, so the
+// panel must not keep showing the app as running.
+func TestCleanExitMarksStopped(t *testing.T) {
+	ctx := context.Background()
+	e := newTestEnv(t)
+	u := e.addUser("budi", store.RoleUser, roomyQuota)
+	app, _ := deployFirst(t, e, u, "billing")
+	cid := activeContainer(t, e, app)
+	startMonitor(t, e)
+
+	labels := map[string]string{"runova.app": strconv.FormatInt(app.ID, 10), "exitCode": "0"}
+	e.engine.Emit(docker.Event{ContainerID: cid, Action: "die", Labels: labels, Time: e.clock.Now()})
+	waitFor(t, "app stopped", func() bool {
+		got, _ := e.store.App(ctx, app.ID)
+		return got.Status == store.AppStopped
+	})
+	if n := len(e.engine.CallsWithPrefix("stop ")); n != 0 {
+		t.Errorf("stop calls = %d; a clean exit needs no stop", n)
+	}
+	list, _ := e.store.Notifications(ctx, u.ID, 10)
+	if len(list) != 1 || list[0].Level != store.LevelInfo {
+		t.Fatalf("notifications = %+v, want one info notice", list)
+	}
+}
