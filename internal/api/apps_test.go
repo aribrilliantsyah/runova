@@ -215,6 +215,8 @@ func TestCreateAppFlow(t *testing.T) {
 		var ds []store.Deployment
 		r.into(t, &ds)
 		if len(ds) == 2 && ds[0].Status == store.DeployActive {
+			// Active is committed before the deploy releases the app's lock.
+			e.deploys.Wait()
 			if r := c.do("POST", appPath(id, "/deployments/"+strconv.FormatInt(ds[1].ID, 10)+"/rollback"), nil); r.status != 202 {
 				t.Fatalf("rollback = %d %s", r.status, r.body)
 			}
