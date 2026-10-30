@@ -87,8 +87,9 @@ func newTestEnv(t *testing.T) *testEnv {
 		},
 		Dial: func(_, addr string, _ time.Duration) (net.Conn, error) {
 			e.mu.Lock()
-			ok := e.healthy(addr)
+			probe := e.healthy
 			e.mu.Unlock()
+			ok := probe(addr)
 			if !ok {
 				return nil, &net.OpError{Op: "dial", Err: os.ErrDeadlineExceeded}
 			}
