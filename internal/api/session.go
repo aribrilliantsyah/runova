@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"net/http"
@@ -27,6 +28,17 @@ func clip(s string, n int) string {
 	return s
 }
 
+// reserveAttempt reports whether (name, ip) is locked out and, if not, counts
+// one failure up front. The mutex makes check-and-count atomic across requests.
+func (s *server) reserveAttempt(ctx context.Context, name, ip string) (until time.Time, locked bool, err error) {
+	s.loginMu.Lock()
+	defer s.loginMu.Unlock()
+	if until, locked, err = s.throttle.Locked(ctx, name, ip); err != nil || locked {
+		return until, locked, err
+	}
+	return time.Time{}, false, s.throttle.Fail(ctx, name, ip)
+}
+
 func (s *server) login(w http.ResponseWriter, r *http.Request) {
 	var body struct{ Username, Password string }
 	if !decode(w, r, &body) {
@@ -36,7 +48,10 @@ func (s *server) login(w http.ResponseWriter, r *http.Request) {
 	name := clip(body.Username, maxLoginName)
 	ip := auth.ClientIP(r)
 
-	until, locked, err := s.throttle.Locked(ctx, name, ip)
+	// Check and count the attempt before the slow password check, atomically:
+	// otherwise parallel guesses all pass the lock check, and a client that drops
+	// the connection mid-bcrypt would never be counted. A success resets the count.
+	until, locked, err := s.reserveAttempt(ctx, name, ip)
 	if err != nil {
 		serverError(w, r, err)
 		return
@@ -57,10 +72,6 @@ func (s *server) login(w http.ResponseWriter, r *http.Request) {
 		hash = dummyHash()
 	}
 	if err != nil || !auth.CheckPassword(hash, body.Password) {
-		if err := s.throttle.Fail(ctx, name, ip); err != nil {
-			serverError(w, r, err)
-			return
-		}
 		s.record(r, store.User{ID: u.ID, Username: name}, store.ActLoginFailed, "", "")
 		writeError(w, http.StatusUnauthorized, "Username atau password salah")
 		return

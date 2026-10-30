@@ -10,6 +10,7 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"runova/internal/auth"
@@ -26,6 +27,7 @@ type server struct {
 	now      func() time.Time
 	sessions *auth.Sessions
 	throttle *auth.Throttle
+	loginMu  sync.Mutex // serializes the login throttle's check-and-count
 }
 
 // New builds the API handler; every route lives under /api.
