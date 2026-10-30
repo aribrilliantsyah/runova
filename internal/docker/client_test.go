@@ -497,3 +497,31 @@ func TestExecCloseHangsUpShell(t *testing.T) {
 		t.Fatal("server never saw the session end")
 	}
 }
+
+// A program that prints without ever ending a line must not make ReadLogs
+// buffer its whole output.
+func TestLogsDemuxCapsLineLength(t *testing.T) {
+	const total = 10 * maxLine
+	var stream []byte
+	stream = append(stream, frame(1, "2026-10-30T09:00:00Z ")...)
+	for range total / (maxLine / 4) {
+		stream = append(stream, frame(1, strings.Repeat("x", maxLine/4))...)
+	}
+	stream = append(stream, frame(1, "\nnext\n")...)
+
+	var got []LogLine
+	err := ReadLogs(bytes.NewReader(stream), func(l LogLine) error { got = append(got, l); return nil })
+	if err != nil {
+		t.Fatal(err)
+	}
+	sum := 0
+	for _, l := range got[:len(got)-1] {
+		if len(l.Text) > maxLine {
+			t.Fatalf("delivered a %d byte line, limit %d", len(l.Text), maxLine)
+		}
+		sum += len(l.Text)
+	}
+	if sum != total || got[len(got)-1].Text != "next" || len(got) < 10 {
+		t.Errorf("got %d lines, %d bytes before 'next' (want %d bytes, last %q)", len(got), sum, total, got[len(got)-1].Text)
+	}
+}

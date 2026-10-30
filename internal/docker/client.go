@@ -358,7 +358,11 @@ func (c *Client) Logs(ctx context.Context, id string, tail int, follow bool) (io
 	return resp.Body, nil
 }
 
-const maxFrame = 1 << 20
+const (
+	maxFrame = 1 << 20
+	// maxLine is the longest log line delivered whole; longer ones are cut into pieces of this size.
+	maxLine = 64 << 10
+)
 
 // ReadLogs demultiplexes a Docker log stream (8-byte frame headers) into
 // lines, calling fn for each in order. A line without a trailing newline at
@@ -396,6 +400,14 @@ func ReadLogs(r io.Reader, fn func(LogLine) error) error {
 				return err
 			}
 			buf = buf[i+1:]
+		}
+		// A program that never prints a newline would otherwise grow buf
+		// without bound (and each frame re-copies it).
+		for len(buf) > maxLine {
+			if err := emit(stream, buf[:maxLine]); err != nil {
+				return err
+			}
+			buf = buf[maxLine:]
 		}
 		partial[stream] = append([]byte(nil), buf...)
 	}
