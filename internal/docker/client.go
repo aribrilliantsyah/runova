@@ -212,7 +212,30 @@ type (
 	}
 )
 
+// ErrRootUser is returned by CreateContainer for a spec that would run the
+// container as root; every Runova container runs as its owner's UID.
+var ErrRootUser = errors.New("docker: container user must be a non-root uid")
+
+// nonRootUser reports whether user is "uid" or "uid:gid" with nonzero numeric
+// ids. Names ("root", "") are refused: the image decides what they mean.
+func nonRootUser(user string) bool {
+	uid, gid, hasGID := strings.Cut(user, ":")
+	ids := []string{uid}
+	if hasGID {
+		ids = append(ids, gid)
+	}
+	for _, id := range ids {
+		if n, err := strconv.ParseUint(id, 10, 32); err != nil || n == 0 {
+			return false
+		}
+	}
+	return true
+}
+
 func (c *Client) CreateContainer(ctx context.Context, name string, spec ContainerSpec) (string, error) {
+	if !nonRootUser(spec.User) {
+		return "", ErrRootUser
+	}
 	cfg := map[string]any{
 		"Image":  spec.Image,
 		"Cmd":    spec.Cmd,

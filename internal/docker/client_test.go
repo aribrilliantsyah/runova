@@ -525,3 +525,16 @@ func TestLogsDemuxCapsLineLength(t *testing.T) {
 		t.Errorf("got %d lines, %d bytes before 'next' (want %d bytes, last %q)", len(got), sum, total, got[len(got)-1].Text)
 	}
 }
+
+// Every container must run as its owner's UID; a spec that would fall back to
+// the image's user (often root) is refused before anything is sent.
+func TestCreateContainerRefusesRoot(t *testing.T) {
+	c := serve(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		t.Errorf("request sent for a root spec: %s", r.URL.Path)
+	}))
+	for _, user := range []string{"", "root", "0", "0:0", "100001:0", "100001:root", "100001:", ":100001", "-1"} {
+		if _, err := c.CreateContainer(context.Background(), "x", ContainerSpec{Image: "img", User: user}); !errors.Is(err, ErrRootUser) {
+			t.Errorf("User %q: err = %v, want ErrRootUser", user, err)
+		}
+	}
+}
