@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"maps"
 	"net/netip"
 	"slices"
 )
@@ -81,7 +80,11 @@ func (s *Store) SetSettings(ctx context.Context, v Settings) error {
 	if err := v.Validate(); err != nil {
 		return err
 	}
-	v.Runtimes = maps.Clone(v.Runtimes)
+	rt := make(map[string]bool, len(RuntimeIDs))
+	for _, id := range RuntimeIDs {
+		rt[id] = v.Runtimes[id]
+	}
+	v.Runtimes = rt
 	raw, err := json.Marshal(v)
 	if err != nil {
 		return fmt.Errorf("encode settings: %w", err)
