@@ -63,9 +63,19 @@ Setelah jalan, halaman aplikasi berisi kontrol (unggah versi baru, restart, stop
 
 - **Admin** mendaftarkan pengguna. Tidak ada pendaftaran mandiri.
 - Setiap pengguna hanya melihat dan mengelola aplikasinya sendiri.
-- Admin menentukan kuota per pengguna: **jumlah aplikasi, memori, dan CPU**. Pengguna membagi kuota itu ke aplikasinya.
+- Admin menentukan kuota per pengguna: **jumlah aplikasi, memori, CPU, dan jumlah database** (bawaan 3). Pengguna membagi kuota itu ke aplikasinya.
 - Storage tidak dikuota, supaya Runova jalan di Ubuntu Server apa adanya tanpa menyiapkan disk khusus. Admin tetap bisa memantau pemakaian disk server di halaman Server.
 - Aplikasi yang memakai memori melebihi batasnya dihentikan dan dijalankan ulang oleh Docker tanpa mengganggu aplikasi lain.
+
+## Database
+
+Runova memasang **PostgreSQL 18** di server yang sama (paket resmi Ubuntu 26.04).
+
+- Setiap pengguna mendapat **satu akun PostgreSQL** saat didaftarkan admin, misalnya `budi`.
+- Pengguna membuat database sendiri di panel, dengan nama berawalan akunnya (`budi_billing`, `budi_auth`). Jumlahnya dibatasi admin, bawaannya **3 per pengguna**.
+- Hanya pemilik yang bisa masuk ke database-nya. Akun pengguna tidak punya hak superuser, tidak bisa membuat role, dan dibatasi jumlah koneksinya.
+- Saat deploy, pengguna memilih database untuk aplikasinya (atau tanpa database). Runova mengisi `DATABASE_URL`, `SPRING_DATASOURCE_URL`, dan `PGHOST`/`PGPORT`/`PGUSER`/`PGPASSWORD`/`PGDATABASE` otomatis. Beberapa aplikasi milik pengguna yang sama boleh memakai database yang sama.
+- Host, port, nama database, dan password bisa dilihat dan disalin di halaman **Database**, misalnya untuk dibuka dari DBeaver dari jaringan yang diizinkan admin.
 
 ## Menghubungkan domain
 
@@ -100,6 +110,7 @@ Untuk DNS langsung dan proxy, sertifikat diterbitkan Caddy di server. Untuk Tunn
 | Runova | Satu binary Go, frontend tertanam |
 | Isolasi aplikasi | Docker, satu container per aplikasi, batas memori dan CPU |
 | Domain & HTTPS | Caddy, sertifikat otomatis |
+| Database | PostgreSQL 18 dari apt Ubuntu, service systemd di host. Hanya menerima koneksi dari jaringan Docker dan jaringan yang diizinkan admin |
 | Akses IP | Nyala: port terbuka di `0.0.0.0`. Mati: hanya `127.0.0.1`, cuma Caddy yang bisa mengakses |
 | Port aplikasi | Dialokasikan otomatis dari rentang yang diatur admin |
 | IP publik server | Diisi admin sekali. Kalau kosong, panduan domain hanya menawarkan Cloudflare Tunnel |

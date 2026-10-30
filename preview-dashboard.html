@@ -290,7 +290,7 @@ input.f::placeholder{color:var(--faint)}
 .qcell .t b{color:var(--text);font-weight:500}
 
 /* Server */
-.g3{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
+.g3{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:12px}
 .svc{display:flex;align-items:center;gap:10px}
 .svc .ic{width:32px;height:32px;border-radius:8px;border:1px solid var(--line);display:grid;place-items:center;background:var(--raised)}
 .svc .ic .lucide{width:16px;height:16px;color:var(--muted)}
@@ -490,6 +490,41 @@ input.f::placeholder{color:var(--faint)}
   .kvbox div{grid-template-columns:minmax(0,1fr) auto;row-gap:2px}
   .kvbox div span{grid-column:1 / -1;font-size:11.5px}
 }
+
+/* Databases */
+.dbgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:10px}
+.dbcard{border:1px solid var(--line);border-radius:var(--r);background:var(--panel);display:grid}
+.dbcard .h{display:flex;align-items:center;gap:10px;padding:12px 13px}
+.dbcard .h b{font-weight:600;font-size:13.5px}
+.dbcard .h .sub{font-size:12px;color:var(--muted)}
+.dbcard .h .r{margin-left:auto;display:flex}
+.dbcard .dot{display:inline-block}
+.dbcard .used{display:flex;flex-wrap:wrap;gap:6px;padding:0 13px 12px}
+.dbcard .ft{display:flex;align-items:center;gap:8px;padding:9px 13px;border-top:1px solid var(--line);font-size:12px;color:var(--muted)}
+.dbcard .ft .r{margin-left:auto;display:flex;gap:4px}
+.pglogo{width:28px;height:28px;border-radius:7px;border:1px solid var(--line);display:grid;place-items:center;background:var(--raised);flex:none}
+.pglogo img{width:18px;height:18px}
+.dbnew{border:1.5px dashed var(--line-2);border-radius:var(--r);display:grid;place-items:center;gap:6px;padding:18px;text-align:center;color:var(--muted);background:var(--raised);cursor:pointer;min-height:124px}
+.dbnew:hover{border-color:var(--faint);color:var(--text)}
+.dbnew[aria-disabled=true]{cursor:not-allowed;opacity:.7}
+.dbnew svg.lucide{width:18px;height:18px}
+.dbnew b{font-weight:500;color:var(--text)}
+.conn{margin-top:14px}
+.conn .kvbox div{grid-template-columns:110px minmax(0,1fr) auto}
+.dbpick{display:grid;gap:6px}
+.dbopt{all:unset;display:flex;align-items:center;gap:10px;border:1px solid var(--line-2);border-radius:var(--r);padding:9px 11px;cursor:pointer;background:var(--panel)}
+.dbopt:hover{border-color:var(--faint)}
+.dbopt[aria-pressed=true]{border-color:var(--text);box-shadow:0 0 0 1px var(--text)}
+.dbopt[aria-disabled=true]{opacity:.5;cursor:not-allowed}
+.dbopt b{font-weight:500}
+.dbopt small{display:block;font-size:11.5px;color:var(--muted)}
+.dbopt .r{margin-left:auto}
+.autoenv{margin-top:8px;font-size:12px;color:var(--muted)}
+.autoenv code{font:500 11.5px var(--mono);color:var(--text)}
+@container rnv (max-width: 760px){
+  .dbgrid{grid-template-columns:1fr}
+  .conn .kvbox div{grid-template-columns:minmax(0,1fr) auto}
+}
 </style>
 </head>
 <body>
@@ -502,6 +537,7 @@ input.f::placeholder{color:var(--faint)}
     <div class="grp"><h6>Workspace</h6><nav class="nav">
       <button data-go="apps" aria-current="page"><i data-lucide="boxes"></i>Aplikasi<span class="n">6</span></button>
       <button data-go="new"><i data-lucide="cloud-upload"></i>Deploy baru</button>
+      <button data-go="db"><i data-lucide="database"></i>Database<span class="n">2/3</span></button>
       <button data-go="activity"><i data-lucide="history"></i>Aktivitas</button>
     </nav></div>
 
@@ -736,7 +772,7 @@ input.f::placeholder{color:var(--faint)}
             <h4>Deploy aplikasi</h4>
             <button data-step="1"><span class="no">1</span><b>Unggah</b><small>billing-api-2.4.1.jar</small></button>
             <button data-step="2"><span class="no">2</span><b>Runtime</b><small>Versi Java</small></button>
-            <button data-step="3"><span class="no">3</span><b>Environment</b><small>4 variabel terdeteksi</small></button>
+            <button data-step="3"><span class="no">3</span><b>Database & env</b><small>budi_billing · 4 variabel</small></button>
             <button data-step="4"><span class="no">4</span><b>Resource & akses</b><small>Memori, CPU, IP</small></button>
           </nav>
 
@@ -771,12 +807,21 @@ input.f::placeholder{color:var(--faint)}
             </div>
 
             <div class="wstep" data-w="3">
-              <h2>Environment</h2><p class="lead">Variabel yang dirujuk aplikasi. Nilai rahasia disimpan terenkripsi.</p>
+              <h2>Database & environment</h2><p class="lead">Pilih database PostgreSQL untuk aplikasi ini, lalu lengkapi variabel lain.</p>
+              <div class="fld"><label>Database</label>
+                <div class="dbpick" id="dbpick">
+                  <button class="dbopt" aria-pressed="false" data-db=""><span class="pglogo" style="width:24px;height:24px"><i data-lucide="ban" style="width:14px;height:14px;color:var(--faint)"></i></span><div><b>Tanpa database</b><small>Aplikasi tidak memakai PostgreSQL</small></div></button>
+                  <button class="dbopt" aria-pressed="true" data-db="budi_billing"><span class="pglogo" style="width:24px;height:24px"><img src="https://cdn.jsdelivr.net/gh/devicons/devicon@latest/icons/postgresql/postgresql-original.svg" alt="" style="width:15px;height:15px"></span><div><b class="mono">budi_billing</b><small>Dipakai juga oleh invoice-pdf</small></div></button>
+                  <button class="dbopt" aria-pressed="false" data-db="budi_auth"><span class="pglogo" style="width:24px;height:24px"><img src="https://cdn.jsdelivr.net/gh/devicons/devicon@latest/icons/postgresql/postgresql-original.svg" alt="" style="width:15px;height:15px"></span><div><b class="mono">budi_auth</b><small>Dipakai oleh auth-gateway</small></div></button>
+                  <button class="dbopt" aria-pressed="false" data-db="new"><span class="pglogo" style="width:24px;height:24px"><i data-lucide="plus" style="width:14px;height:14px;color:var(--muted)"></i></span><div><b>Buat database baru</b><small>Sisa 1 dari 3</small></div><span class="r mono faint">budi_billing_api</span></button>
+                </div>
+                <div class="autoenv" id="autoenv">Diisi otomatis: <code>DATABASE_URL</code> <code>SPRING_DATASOURCE_URL</code> <code>PGHOST</code> <code>PGPORT</code> <code>PGUSER</code> <code>PGPASSWORD</code> <code>PGDATABASE</code></div>
+              </div>
               <section class="card">
                 <div class="envhead"><span>Terdeteksi dari application.properties</span><div class="r"><button class="btn sm ghost"><i data-lucide="file-code-2"></i>Tempel .env</button></div></div>
-                <div class="envrow"><span class="k">DB_URL</span><input class="f mono" value="jdbc:postgresql://10.20.1.30:5432/billing" aria-label="DB_URL"><span></span></div>
-                <div class="envrow"><span class="k">DB_USER</span><input class="f mono" value="billing_app" aria-label="DB_USER"><span></span></div>
-                <div class="envrow"><span class="k">DB_PASSWORD <i data-lucide="key-round" style="width:12px;height:12px;color:var(--faint)"></i></span><input class="f mono" type="password" value="rahasia-sekali" aria-label="DB_PASSWORD"><button class="ibtn" aria-label="Lihat"><i data-lucide="eye"></i></button></div>
+                <div class="envrow"><span class="k">DB_URL</span><input class="f mono" value="${SPRING_DATASOURCE_URL}" aria-label="DB_URL"><span></span></div>
+                <div class="envrow"><span class="k">DB_USER</span><input class="f mono" value="${PGUSER}" aria-label="DB_USER"><span></span></div>
+                <div class="envrow"><span class="k">DB_PASSWORD <i data-lucide="key-round" style="width:12px;height:12px;color:var(--faint)"></i></span><input class="f mono" value="${PGPASSWORD}" aria-label="DB_PASSWORD"><button class="ibtn" aria-label="Lihat"><i data-lucide="eye"></i></button></div>
                 <div class="envrow"><span class="k">JWT_SECRET <span class="req">*</span></span><input class="f mono" placeholder="Wajib diisi" aria-label="JWT_SECRET" id="jwt"><button class="ibtn" aria-label="Buat nilai acak" title="Buat nilai acak" id="genjwt"><i data-lucide="rotate-cw"></i></button></div>
               </section>
               <button class="btn sm" style="margin-top:10px"><i data-lucide="plus"></i>Tambah variabel</button>
@@ -866,6 +911,7 @@ input.f::placeholder{color:var(--faint)}
             <div class="srow"><span>Artefak</span><b class="mono">billing-api-2.4.1.jar</b></div>
             <div class="srow"><span>Runtime</span><b id="sumrt">Java 21</b></div>
             <div class="srow"><span>Port</span><b class="mono">8080 → otomatis</b></div>
+            <div class="srow"><span>Database</span><b class="mono" id="sumdb">budi_billing</b></div>
             <div class="srow"><span>Resource</span><b>512 MB · 0,5 core</b></div>
             <div class="sep"></div>
             <div class="todo">
@@ -876,6 +922,42 @@ input.f::placeholder{color:var(--faint)}
             </div>
             <button class="btn pri" id="deploy" style="justify-content:center;height:34px" disabled><i data-lucide="rocket"></i>Deploy</button>
           </aside>
+        </div>
+      </section>
+
+      <!-- Databases -->
+      <section class="view" id="v-db">
+        <div class="ph">
+          <div><h1>Database</h1><p>PostgreSQL 18 di server ini. Semua database milikmu memakai satu akun: <span class="mono">budi</span>.</p></div>
+          <div class="acts"><span class="chip">2 dari 3 database</span><button class="btn pri" id="dbNewBtn"><i data-lucide="plus"></i>Buat database</button></div>
+        </div>
+        <div class="pb">
+          <div class="dbgrid">
+            <article class="dbcard">
+              <div class="h"><span class="pglogo"><img src="https://cdn.jsdelivr.net/gh/devicons/devicon@latest/icons/postgresql/postgresql-original.svg" alt=""></span><div><b class="mono">budi_billing</b><div class="sub">48 MB · dibuat 12 Okt</div></div><span class="r"><span class="dot ok" title="Aktif"></span></span></div>
+              <div class="used"><span class="chip"><i data-lucide="boxes"></i>billing-api</span><span class="chip"><i data-lucide="boxes"></i>invoice-pdf</span></div>
+              <div class="ft"><span>4 koneksi aktif</span><div class="r"><button class="btn sm ghost" data-conn="budi_billing"><i data-lucide="plug"></i>Koneksi</button><button class="btn sm ghost" aria-label="Hapus budi_billing"><i data-lucide="trash-2"></i></button></div></div>
+            </article>
+            <article class="dbcard">
+              <div class="h"><span class="pglogo"><img src="https://cdn.jsdelivr.net/gh/devicons/devicon@latest/icons/postgresql/postgresql-original.svg" alt=""></span><div><b class="mono">budi_auth</b><div class="sub">6 MB · dibuat 2 Sep</div></div><span class="r"><span class="dot ok" title="Aktif"></span></span></div>
+              <div class="used"><span class="chip"><i data-lucide="boxes"></i>auth-gateway</span></div>
+              <div class="ft"><span>1 koneksi aktif</span><div class="r"><button class="btn sm ghost" data-conn="budi_auth"><i data-lucide="plug"></i>Koneksi</button><button class="btn sm ghost" aria-label="Hapus budi_auth"><i data-lucide="trash-2"></i></button></div></div>
+            </article>
+            <button class="dbnew" id="dbNewCard"><i data-lucide="plus"></i><b>Buat database</b><span>Sisa 1 dari batas 3 yang diatur admin</span></button>
+          </div>
+
+          <section class="card conn" id="connCard"><header><h3><span class="mono" id="connName">budi_billing</span> · koneksi</h3><div class="r"><button class="btn sm ghost"><i data-lucide="key-round"></i>Ganti password</button></div></header>
+            <div class="bd">
+              <div class="kvbox">
+                <div><span>Host</span><code>10.20.1.15</code><button class="cp" aria-label="Salin"><i data-lucide="copy"></i></button></div>
+                <div><span>Port</span><code>5432</code><button class="cp" aria-label="Salin"><i data-lucide="copy"></i></button></div>
+                <div><span>Database</span><code id="connDb">budi_billing</code><button class="cp" aria-label="Salin"><i data-lucide="copy"></i></button></div>
+                <div><span>User</span><code>budi</code><button class="cp" aria-label="Salin"><i data-lucide="copy"></i></button></div>
+                <div><span>Password</span><code class="faint">••••••••••••••••</code><button class="cp" aria-label="Salin"><i data-lucide="copy"></i></button></div>
+              </div>
+              <div class="gnote"><i data-lucide="info"></i><span>Aplikasi tidak perlu mengisi ini. Runova memberi <b class="mono">DATABASE_URL</b> dan <b class="mono">PG*</b> otomatis ke aplikasi yang memakai database ini. Koneksi dari luar server (misalnya DBeaver) hanya bisa dari jaringan yang diizinkan admin.</span></div>
+            </div>
+          </section>
         </div>
       </section>
 
@@ -890,7 +972,7 @@ input.f::placeholder{color:var(--faint)}
         <div class="ph"><div><h1>Pengguna</h1><p>Admin mendaftarkan pengguna dan menentukan kuota. Pengguna membagi kuota ke aplikasinya sendiri.</p></div>
           <div class="acts"><button class="btn pri"><i data-lucide="user-plus"></i>Tambah pengguna</button></div></div>
         <div class="pb"><section class="card"><table class="t">
-          <thead><tr><th>Pengguna</th><th>Peran</th><th>Aplikasi</th><th>Memori</th><th>CPU</th><th class="num"></th></tr></thead>
+          <thead><tr><th>Pengguna</th><th>Peran</th><th>Aplikasi</th><th>Memori</th><th>CPU</th><th>Database</th><th class="num"></th></tr></thead>
           <tbody id="userrows"></tbody></table></section></div>
       </section>
 
@@ -907,8 +989,13 @@ input.f::placeholder{color:var(--faint)}
           <div class="g3">
             <section class="card"><div class="bd svc"><span class="ic"><i data-lucide="container"></i></span><div><b>Docker</b><div class="muted mono">28.4.0</div></div><span class="chip ok">Aktif</span></div></section>
             <section class="card"><div class="bd svc"><span class="ic"><i data-lucide="lock"></i></span><div><b>Caddy</b><div class="muted mono">2.10.2 · 9 domain</div></div><span class="chip ok">Aktif</span></div></section>
-            <section class="card"><div class="bd svc"><span class="ic"><i data-lucide="network"></i></span><div><b>Port aplikasi</b><div class="muted mono">20000 sampai 20999</div></div><span class="chip">13 terpakai</span></div></section>
+            <section class="card"><div class="bd svc"><span class="ic"><i data-lucide="database"></i></span><div><b>PostgreSQL</b><div class="muted mono">18.6 · 9 database</div></div><span class="chip ok">Aktif</span></div></section>
           </div>
+          <section class="card" style="margin-top:12px"><header><div><h3>Bawaan untuk pengguna baru</h3><p>Bisa diubah per pengguna lewat tombol Kuota.</p></div></header>
+            <div class="bd"><dl class="kv">
+              <dt>Aplikasi</dt><dd>3</dd><dt>Memori</dt><dd>1 GB</dd><dt>CPU</dt><dd>1 core</dd>
+              <dt>Database</dt><dd>3 database PostgreSQL, maksimal 20 koneksi per pengguna</dd>
+            </dl></div></section>
           <section class="card" style="margin-top:12px"><header><div><h3>Yang boleh dijalankan</h3><p>Matikan untuk melarang deploy baru dengan runtime itu.</p></div></header>
             <div class="bd"><div class="rt" id="rtlist"></div></div></section>
         </div>
@@ -916,7 +1003,7 @@ input.f::placeholder{color:var(--faint)}
     </main>
     <nav class="bnav" aria-label="Navigasi bawah">
       <button data-go="apps"><i data-lucide="boxes"></i><span>Aplikasi</span></button>
-      <button data-go="activity"><i data-lucide="history"></i><span>Aktivitas</span></button>
+      <button data-go="db"><i data-lucide="database"></i><span>Database</span></button>
       <button data-go="new" class="fab"><span class="fabic"><i data-lucide="plus"></i></span><span>Deploy</span></button>
       <button data-go="users"><i data-lucide="users"></i><span>Pengguna</span></button>
       <button data-more><i data-lucide="ellipsis"></i><span>Lainnya</span></button>
@@ -941,6 +1028,7 @@ input.f::placeholder{color:var(--faint)}
         </div>
       </div>
       <div class="mlist">
+        <button data-go="activity"><i data-lucide="history"></i>Aktivitas<i data-lucide="chevron-right"></i></button>
         <button data-go="server"><i data-lucide="server"></i>Server<i data-lucide="chevron-right"></i></button>
         <button id="themeBtn2"><i data-lucide="moon"></i>Mode gelap<span class="sw" id="themeSw" aria-hidden="true"></span></button>
         <button><i data-lucide="settings"></i>Pengaturan akun<i data-lucide="chevron-right"></i></button>
@@ -1021,14 +1109,14 @@ $("#actrows").innerHTML = [
 
 const q = ([u, m], unit) => { const p = Math.round((u / m) * 100); return `<div class="qcell"><div class="t"><b>${String(u).replace(".", ",")}</b><span>${String(m).replace(".", ",")} ${unit}</span></div><div class="bar"><i class="${p >= 85 ? "hi" : ""}" style="width:${p}%"></i></div></div>`; };
 $("#userrows").innerHTML = [
-  ["Budi Santoso", "budi", "Admin", [6, 8], [1.75, 3], [2.25, 3]],
-  ["Sari Wulandari", "sari", "Pengguna", [3, 5], [1.5, 2], [1, 2]],
-  ["Tim Data", "data", "Pengguna", [2, 4], [3.5, 4], [2, 2]],
-  ["Rina Kusuma", "rina", "Pengguna", [0, 3], [0, 1], [0, 1]],
-].map(([n, u, r, a, m, c]) => `<tr>
+  ["Budi Santoso", "budi", "Admin", [6, 8], [1.75, 3], [2.25, 3], [2, 3]],
+  ["Sari Wulandari", "sari", "Pengguna", [3, 5], [1.5, 2], [1, 2], [3, 3]],
+  ["Tim Data", "data", "Pengguna", [2, 4], [3.5, 4], [2, 2], [4, 6]],
+  ["Rina Kusuma", "rina", "Pengguna", [0, 3], [0, 1], [0, 1], [0, 3]],
+].map(([n, u, r, a, m, c, d]) => `<tr>
   <td><div class="ucell"><span class="av">${n.split(" ").map((x) => x[0]).join("").slice(0, 2)}</span><div><b>${n}</b><small>${u}</small></div></div></td>
   <td>${r === "Admin" ? '<span class="chip info">Admin</span>' : '<span class="chip">Pengguna</span>'}</td>
-  <td>${q(a, "")}</td><td>${q(m, "GB")}</td><td>${q(c, "core")}</td>
+  <td>${q(a, "")}</td><td>${q(m, "GB")}</td><td>${q(c, "core")}</td><td>${q(d, "")}</td>
   <td class="num" style="white-space:nowrap"><button class="btn sm"><i data-lucide="sliders-horizontal"></i>Kuota</button> <button class="ibtn" aria-label="Lainnya" style="display:inline-grid;vertical-align:middle"><i data-lucide="ellipsis"></i></button></td></tr>`).join("");
 
 $("#rtlist").innerHTML = [
@@ -1042,14 +1130,14 @@ const CRUMBS = {
   apps: [["boxes", "Aplikasi"]],
   app: [["boxes", "Aplikasi"], ["img:" + LOGO.java, "billing-api", true]],
   new: [["boxes", "Aplikasi"], ["cloud-upload", "Deploy baru"]],
-  activity: [["history", "Aktivitas"]], users: [["users", "Pengguna"]], server: [["server", "Server"]],
+  activity: [["history", "Aktivitas"]], users: [["users", "Pengguna"]], server: [["server", "Server"]], db: [["database", "Database"]],
 };
-const NAVKEY = { apps: "apps", app: "apps", new: "new", activity: "activity", users: "users", server: "server" };
+const NAVKEY = { apps: "apps", app: "apps", new: "new", activity: "activity", users: "users", server: "server", db: "db" };
 function go(v) {
   document.querySelectorAll(".view").forEach((x) => x.classList.toggle("on", x.id === "v-" + v));
   $("#app").dataset.view = v;
   $("#msheet").hidden = true;
-  const bcur = v === "server" ? "more" : NAVKEY[v];
+  const bcur = v === "server" || v === "activity" ? "more" : NAVKEY[v];
   document.querySelectorAll(".bnav button").forEach((b) => ((b.dataset.go || "more") === bcur ? b.setAttribute("aria-current", "page") : b.removeAttribute("aria-current")));
   document.querySelectorAll(".nav button").forEach((b) => (b.dataset.go === NAVKEY[v] ? b.setAttribute("aria-current", "page") : b.removeAttribute("aria-current")));
   $("#crumb").innerHTML = CRUMBS[v].map(([ic, t, dd], i) => `${i ? '<span class="sl">/</span>' : ""}<button>${ic.startsWith("img:") ? `<img src="${ic.slice(4)}" alt="">` : `<i data-lucide="${ic}"></i>`}${t}${dd ? '<i data-lucide="chevron-down"></i>' : ""}</button>`).join("");
@@ -1065,7 +1153,7 @@ function setStep(n) {
   step = Math.max(1, Math.min(4, n));
   $(".wiz").dataset.at = step;
   $("#mstepTxt").textContent = `Langkah ${step} dari 4`;
-  $("#mstepName").textContent = ["Unggah", "Runtime", "Environment", "Resource & akses"][step - 1];
+  $("#mstepName").textContent = ["Unggah", "Runtime", "Database & env", "Resource & akses"][step - 1];
   $("#mstepBar").style.width = step * 25 + "%";
   $("#mprevTxt").textContent = step === 1 ? "Batal" : "Kembali";
   $("#mnext").style.display = step === 4 ? "none" : "";
@@ -1129,6 +1217,15 @@ document.addEventListener("click", (e) => {
     setTimeout(() => { cp.innerHTML = '<i data-lucide="copy"></i>'; icons(); }, 1200);
     return;
   }
+  const dbo = t.closest("#dbpick .dbopt"); if (dbo && dbo.getAttribute("aria-disabled") !== "true") {
+    document.querySelectorAll("#dbpick .dbopt").forEach((b) => b.setAttribute("aria-pressed", b === dbo));
+    const v = dbo.dataset.db;
+    $("#sumdb").textContent = v === "" ? "–" : v === "new" ? "budi_billing_api (baru)" : v;
+    $("#autoenv").style.visibility = v === "" ? "hidden" : "visible";
+    return;
+  }
+  const cn = t.closest("[data-conn]"); if (cn) { $("#connName").textContent = cn.dataset.conn; $("#connDb").textContent = cn.dataset.conn; $("#connCard").scrollIntoView({ block: "nearest", behavior: "smooth" }); return; }
+  if (t.closest("#dbNewBtn") || t.closest("#dbNewCard")) { createDb(); return; }
   const sg = t.closest(".seg button"); if (sg) sg.parentElement.querySelectorAll("button").forEach((b) => b.setAttribute("aria-pressed", b === sg));
 });
 // Second-level public suffixes common in Indonesia and elsewhere (preview only; the real
@@ -1152,6 +1249,28 @@ document.addEventListener("input", (e) => {
     if (ok) fillGuide($("#wguide [data-guide]"), host);
   }
 });
+let dbCount = 2;
+function createDb() {
+  if (dbCount >= 3) return;
+  const name = prompt("Nama database (huruf kecil, angka, garis bawah). Akan diberi awalan budi_", "reports");
+  if (!name) return;
+  dbCount++;
+  const card = document.createElement("article");
+  card.className = "dbcard";
+  card.innerHTML = `<div class="h"><span class="pglogo"><img src="https://cdn.jsdelivr.net/gh/devicons/devicon@latest/icons/postgresql/postgresql-original.svg" alt=""></span><div><b class="mono">budi_${name.replace(/[^a-z0-9_]/g, "")}</b><div class="sub">0 MB · baru saja</div></div><span class="r"><span class="dot ok"></span></span></div><div class="used"><span class="muted" style="font-size:12px">Belum dipakai aplikasi</span></div><div class="ft"><span>0 koneksi</span><div class="r"><button class="btn sm ghost" data-conn="budi_${name}"><i data-lucide="plug"></i>Koneksi</button></div></div>`;
+  $("#dbNewCard").before(card);
+  $("#dbNewCard").setAttribute("aria-disabled", "true");
+  $("#dbNewCard").innerHTML = '<i data-lucide="lock"></i><b>Batas database tercapai</b><span>3 dari 3. Minta admin menaikkan batas, atau hapus database yang tidak dipakai.</span>';
+  $("#dbNewBtn").disabled = true;
+  document.querySelector("#v-db .acts .chip").textContent = "3 dari 3 database";
+  document.querySelector('.nav [data-go=db] .n').textContent = "3/3";
+  const opt = document.querySelector('#dbpick [data-db=new]');
+  opt.setAttribute("aria-disabled", "true");
+  opt.setAttribute("aria-pressed", "false");
+  opt.querySelector("small").textContent = "Batas 3 database tercapai";
+  opt.querySelector(".r").textContent = "";
+  icons();
+}
 function toggleTheme() {
   const a = $("#app");
   a.dataset.theme = a.dataset.theme === "dark" ? "light" : "dark";
