@@ -332,11 +332,12 @@ func (s *Store) Deployments(ctx context.Context, appID int64) ([]Deployment, err
 
 // DeploymentPatch lists the changeable deployment fields; nil means unchanged.
 type DeploymentPatch struct {
-	Status      *DeployStatus
-	HostPort    *int
-	ContainerID *string
-	FailureLog  *string
-	FinishedAt  *int64
+	Status       *DeployStatus
+	HostPort     *int
+	ContainerID  *string
+	FailureLog   *string
+	FinishedAt   *int64
+	ArtifactPath *string
 }
 
 func (s *Store) UpdateDeployment(ctx context.Context, id int64, p DeploymentPatch) error {
@@ -360,13 +361,24 @@ func (s *Store) UpdateDeployment(ctx context.Context, id int64, p DeploymentPatc
 		if p.FinishedAt != nil {
 			d.FinishedAt = *p.FinishedAt
 		}
+		if p.ArtifactPath != nil {
+			d.ArtifactPath = *p.ArtifactPath
+		}
 		if _, err := tx.ExecContext(ctx,
-			`UPDATE deployments SET status=?, host_port=?, container_id=?, failure_log=?, finished_at=? WHERE id=?`,
-			d.Status, d.HostPort, d.ContainerID, d.FailureLog, d.FinishedAt, id); err != nil {
+			`UPDATE deployments SET status=?, host_port=?, container_id=?, failure_log=?, finished_at=?, artifact_path=? WHERE id=?`,
+			d.Status, d.HostPort, d.ContainerID, d.FailureLog, d.FinishedAt, d.ArtifactPath, id); err != nil {
 			return fmt.Errorf("update deployment: %w", err)
 		}
 		return nil
 	})
+}
+
+// DeleteDeployment removes one deployment row.
+func (s *Store) DeleteDeployment(ctx context.Context, id int64) error {
+	if _, err := s.db.ExecContext(ctx, `DELETE FROM deployments WHERE id = ?`, id); err != nil {
+		return fmt.Errorf("delete deployment: %w", err)
+	}
+	return nil
 }
 
 // ActivateDeployment marks the deployment active, every other active one of
