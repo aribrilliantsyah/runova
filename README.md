@@ -101,7 +101,6 @@ Untuk DNS langsung dan proxy, sertifikat diterbitkan Caddy di server. Untuk Tunn
 | Domain & HTTPS | Caddy, sertifikat otomatis |
 | Akses IP | Nyala: port terbuka di `0.0.0.0`. Mati: hanya `127.0.0.1`, cuma Caddy yang bisa mengakses |
 | Port aplikasi | Dialokasikan otomatis dari rentang yang diatur admin |
-
 | IP publik server | Diisi admin sekali. Kalau kosong, panduan domain hanya menawarkan Cloudflare Tunnel |
 
 Rancangan rinci (arsitektur, cara membaca artefak, Docker, Caddy, keamanan antar-pengguna, pengujian) akan ditulis di `docs/spec.md` sebelum implementasi dimulai.
