@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+# Stand-in for the runova binary: logs the call and fakes the state it would keep.
+echo "runova $*" >> "$CALLS"
+case "$1 $2" in
+"version ") echo "runova 0.0.0-test" ;;
+"keygen ") head -c 32 /dev/urandom > "$RUNOVA_SECRET_KEY" ;;
+"admin exists") [[ -e "$RUNOVA_DATA/.admin" ]] ;;
+"admin create") touch "$RUNOVA_DATA/.admin"; printf 'Username: %s\nPassword: Pw12345678abcdefghjk\n' "$3" ;;
+esac
+exit

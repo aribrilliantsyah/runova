@@ -1,0 +1,6 @@
+#!/usr/bin/env bash
+echo "apt-get $*" >> "$CALLS"
+if [[ $1 == install ]]; then
+  shift
+  for a in "$@"; do [[ $a == -* ]] || { mkdir -p "$RUNOVA_ROOT/.installed"; touch "$RUNOVA_ROOT/.installed/$a"; }; done
+fi

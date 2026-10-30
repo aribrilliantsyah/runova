@@ -34,11 +34,11 @@ func randomPassword() (string, error) {
 }
 
 func admin(cfg config.Config, args []string, stdout, stderr io.Writer) int {
-	if len(args) != 2 || (args[0] != "create" && args[0] != "reset-password") {
+	exists := len(args) == 1 && args[0] == "exists"
+	if !exists && (len(args) != 2 || (args[0] != "create" && args[0] != "reset-password")) {
 		fmt.Fprint(stderr, usage)
 		return 2
 	}
-	sub, username := args[0], args[1]
 
 	st, err := store.Open(cfg.DBPath())
 	if err != nil {
@@ -48,10 +48,30 @@ func admin(cfg config.Config, args []string, stdout, stderr io.Writer) int {
 	defer st.Close()
 
 	ctx := context.Background()
-	if sub == "create" {
-		return createAdmin(ctx, st, username, stdout, stderr)
+	switch {
+	case exists:
+		return adminExists(ctx, st, stderr)
+	case args[0] == "create":
+		return createAdmin(ctx, st, args[1], stdout, stderr)
+	default:
+		return resetPassword(ctx, st, args[1], stdout, stderr)
 	}
-	return resetPassword(ctx, st, username, stdout, stderr)
+}
+
+// adminExists exits 0 when at least one admin exists and 1 when none does, so
+// the installer creates the first admin only once.
+func adminExists(ctx context.Context, st *store.Store, stderr io.Writer) int {
+	users, err := st.Users(ctx)
+	if err != nil {
+		fmt.Fprintf(stderr, "Gagal membaca pengguna: %v\n", err)
+		return 2
+	}
+	for _, u := range users {
+		if u.IsAdmin() {
+			return 0
+		}
+	}
+	return 1
 }
 
 func createAdmin(ctx context.Context, st *store.Store, username string, stdout, stderr io.Writer) int {

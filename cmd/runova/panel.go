@@ -5,6 +5,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"net/netip"
 	"strconv"
 
 	"runova/internal/caddy"
@@ -12,10 +13,10 @@ import (
 	"runova/internal/store"
 )
 
-// panel handles `runova panel set --domain <d> | --port <p>`. It writes the
+// panel handles `runova panel set [--domain <d> | --port <p>] [--public-ip <ip>]`. It writes the
 // panel address straight to the database, for the installer to use before the
 // service runs. The panel is reached by domain or by IP:port, so each option
-// replaces the other.
+// replaces the other; --public-ip leaves the address alone.
 func panel(cfg config.Config, args []string, stdout, stderr io.Writer) int {
 	if len(args) == 0 || args[0] != "set" {
 		fmt.Fprint(stderr, usage)
@@ -25,16 +26,18 @@ func panel(cfg config.Config, args []string, stdout, stderr io.Writer) int {
 	fs.SetOutput(io.Discard)
 	domain := fs.String("domain", "", "")
 	port := fs.String("port", "", "")
+	publicIP := fs.String("public-ip", "", "")
 	if err := fs.Parse(args[1:]); err != nil || fs.NArg() != 0 {
 		fmt.Fprint(stderr, usage)
 		return 2
 	}
-	var domainSet, portSet bool
+	var domainSet, portSet, ipSet bool
 	fs.Visit(func(f *flag.Flag) {
 		domainSet = domainSet || f.Name == "domain"
 		portSet = portSet || f.Name == "port"
+		ipSet = ipSet || f.Name == "public-ip"
 	})
-	if domainSet == portSet {
+	if (domainSet && portSet) || !(domainSet || portSet || ipSet) {
 		fmt.Fprint(stderr, usage)
 		return 2
 	}
@@ -52,7 +55,17 @@ func panel(cfg config.Config, args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintf(stderr, "Gagal membaca setelan: %v\n", err)
 		return 1
 	}
-	settings.PanelDomain, settings.PanelPort = "", 0
+	if domainSet || portSet {
+		settings.PanelDomain, settings.PanelPort = "", 0
+	}
+	if ipSet {
+		addr, err := netip.ParseAddr(*publicIP)
+		if err != nil {
+			fmt.Fprintf(stderr, "IP publik tidak valid: %q\n", *publicIP)
+			return 1
+		}
+		settings.PublicIP = addr.String()
+	}
 	if domainSet {
 		host, err := caddy.ValidateDomain(*domain)
 		if err != nil {
@@ -69,7 +82,7 @@ func panel(cfg config.Config, args []string, stdout, stderr io.Writer) int {
 			return 1
 		}
 		settings.PanelDomain = host
-	} else {
+	} else if portSet {
 		n, err := strconv.Atoi(*port)
 		if err != nil {
 			fmt.Fprintf(stderr, "Port tidak valid: %q\n", *port)
@@ -81,10 +94,13 @@ func panel(cfg config.Config, args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintln(stderr, err)
 		return 1
 	}
-	if domainSet {
+	switch {
+	case domainSet:
 		fmt.Fprintf(stdout, "Alamat panel: https://%s\n", settings.PanelDomain)
-	} else {
+	case portSet:
 		fmt.Fprintf(stdout, "Alamat panel: https://<IP server>:%d\n", settings.PanelPort)
+	default:
+		fmt.Fprintf(stdout, "IP publik: %s\n", settings.PublicIP)
 	}
 	return 0
 }

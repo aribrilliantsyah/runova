@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -138,6 +139,131 @@ func TestUsage(t *testing.T) {
 	for _, args := range [][]string{nil, {"x"}} {
 		if r := runIn(t, nil, args...); r.code != 2 || !strings.Contains(r.stderr, "runova") {
 			t.Errorf("run(%v) = %+v", args, r)
+		}
+	}
+}
+
+func TestVersion(t *testing.T) {
+	if r := runIn(t, nil, "version"); r.code != 0 || r.stdout != "runova dev\n" {
+		t.Fatalf("version = %+v, want %q", r, "runova dev\n")
+	}
+}
+
+func TestCheckReportsFailures(t *testing.T) {
+	env := map[string]string{
+		"RUNOVA_DATA":        t.TempDir(),
+		"RUNOVA_SECRET_KEY":  filepath.Join(t.TempDir(), "missing.key"),
+		"RUNOVA_DOCKER_HOST": "unix:///nonexistent/docker.sock",
+		"RUNOVA_CADDY_ADMIN": "http://127.0.0.1:1",
+		"RUNOVA_PG_DSN":      "host=127.0.0.1 port=1 user=runova dbname=postgres",
+	}
+	r := runIn(t, env, "check")
+	if r.code != 1 {
+		t.Fatalf("exit code = %d, want 1; stdout %q", r.code, r.stdout)
+	}
+	for _, name := range []string{"docker", "caddy", "postgres", "secret"} {
+		if !regexp.MustCompile(`(?m)^fail ` + name + `: \S`).MatchString(r.stdout) {
+			t.Errorf("no failure line for %s in %q", name, r.stdout)
+		}
+	}
+	if !strings.Contains(r.stdout, "ok data ") {
+		t.Errorf("a usable data directory should be reported ok: %q", r.stdout)
+	}
+}
+
+func TestCheckPassesWithFakeBackends(t *testing.T) {
+	key := filepath.Join(t.TempDir(), "secret.key")
+	env := map[string]string{"RUNOVA_DATA": t.TempDir(), "RUNOVA_SECRET_KEY": key, "RUNOVA_FAKE_BACKENDS": "1"}
+	if r := runIn(t, env, "keygen"); r.code != 0 {
+		t.Fatalf("keygen: %+v", r)
+	}
+	r := runIn(t, env, "check")
+	if r.code != 0 || strings.Contains(r.stdout, "fail ") || !strings.Contains(r.stdout, "ok docker") {
+		t.Fatalf("check = %+v", r)
+	}
+}
+
+func TestAdminExists(t *testing.T) {
+	env := map[string]string{"RUNOVA_DATA": t.TempDir()}
+	if r := runIn(t, env, "admin", "exists"); r.code != 1 || r.stdout != "" {
+		t.Fatalf("before any admin: %+v", r)
+	}
+	if r := runIn(t, env, "admin", "create", "admin"); r.code != 0 {
+		t.Fatalf("create: %+v", r)
+	}
+	if r := runIn(t, env, "admin", "exists"); r.code != 0 {
+		t.Fatalf("after create: %+v", r)
+	}
+}
+
+func TestAdminExistsIgnoresPlainUsers(t *testing.T) {
+	env := map[string]string{"RUNOVA_DATA": t.TempDir()}
+	cfg := config.Load(func(k string) string { return env[k] })
+	st, err := store.Open(cfg.DBPath())
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = st.CreateUser(context.Background(), store.NewUser{Username: "budi", PasswordHash: "x", Role: store.RoleUser, Quota: store.Quota{Apps: 1}}, 1)
+	st.Close()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if r := runIn(t, env, "admin", "exists"); r.code != 1 {
+		t.Fatalf("a plain user is not an admin: %+v", r)
+	}
+}
+
+func TestServiceUnit(t *testing.T) {
+	raw, err := os.ReadFile("../../packaging/runova.service")
+	if err != nil {
+		t.Fatal(err)
+	}
+	lines := map[string]bool{}
+	for _, l := range strings.Split(string(raw), "\n") {
+		lines[strings.TrimSpace(l)] = true
+	}
+	caps := "CAP_CHOWN CAP_FOWNER CAP_DAC_OVERRIDE"
+	for _, want := range []string{
+		"User=runova", "Group=runova", "SupplementaryGroups=docker",
+		"EnvironmentFile=/etc/runova/runova.env", "ExecStart=/usr/local/bin/runova serve",
+		"AmbientCapabilities=" + caps, "CapabilityBoundingSet=" + caps,
+		"NoNewPrivileges=yes", "ProtectSystem=strict", "ProtectHome=yes", "PrivateTmp=yes",
+		"ReadWritePaths=/var/lib/runova /etc/postgresql/18/main/pg_hba.d",
+		"Restart=on-failure",
+		"After=docker.service caddy.service postgresql.service",
+		"Wants=docker.service caddy.service postgresql.service",
+		"WantedBy=multi-user.target",
+	} {
+		if !lines[want] {
+			t.Errorf("runova.service lacks %q", want)
+		}
+	}
+}
+
+func TestDevChmodRefusedOnProductionData(t *testing.T) {
+	if err := checkDevMode(config.Config{DataDir: "/var/lib/runova", DevChmod: true}); !errors.Is(err, errDevOnProduction) {
+		t.Errorf("err = %v, want errDevOnProduction", err)
+	}
+	if err := checkDevMode(config.Config{DataDir: t.TempDir(), DevChmod: true}); err != nil {
+		t.Errorf("a temporary directory must be allowed: %v", err)
+	}
+}
+
+func TestDevChmodFlagFromEnv(t *testing.T) {
+	get := func(v string) func(string) string {
+		return func(k string) string {
+			if k == "RUNOVA_DEV_CHMOD" {
+				return v
+			}
+			return ""
+		}
+	}
+	if !config.Load(get("1")).DevChmod {
+		t.Error("RUNOVA_DEV_CHMOD=1 should enable the flag")
+	}
+	for _, v := range []string{"", "0", "true"} {
+		if config.Load(get(v)).DevChmod {
+			t.Errorf("RUNOVA_DEV_CHMOD=%q must not enable the flag", v)
 		}
 	}
 }

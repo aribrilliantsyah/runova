@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+case "$*" in
+  *Status*) [[ -e "$RUNOVA_ROOT/.installed/${@: -1}" ]] && printf "install ok installed" || printf "unknown ok not-installed"; exit 0 ;;
+  *Conffiles*) printf " /etc/caddy/Caddyfile %s\n" "$(md5sum "$FIXTURES/Caddyfile.pristine" | cut -d" " -f1)" ;;
+esac

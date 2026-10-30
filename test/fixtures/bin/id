@@ -1,0 +1,3 @@
+#!/usr/bin/env bash
+[[ -e "$RUNOVA_ROOT/.user" ]] && { echo "runova docker"; exit 0; }
+exit 1

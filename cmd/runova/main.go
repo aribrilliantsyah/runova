@@ -27,12 +27,19 @@ import (
 const usage = `Penggunaan: runova <perintah>
 
   serve                          jalankan panel
+  version                        cetak versi
+  check                          periksa Docker, Caddy, PostgreSQL, kunci, dan izin folder
   admin create <username>        buat admin dengan password acak
   admin reset-password <user>    buat password acak baru
+  admin exists                   keluar 0 bila sudah ada admin, 1 bila belum
   keygen                         buat kunci enkripsi rahasia
   panel set --domain <domain>    alamat panel di domain (HTTPS otomatis)
   panel set --port <port>        alamat panel di IP:port (HTTPS)
+  panel set --public-ip <ip>     IP publik server (boleh bersama --domain/--port)
 `
+
+// version is set at build time with -ldflags "-X main.version=<versi>".
+var version = "dev"
 
 func main() {
 	os.Exit(run(os.Args[1:], os.Getenv, os.Stdout, os.Stderr))
@@ -47,6 +54,11 @@ func run(args []string, getenv func(string) string, stdout, stderr io.Writer) in
 	switch args[0] {
 	case "serve":
 		return serve(cfg, stderr)
+	case "version":
+		fmt.Fprintf(stdout, "runova %s\n", version)
+		return 0
+	case "check":
+		return check(cfg, stdout)
 	case "admin":
 		return admin(cfg, args[1:], stdout, stderr)
 	case "panel":
@@ -68,7 +80,7 @@ func serve(cfg config.Config, stderr io.Writer) int {
 	log := slog.New(slog.NewTextHandler(stderr, nil))
 	slog.SetDefault(log)
 
-	if err := checkFakeBackends(cfg); err != nil {
+	if err := errors.Join(checkFakeBackends(cfg), checkDevMode(cfg)); err != nil {
 		fmt.Fprintln(stderr, err)
 		return 1
 	}
@@ -108,6 +120,9 @@ func serve(cfg config.Config, stderr io.Writer) int {
 		OnError: func(err error) { log.Error("sync caddy", "err", err) },
 	}
 	svc := &apps.Service{Store: st, Engine: engine, Box: box, DataDir: cfg.DataDir, Caddy: syncer}
+	if cfg.DevChmod {
+		devChmod(svc)
+	}
 
 	var (
 		dbSvc   *dbs.Service

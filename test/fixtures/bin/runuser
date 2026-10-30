@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+# runuser -u USER -- CMD...: log the user, then run CMD as the current user.
+echo "runuser $2" >> "$CALLS"
+shift 3
+exec "$@"

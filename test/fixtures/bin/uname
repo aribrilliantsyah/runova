@@ -1,0 +1,3 @@
+#!/usr/bin/env bash
+[[ $1 == -m ]] && { echo "${UNAME_M:-x86_64}"; exit 0; }
+exec /bin/uname "$@"
