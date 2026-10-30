@@ -207,3 +207,122 @@ func TestIntegrationDeployRollbackDelete(t *testing.T) {
 		t.Errorf("data dir survived Delete: %v", err)
 	}
 }
+
+// Docker's port proxy accepts connections on the published port even when
+// nothing listens in the container. An app whose internal_port is wrong must
+// end up failed, not running.
+func TestIntegrationWrongInternalPortFails(t *testing.T) {
+	if os.Getenv("RUNOVA_DOCKER_TEST") != "1" {
+		t.Skip("set RUNOVA_DOCKER_TEST=1 to run against a real Docker Engine")
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+	defer cancel()
+	engine := docker.New(os.Getenv("RUNOVA_DOCKER_HOST"))
+	if err := engine.Ping(ctx); err != nil {
+		t.Fatal(err)
+	}
+
+	dir := t.TempDir()
+	st, err := store.Open(filepath.Join(dir, "runova.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+	keyPath := filepath.Join(dir, "key")
+	if err := secret.GenerateKey(keyPath); err != nil {
+		t.Fatal(err)
+	}
+	box, err := secret.LoadKey(keyPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	user, err := st.CreateUser(ctx, store.NewUser{Username: "itestport", PasswordHash: "x", Role: store.RoleUser,
+		Quota: store.Quota{Apps: 3, MemoryMB: 1024, CPUMilli: 1000, Databases: 3, PGConnections: 20}}, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		bg := context.Background()
+		list, _ := engine.ListContainers(bg, map[string]string{"runova.user": "itestport"})
+		for _, c := range list {
+			engine.RemoveContainer(bg, c.ID)
+		}
+		engine.RemoveNetwork(bg, fmt.Sprintf("runova-u%d", user.ID))
+	})
+	svc := &apps.Service{
+		Store: st, Engine: engine, Box: box, DataDir: filepath.Join(dir, "root"),
+		Chown:         func(path string, _ int) error { return os.Chmod(path, 0o777) },
+		HealthTimeout: 5 * time.Second,
+	}
+
+	bin := buildStaticBinary(t, integrationSrc)
+	raw, err := os.ReadFile(bin)
+	if err != nil {
+		t.Fatal(err)
+	}
+	upload := func() string {
+		id := strconv.FormatInt(time.Now().UnixNano(), 36)
+		udir := filepath.Join(dir, "tmp", id)
+		if err := os.MkdirAll(udir, 0o700); err != nil {
+			t.Fatal(err)
+		}
+		path := filepath.Join(udir, "hello")
+		if err := os.WriteFile(path, raw, 0o600); err != nil {
+			t.Fatal(err)
+		}
+		rep := artifact.Report{Kind: artifact.KindStatic, FileName: "hello", Size: int64(len(raw)), SHA256: "ab", Port: 8080,
+			PortSource: "bawaan", Env: []artifact.EnvVar{}, Problems: []string{}}
+		if err := st.CreateUpload(ctx, store.Upload{ID: id, UserID: user.ID, Dir: udir, ArtifactPath: path, Report: rep, CreatedAt: 1}); err != nil {
+			t.Fatal(err)
+		}
+		return id
+	}
+
+	// The binary reads PORT, which Runova sets to internal_port; run it on a
+	// port while the container publishes another, so nothing listens on the
+	// published one: the app listens on 9999 but internal_port says 8080.
+	wrong, err := os.ReadFile(buildStaticBinary(t, wrongPortSrc))
+	if err != nil {
+		t.Fatal(err)
+	}
+	raw = wrong
+
+	app, d, err := svc.Create(ctx, user, apps.CreateInput{UploadID: upload(), Name: "wrongport", MemoryMB: 128, CPUMilli: 100})
+	if err != nil {
+		t.Fatal(err)
+	}
+	start := time.Now()
+	err = svc.Deploy(ctx, user, app.ID, d.ID)
+	if err == nil {
+		t.Fatal("Deploy succeeded for an app that does not listen on its internal port")
+	}
+	t.Logf("deploy failed after %s: %v", time.Since(start).Round(time.Millisecond), err)
+
+	gotD, _ := st.Deployment(ctx, d.ID)
+	gotA, _ := st.App(ctx, app.ID)
+	if gotD.Status != store.DeployFailed || gotA.Status != store.AppFailed {
+		t.Fatalf("deployment = %s, app = %s; want failed, failed", gotD.Status, gotA.Status)
+	}
+	left, _ := engine.ListContainers(ctx, map[string]string{"runova.app": strconv.FormatInt(app.ID, 10)})
+	if len(left) != 0 {
+		t.Errorf("failed deploy left containers: %+v", left)
+	}
+}
+
+// wrongPortSrc listens on 9999 whatever PORT says.
+const wrongPortSrc = `package main
+
+import (
+	"fmt"
+	"net/http"
+	"os"
+)
+
+func main() {
+	fmt.Println("listening on 9999")
+	if err := http.ListenAndServe(":9999", nil); err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
+}
+`

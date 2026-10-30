@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -27,8 +28,9 @@ import (
 
 type appEnv struct {
 	*env
-	engine *dockertest.Fake
-	svc    *apps.Service
+	engine  *dockertest.Fake
+	svc     *apps.Service
+	deploys *sync.WaitGroup
 }
 
 // peerCloser closes both ends of a net.Pipe, so a probe that hangs up leaks nothing.
@@ -75,12 +77,13 @@ func newAppEnv(t *testing.T, idle time.Duration) *appEnv {
 		},
 		HealthTimeout: time.Second, HealthInterval: time.Millisecond, HealthReadWait: 2 * time.Millisecond, DrainDelay: time.Millisecond,
 	}
+	var deploys sync.WaitGroup
 	ctx, cancel := context.WithCancel(context.Background())
-	srv := httptest.NewServer(api.New(api.Config{Store: st, Now: clk.Now, DataDir: dataDir, Apps: svc, Context: ctx, TerminalIdle: idle}))
-	t.Cleanup(func() { cancel(); srv.Close(); st.Close() })
+	srv := httptest.NewServer(api.New(api.Config{Store: st, Now: clk.Now, DataDir: dataDir, Apps: svc, Context: ctx, TerminalIdle: idle, Deploys: &deploys}))
+	t.Cleanup(func() { cancel(); deploys.Wait(); srv.Close(); st.Close() })
 	e := &env{t: t, srv: srv, store: st, clock: clk, dataDir: dataDir}
 	e.addUser("admin", adminPassword, store.RoleAdmin)
-	return &appEnv{env: e, engine: engine, svc: svc}
+	return &appEnv{env: e, engine: engine, svc: svc, deploys: &deploys}
 }
 
 // createApp uploads a static binary and creates the app through the API.

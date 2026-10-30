@@ -85,6 +85,10 @@ func (s *Service) forget(appID int64) {
 // sixth die of an app's active container within ten minutes stops it, marks
 // the app failed and notifies its owner. Dies caused by stops Runova asked for
 // do not count. A broken event stream is reopened after ReconnectDelay.
+//
+// Every connection first subscribes and only then reconciles with Docker, so a
+// container that dies while the stream was down (or before the first
+// subscription) is seen by one of the two and never by neither.
 func (s *Service) Monitor(ctx context.Context) error {
 	delay := s.ReconnectDelay
 	if delay <= 0 {
@@ -92,6 +96,9 @@ func (s *Service) Monitor(ctx context.Context) error {
 	}
 	for {
 		events, errc := s.Engine.Events(ctx, map[string]string{appLabel: ""})
+		if err := s.Reconcile(ctx); err != nil && ctx.Err() == nil {
+			slog.Error("reconcile with docker", "err", err)
+		}
 		for ev := range events {
 			s.handleEvent(ctx, ev)
 		}
@@ -168,22 +175,40 @@ func (s *Service) giveUp(ctx context.Context, app store.App, d store.Deployment)
 	slog.Warn("app crash loop, stopped", "app", app.Name)
 }
 
-// Reconcile aligns the database with Docker after Runova (re)starts. It never
-// creates or starts containers: a running container stays as it is, a stopped
-// one is left to Docker's restart policy, and a missing one marks the app
-// failed. Containers of Runova that no active deployment owns are removed.
+// Reconcile aligns the database with Docker. It runs when Runova starts and
+// after every reconnect of Monitor, so it is safe next to deploys: an app
+// whose change lock is taken is skipped together with all of its containers.
+// It never creates or starts containers: a running container stays as it is,
+// a stopped one is left to Docker's restart policy, and a missing one marks
+// the app failed. Containers of Runova that no active deployment owns are
+// removed.
 func (s *Service) Reconcile(ctx context.Context) error {
-	list, err := s.Store.AllApps(ctx)
-	if err != nil {
-		return err
-	}
+	// Containers first: one created after this list belongs to an app whose
+	// row exists by then, so the apps read below always cover the list.
 	containers, err := s.Engine.ListContainers(ctx, map[string]string{appLabel: ""})
 	if err != nil {
 		return fmt.Errorf("list containers: %w", err)
 	}
+	list, err := s.Store.AllApps(ctx)
+	if err != nil {
+		return err
+	}
 	keep := map[string]bool{}
+	busy := map[string]bool{}
 	var errs []error
+	var unlocks []func()
+	defer func() {
+		for _, unlock := range unlocks {
+			unlock()
+		}
+	}()
 	for _, app := range list {
+		unlock, ok := s.lockApp(app.ID)
+		if !ok {
+			busy[strconv.FormatInt(app.ID, 10)] = true
+			continue
+		}
+		unlocks = append(unlocks, unlock)
 		id, err := s.reconcileApp(ctx, app)
 		if err != nil {
 			errs = append(errs, fmt.Errorf("reconcile %s: %w", app.Name, err))
@@ -198,7 +223,7 @@ func (s *Service) Reconcile(ctx context.Context) error {
 		return errors.Join(errs...)
 	}
 	for _, c := range containers {
-		if keep[c.ID] {
+		if keep[c.ID] || busy[c.Labels[appLabel]] {
 			continue
 		}
 		slog.Info("removing orphan container", "container", c.ID, "names", c.Names)

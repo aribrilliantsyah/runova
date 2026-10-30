@@ -32,6 +32,9 @@ type Config struct {
 	TerminalIdle time.Duration
 	// DBs serves the database endpoints and runs the user role hooks; without it neither exists.
 	DBs *dbs.Service
+	// Deploys, when set, tracks the background deploys the API starts so the
+	// caller can wait for them at shutdown.
+	Deploys *sync.WaitGroup
 }
 
 type server struct {
@@ -45,6 +48,8 @@ type server struct {
 	throttle *auth.Throttle
 	loginMu  sync.Mutex // serializes the login throttle's check-and-count
 	dbs      *dbs.Service
+	deploys  *sync.WaitGroup
+	stats    statsCache
 }
 
 // New builds the API handler; every route lives under /api.
@@ -56,10 +61,14 @@ func New(cfg Config) http.Handler {
 		dataDir:  cfg.DataDir,
 		apps:     cfg.Apps,
 		dbs:      cfg.DBs,
+		deploys:  cfg.Deploys,
 		ctx:      cfg.Context,
 		idle:     cfg.TerminalIdle,
 		sessions: &auth.Sessions{Store: cfg.Store, Now: cfg.Now},
 		throttle: &auth.Throttle{Store: cfg.Store, Now: cfg.Now},
+	}
+	if s.deploys == nil {
+		s.deploys = new(sync.WaitGroup)
 	}
 	if s.ctx == nil {
 		s.ctx = context.Background()

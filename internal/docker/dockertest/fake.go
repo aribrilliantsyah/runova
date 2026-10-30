@@ -405,6 +405,7 @@ func (f *Fake) Stats(_ context.Context, id string) (docker.Stats, error) {
 	if c == nil {
 		return docker.Stats{}, notFound(id)
 	}
+	f.record("stats %s", c.Name)
 	return f.StatsResult, nil
 }
 

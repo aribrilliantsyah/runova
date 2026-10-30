@@ -416,3 +416,47 @@ func TestCleanupExpiredUploads(t *testing.T) {
 		t.Errorf("fresh upload row: %v", err)
 	}
 }
+
+func TestSweepUploadDirs(t *testing.T) {
+	e := newEnv(t)
+	c := e.login("admin", adminPassword)
+	var owned uploadResult
+	c.upload("app.jar", jarWithMajor(t, 61)).into(t, &owned)
+
+	tmp := filepath.Join(e.dataDir, "tmp")
+	mkdir := func(name string, age time.Duration) {
+		t.Helper()
+		dir := filepath.Join(tmp, name)
+		if err := os.MkdirAll(dir, 0o700); err != nil {
+			t.Fatal(err)
+		}
+		when := e.clock.Now().Add(-age)
+		if err := os.Chtimes(dir, when, when); err != nil {
+			t.Fatal(err)
+		}
+	}
+	mkdir("orphan-old", 25*time.Hour)
+	mkdir("orphan-fresh", time.Hour)
+	// The owned folder is also old on disk: a row protects it, expiry is CleanupUploads' job.
+	old := e.clock.Now().Add(-48 * time.Hour)
+	if err := os.Chtimes(filepath.Join(tmp, owned.ID), old, old); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := api.SweepUploadDirs(e.dataDir, e.store, e.clock.Now()); err != nil {
+		t.Fatal(err)
+	}
+	got, want := e.tmpEntries(), []string{"orphan-fresh", owned.ID}
+	slices.Sort(got)
+	slices.Sort(want)
+	if !slices.Equal(got, want) {
+		t.Errorf("tmp = %v, want %v", got, want)
+	}
+}
+
+func TestSweepUploadDirsWithoutTmp(t *testing.T) {
+	e := newEnv(t)
+	if err := api.SweepUploadDirs(filepath.Join(e.dataDir, "nowhere"), e.store, e.clock.Now()); err != nil {
+		t.Fatalf("missing tmp dir: %v", err)
+	}
+}

@@ -487,9 +487,11 @@ func parseLogLine(stream byte, line []byte) LogLine {
 	return l
 }
 
-// Events streams container events whose labels match labelFilter. The event
-// channel is closed when the stream ends; the error channel then yields the
-// reason (nothing when the context was canceled or the daemon closed cleanly).
+// Events streams container events whose labels match labelFilter. The
+// subscription is in place when Events returns (the Engine has answered the
+// request), so nothing that happens afterwards is missed. The event channel
+// is closed when the stream ends; the error channel then yields the reason
+// (nothing when the context was canceled or the daemon closed cleanly).
 func (c *Client) Events(ctx context.Context, labelFilter map[string]string) (<-chan Event, <-chan error) {
 	events := make(chan Event)
 	errc := make(chan error, 1)
@@ -497,16 +499,18 @@ func (c *Client) Events(ctx context.Context, labelFilter map[string]string) (<-c
 	if len(labelFilter) > 0 {
 		filters["label"] = labelFilters(labelFilter)
 	}
+	resp, err := c.do(ctx, http.MethodGet, "/events", url.Values{"filters": {filterJSON(filters)}}, nil)
+	if err != nil {
+		if ctx.Err() == nil {
+			errc <- err
+		}
+		close(errc)
+		close(events)
+		return events, errc
+	}
 	go func() {
 		defer close(errc)
 		defer close(events)
-		resp, err := c.do(ctx, http.MethodGet, "/events", url.Values{"filters": {filterJSON(filters)}}, nil)
-		if err != nil {
-			if ctx.Err() == nil {
-				errc <- err
-			}
-			return
-		}
 		defer resp.Body.Close()
 		dec := json.NewDecoder(resp.Body)
 		for {

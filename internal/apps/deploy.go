@@ -31,15 +31,30 @@ func (s *Service) lockOrBusy(appID int64) (func(), error) {
 // then makes the deployment the active one. A failed deploy is recorded on
 // the deployment and the app; the error returned is the cause.
 func (s *Service) Deploy(ctx context.Context, user store.User, appID, deploymentID int64) error {
+	release, err := s.Lock(ctx, user, appID)
+	if err != nil {
+		return err
+	}
+	defer release()
+	return s.DeployLocked(ctx, user, appID, deploymentID)
+}
+
+// Lock takes the app's change lock for a caller that must know it holds the
+// app before it prepares a deployment: ErrBusy when a deploy or another
+// change is running. Run the deployment with DeployLocked, then call release.
+func (s *Service) Lock(ctx context.Context, user store.User, appID int64) (release func(), err error) {
+	if _, _, err := s.load(ctx, user, appID); err != nil {
+		return nil, err
+	}
+	return s.lockOrBusy(appID)
+}
+
+// DeployLocked is Deploy for a caller that already holds the app through Lock.
+func (s *Service) DeployLocked(ctx context.Context, user store.User, appID, deploymentID int64) error {
 	app, owner, err := s.load(ctx, user, appID)
 	if err != nil {
 		return err
 	}
-	unlock, err := s.lockOrBusy(appID)
-	if err != nil {
-		return err
-	}
-	defer unlock()
 	return s.deployLocked(ctx, user, owner, app, deploymentID)
 }
 

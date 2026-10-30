@@ -79,10 +79,26 @@ func appError(w http.ResponseWriter, r *http.Request, err error) {
 }
 
 // deployInBackground runs a prepared deployment under the server context, so
-// it outlives the request that asked for it.
+// it outlives the request that asked for it. The goroutine is tracked in
+// s.deploys so shutdown can wait for it.
 func (s *server) deployInBackground(u store.User, appID, deploymentID int64) {
+	s.deploys.Add(1)
 	go func() {
+		defer s.deploys.Done()
 		if err := s.apps.Deploy(s.ctx, u, appID, deploymentID); err != nil {
+			slog.Warn("background deploy", "app", appID, "deployment", deploymentID, "err", err)
+		}
+	}()
+}
+
+// deployHeldInBackground is deployInBackground for an app the request already
+// locked with apps.Lock: the goroutine runs the deployment and releases the lock.
+func (s *server) deployHeldInBackground(u store.User, appID, deploymentID int64, release func()) {
+	s.deploys.Add(1)
+	go func() {
+		defer s.deploys.Done()
+		defer release()
+		if err := s.apps.DeployLocked(s.ctx, u, appID, deploymentID); err != nil {
 			slog.Warn("background deploy", "app", appID, "deployment", deploymentID, "err", err)
 		}
 	}()
@@ -179,15 +195,7 @@ func (s *server) getApp(w http.ResponseWriter, r *http.Request) {
 			active = &d
 		}
 	}
-	var stats *docker.Stats
-	sctx, cancel := context.WithTimeout(r.Context(), statsWait)
-	defer cancel()
-	switch st, running, err := s.apps.Stats(sctx, u, app.ID); {
-	case err != nil:
-		slog.Warn("app stats", "app", app.Name, "err", err)
-	case running:
-		stats = &st
-	}
+	stats := s.appStats(r.Context(), u, app)
 	writeJSON(w, http.StatusOK, struct {
 		App        store.App         `json:"app"`
 		Owner      string            `json:"owner"`
@@ -281,12 +289,18 @@ func (s *server) newVersion(w http.ResponseWriter, r *http.Request) {
 	if !decode(w, r, &in) {
 		return
 	}
-	d, err := s.apps.NewVersion(r.Context(), u, id, in.UploadID)
+	release, err := s.apps.Lock(r.Context(), u, id)
 	if err != nil {
 		appError(w, r, err)
 		return
 	}
-	s.deployInBackground(u, id, d.ID)
+	d, err := s.apps.NewVersion(r.Context(), u, id, in.UploadID)
+	if err != nil {
+		release()
+		appError(w, r, err)
+		return
+	}
+	s.deployHeldInBackground(u, id, d.ID, release)
 	writeJSON(w, http.StatusCreated, d)
 }
 
@@ -296,16 +310,18 @@ func (s *server) redeploy(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	if s.apps.Busy(id) {
-		appError(w, r, apps.ErrBusy)
-		return
-	}
-	d, err := s.apps.PrepareRedeploy(r.Context(), u, id)
+	release, err := s.apps.Lock(r.Context(), u, id)
 	if err != nil {
 		appError(w, r, err)
 		return
 	}
-	s.deployInBackground(u, id, d.ID)
+	d, err := s.apps.PrepareRedeploy(r.Context(), u, id)
+	if err != nil {
+		release()
+		appError(w, r, err)
+		return
+	}
+	s.deployHeldInBackground(u, id, d.ID, release)
 	writeJSON(w, http.StatusAccepted, okBody)
 }
 
@@ -320,16 +336,18 @@ func (s *server) rollback(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "Deployment tidak ditemukan")
 		return
 	}
-	if s.apps.Busy(id) {
-		appError(w, r, apps.ErrBusy)
-		return
-	}
-	nd, err := s.apps.PrepareRollback(r.Context(), u, id, did)
+	release, err := s.apps.Lock(r.Context(), u, id)
 	if err != nil {
 		appError(w, r, err)
 		return
 	}
-	s.deployInBackground(u, id, nd.ID)
+	nd, err := s.apps.PrepareRollback(r.Context(), u, id, did)
+	if err != nil {
+		release()
+		appError(w, r, err)
+		return
+	}
+	s.deployHeldInBackground(u, id, nd.ID, release)
 	writeJSON(w, http.StatusAccepted, okBody)
 }
 

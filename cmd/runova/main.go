@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"sync"
 	"syscall"
 	"time"
 
@@ -110,9 +111,6 @@ func serve(cfg config.Config, stderr io.Writer) int {
 	defer closePG()
 	svc.DBEnv = dbSvc.AppEnv
 
-	if err := svc.Reconcile(ctx); err != nil {
-		log.Error("reconcile with docker", "err", err)
-	}
 	go func() {
 		if err := svc.Monitor(ctx); err != nil && ctx.Err() == nil {
 			log.Error("docker monitor stopped", "err", err)
@@ -120,12 +118,13 @@ func serve(cfg config.Config, stderr io.Writer) int {
 	}()
 	go syncer.Run(ctx)
 	go svc.WatchDomains(ctx)
-	go cleanupLoop(ctx, st)
+	go cleanupLoop(ctx, st, cfg.DataDir)
 	go dbSvc.RunSchedule(ctx)
 
+	var deploys sync.WaitGroup
 	srv := &http.Server{
 		Addr:              cfg.Listen,
-		Handler:           api.New(api.Config{Store: st, Now: time.Now, DataDir: cfg.DataDir, Apps: svc, DBs: dbSvc, Context: ctx}),
+		Handler:           api.New(api.Config{Store: st, Now: time.Now, DataDir: cfg.DataDir, Apps: svc, DBs: dbSvc, Context: ctx, Deploys: &deploys}),
 		ReadHeaderTimeout: 10 * time.Second,
 	}
 	errc := make(chan error, 1)
@@ -142,15 +141,37 @@ func serve(cfg config.Config, stderr io.Writer) int {
 	log.Info("shutting down")
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
+	code := 0
 	if err := srv.Shutdown(shutdownCtx); err != nil && !errors.Is(err, http.ErrServerClosed) {
 		log.Error("shutdown", "err", err)
-		return 1
+		code = 1
 	}
-	return 0
+	// ctx is canceled, so running deploys fail fast; give them time to remove
+	// the containers they created and record the failure.
+	if !waitTimeout(&deploys, deployDrain) {
+		log.Warn("background deploys still running; reconcile cleans up at next start", "after", deployDrain)
+	}
+	return code
 }
 
-// cleanupLoop drops expired sessions, old login failures and expired uploads at start and then hourly.
-func cleanupLoop(ctx context.Context, st *store.Store) {
+// deployDrain is how long shutdown waits for background deploys.
+const deployDrain = 30 * time.Second
+
+// waitTimeout waits for wg and reports whether it finished within d.
+func waitTimeout(wg *sync.WaitGroup, d time.Duration) bool {
+	done := make(chan struct{})
+	go func() { wg.Wait(); close(done) }()
+	select {
+	case <-done:
+		return true
+	case <-time.After(d):
+		return false
+	}
+}
+
+// cleanupLoop drops expired sessions, old login failures, expired uploads and
+// orphaned upload folders at start and then hourly.
+func cleanupLoop(ctx context.Context, st *store.Store, dataDir string) {
 	clean := func() {
 		now := time.Now()
 		if err := st.DeleteExpiredSessions(ctx, now.UnixMilli()); err != nil && ctx.Err() == nil {
@@ -161,6 +182,9 @@ func cleanupLoop(ctx context.Context, st *store.Store) {
 		}
 		if err := api.CleanupUploads(ctx, st, now); err != nil && ctx.Err() == nil {
 			slog.Error("cleanup uploads", "err", err)
+		}
+		if err := api.SweepUploadDirs(dataDir, st, now); err != nil && ctx.Err() == nil {
+			slog.Error("sweep upload dirs", "err", err)
 		}
 	}
 	clean()
