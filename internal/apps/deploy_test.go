@@ -59,8 +59,8 @@ func TestDeployHappyPath(t *testing.T) {
 	}
 	calls = e.engine.Calls()[len(want):]
 	n1, n2 := "runova-budi-billing-"+strconv.FormatInt(d1.ID, 10), "runova-budi-billing-"+strconv.FormatInt(d2.ID, 10)
-	if want2 := []string{"network runova-u1 172.30.1.0/24", "stop " + n1, "remove " + n1, "create " + n2, "start " + n2}; !slices.Equal(calls, want2) {
-		t.Fatalf("second deploy calls = %v\nwant %v (old container gone before the new one is created; image pulled only once)", calls, want2)
+	if want2 := []string{"network runova-u1 172.30.1.0/24", "create " + n2, "start " + n2, "stop " + n1, "remove " + n1}; !slices.Equal(calls, want2) {
+		t.Fatalf("second deploy calls = %v\nwant %v (zero-downtime: old container goes after the new one runs; image pulled only once)", calls, want2)
 	}
 
 	got1, _ := e.store.Deployment(ctx, d1.ID)
@@ -125,8 +125,8 @@ func TestDeployUnhealthy(t *testing.T) {
 		t.Fatalf("failed deployment = %+v", got2)
 	}
 	cur, _ := e.store.App(ctx, app.ID)
-	if cur.Status != store.AppFailed {
-		t.Errorf("app status = %s, want failed", cur.Status)
+	if cur.Status != store.AppRunning || cur.CurrentDeploymentID == nil || *cur.CurrentDeploymentID != d1.ID {
+		t.Errorf("app = %s current %v, want running on #1 (zero-downtime: the old version kept serving)", cur.Status, cur.CurrentDeploymentID)
 	}
 	got1, _ := e.store.Deployment(ctx, d1.ID)
 	if got1.Status != store.DeploySuperseded && got1.Status != store.DeployActive {

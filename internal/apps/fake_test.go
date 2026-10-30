@@ -100,6 +100,7 @@ func newTestEnv(t *testing.T) *testEnv {
 		HealthTimeout:  time.Second,
 		HealthInterval: time.Millisecond,
 		ReconnectDelay: time.Millisecond,
+		DrainDelay:     time.Millisecond,
 	}
 	return e
 }

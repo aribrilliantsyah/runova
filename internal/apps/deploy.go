@@ -59,6 +59,7 @@ func (s *Service) deployLocked(ctx context.Context, actor, owner store.User, app
 		return err
 	}
 
+	prevStatus := app.Status
 	if err := s.Store.SetAppStatus(ctx, app.ID, store.AppDeploying); err != nil {
 		return err
 	}
@@ -68,15 +69,30 @@ func (s *Service) deployLocked(ctx context.Context, actor, owner store.User, app
 	}
 	d.Status = running
 
-	containerID, err := s.rollout(ctx, owner, app, &d)
+	old, hasOld := s.servingDeployment(ctx, app)
+	zero := app.DeployMode == store.DeployModeZero
+	failStatus := store.AppFailed
+	if zero && hasOld {
+		failStatus = prevStatus
+	}
+
+	containerID, err := s.rollout(ctx, owner, app, &d, !zero)
 	if err != nil {
-		s.failDeployment(ctx, owner, app, d, containerID, err)
+		s.failDeployment(ctx, owner, app, d, containerID, err, failStatus)
 		return err
 	}
 
 	if err := s.Store.ActivateDeployment(ctx, app.ID, d.ID); err != nil {
-		s.failDeployment(ctx, owner, app, d, containerID, err)
+		s.failDeployment(ctx, owner, app, d, containerID, err, failStatus)
 		return err
+	}
+	if zero && hasOld {
+		if err := s.switchTraffic(ctx, app, old); err != nil {
+			s.failDeployment(ctx, owner, app, d, containerID, err, failStatus)
+			return err
+		}
+	} else {
+		s.refreshCaddy(ctx, app)
 	}
 	finished := s.now().UnixMilli()
 	if err := s.Store.UpdateDeployment(ctx, d.ID, store.DeploymentPatch{FinishedAt: &finished}); err != nil {
@@ -87,10 +103,11 @@ func (s *Service) deployLocked(ctx context.Context, actor, owner store.User, app
 	return nil
 }
 
-// rollout does the container work of a deploy. On failure it returns the
-// ID of the new container, if one was created, so the caller can collect
-// its logs and remove it.
-func (s *Service) rollout(ctx context.Context, owner store.User, app store.App, d *store.Deployment) (containerID string, err error) {
+// rollout does the container work of a deploy. With replaceFirst the active
+// container goes before the new one is created (stop-start); without it the
+// old one keeps serving. On failure it returns the ID of the new container,
+// if one was created, so the caller can collect its logs and remove it.
+func (s *Service) rollout(ctx context.Context, owner store.User, app store.App, d *store.Deployment, replaceFirst bool) (containerID string, err error) {
 	image := imageFor(app, *d)
 	if ok, err := s.Engine.ImageExists(ctx, image); err != nil {
 		return "", fmt.Errorf("check image %s: %w", image, err)
@@ -124,8 +141,10 @@ func (s *Service) rollout(ctx context.Context, owner store.User, app store.App, 
 	}
 	spec := s.ContainerSpec(app, owner, *d, env, nil)
 
-	if err := s.removeActive(ctx, app); err != nil {
-		return "", err
+	if replaceFirst {
+		if err := s.removeActive(ctx, app); err != nil {
+			return "", err
+		}
 	}
 
 	containerID, err = s.Engine.CreateContainer(ctx, containerName(owner, app, *d), spec)
@@ -158,10 +177,15 @@ func (s *Service) removeActive(ctx context.Context, app store.App) error {
 		return err
 	}
 	s.noteStop(app.ID)
-	if err := s.Engine.StopContainer(ctx, cur.ContainerID, stopGrace); err != nil && !errors.Is(err, docker.ErrNotFound) {
+	return s.removeContainerOf(ctx, cur)
+}
+
+// removeContainerOf stops and deletes the container of deployment d.
+func (s *Service) removeContainerOf(ctx context.Context, d store.Deployment) error {
+	if err := s.Engine.StopContainer(ctx, d.ContainerID, stopGrace); err != nil && !errors.Is(err, docker.ErrNotFound) {
 		return fmt.Errorf("stop old container: %w", err)
 	}
-	if err := s.Engine.RemoveContainer(ctx, cur.ContainerID); err != nil {
+	if err := s.Engine.RemoveContainer(ctx, d.ContainerID); err != nil {
 		return fmt.Errorf("remove old container: %w", err)
 	}
 	return nil
@@ -195,10 +219,11 @@ func (s *Service) waitHealthy(ctx context.Context, port int) error {
 }
 
 // failDeployment records a failed deploy: the last log lines of the failed
-// container go on the deployment, the container is removed, the app becomes
-// failed and its owner is notified. The deployment that was active before
-// stays on record.
-func (s *Service) failDeployment(ctx context.Context, owner store.User, app store.App, d store.Deployment, containerID string, cause error) {
+// container go on the deployment, the container is removed, the app gets
+// appStatus (failed, or the status it had when the old version still serves)
+// and its owner is notified. The deployment that was active before stays on
+// record.
+func (s *Service) failDeployment(ctx context.Context, owner store.User, app store.App, d store.Deployment, containerID string, cause error, appStatus store.AppStatus) {
 	ctx = context.WithoutCancel(ctx)
 	log := cause.Error()
 	if containerID != "" {
@@ -214,8 +239,8 @@ func (s *Service) failDeployment(ctx context.Context, owner store.User, app stor
 	if err := s.Store.UpdateDeployment(ctx, d.ID, store.DeploymentPatch{Status: &status, FailureLog: &log, FinishedAt: &finished}); err != nil {
 		slog.Error("record failed deployment", "deployment", d.ID, "err", err)
 	}
-	if err := s.Store.SetAppStatus(ctx, app.ID, store.AppFailed); err != nil {
-		slog.Error("set app failed", "app", app.Name, "err", err)
+	if err := s.Store.SetAppStatus(ctx, app.ID, appStatus); err != nil {
+		slog.Error("set app status after failed deploy", "app", app.Name, "err", err)
 	}
 	s.notify(ctx, app, store.LevelError, fmt.Sprintf("Deploy %s #%d gagal", app.Name, d.Number), cause.Error())
 	slog.Warn("deploy failed", "app", app.Name, "deployment", d.Number, "err", cause)
@@ -431,6 +456,7 @@ func (s *Service) Stop(ctx context.Context, user store.User, appID int64) error 
 	if err := s.Store.SetAppStatus(ctx, app.ID, store.AppStopped); err != nil {
 		return err
 	}
+	s.refreshCaddy(ctx, app)
 	s.logActivity(ctx, user, store.ActStop, app.Name, "")
 	return nil
 }
@@ -456,6 +482,7 @@ func (s *Service) Start(ctx context.Context, user store.User, appID int64) error
 	if err := s.Store.SetAppStatus(ctx, app.ID, store.AppRunning); err != nil {
 		return err
 	}
+	s.refreshCaddy(ctx, app)
 	s.logActivity(ctx, user, store.ActStart, app.Name, "")
 	return nil
 }
@@ -492,6 +519,7 @@ func (s *Service) Delete(ctx context.Context, user store.User, appID int64) erro
 		return err
 	}
 	s.forget(app.ID)
+	s.refreshCaddy(ctx, app)
 	s.logActivity(ctx, user, store.ActAppDelete, app.Name, "")
 	return nil
 }

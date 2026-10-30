@@ -56,7 +56,7 @@ func newAppEnv(t *testing.T, idle time.Duration) *appEnv {
 			c2.Close()
 			return c1, nil
 		},
-		HealthTimeout: time.Second, HealthInterval: time.Millisecond,
+		HealthTimeout: time.Second, HealthInterval: time.Millisecond, DrainDelay: time.Millisecond,
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	srv := httptest.NewServer(api.New(api.Config{Store: st, Now: clk.Now, DataDir: dataDir, Apps: svc, Context: ctx, TerminalIdle: idle}))

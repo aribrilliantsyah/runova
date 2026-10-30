@@ -29,9 +29,9 @@ func TestAddDomainNormalizesAndApplies(t *testing.T) {
 	ctx := context.Background()
 	e := newTestEnv(t)
 	fc := &fakeCaddy{}
-	e.svc.Caddy = fc
 	u := e.addUser("budi", store.RoleUser, roomyQuota)
 	app, _ := deployFirst(t, e, u, "billing")
+	e.svc.Caddy = fc
 
 	d, err := e.svc.AddDomain(ctx, u, app.ID, "App.Contoh.ID.")
 	if err != nil {
@@ -286,9 +286,9 @@ func TestIPAccessToggleReverts(t *testing.T) {
 	ctx := context.Background()
 	e := newTestEnv(t)
 	fc := &fakeCaddy{}
-	e.svc.Caddy = fc
 	u := e.addUser("budi", store.RoleUser, roomyQuota)
 	app, _ := deployFirst(t, e, u, "billing")
+	e.svc.Caddy = fc
 
 	on := true
 	if _, _, err := e.svc.UpdateSettings(ctx, u, app.ID, apps.SettingsInput{IPAccess: &on}); err != nil || fc.applied != 1 {

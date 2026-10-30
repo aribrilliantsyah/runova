@@ -54,6 +54,8 @@ type Service struct {
 	HealthInterval time.Duration // 0 means 500 ms
 	// ReconnectDelay is the pause before Monitor resubscribes to Docker events; 0 means 2 s.
 	ReconnectDelay time.Duration
+	// DrainDelay is how long a zero-downtime deploy keeps the old container after Caddy switched; 0 means 5 s.
+	DrainDelay time.Duration
 	// Caddy is told to reload after anything that changes what is served; nil means no Caddy.
 	Caddy interface {
 		Apply(ctx context.Context) error
@@ -280,7 +282,7 @@ func (s *Service) Create(ctx context.Context, user store.User, in CreateInput) (
 	app := store.App{
 		UserID: user.ID, Name: in.Name, Kind: rep.Kind, JVMOpts: in.JVMOpts,
 		InternalPort: in.InternalPort, IPAccess: in.IPAccess, MemoryMB: in.MemoryMB, CPUMilli: in.CPUMilli,
-		Status: store.AppStopped, DeployMode: store.DeployModeStopStart, CreatedAt: s.now().UnixMilli(),
+		Status: store.AppStopped, DeployMode: store.DeployModeZero, CreatedAt: s.now().UnixMilli(),
 	}
 	if app.InternalPort == 0 {
 		app.InternalPort = rep.Port
@@ -445,7 +447,7 @@ type SettingsInput struct {
 }
 
 // deployModes lists the modes this build can run.
-var deployModes = []string{store.DeployModeStopStart}
+var deployModes = []string{store.DeployModeStopStart, store.DeployModeZero}
 
 // UpdateSettings validates and stores the change. redeploy reports that a
 // running app only picks the change up with a new deployment. Raising memory
