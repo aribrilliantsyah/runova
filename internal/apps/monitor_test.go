@@ -358,13 +358,23 @@ func TestStopEchoDoesNotSwallowLaterCrash(t *testing.T) {
 	u := e.addUser("budi", store.RoleUser, roomyQuota)
 	app, _ := deployFirst(t, e, u, "billing")
 	cid := activeContainer(t, e, app)
+	other, _ := deployFirst(t, e, u, "other")
+	otherCID := activeContainer(t, e, other)
 	startMonitor(t, e)
 
 	if err := e.svc.Stop(ctx, u, app.ID); err != nil {
 		t.Fatal(err)
 	}
 	die(t, e, app, cid)
-	settle(t, e)
+	// Events are handled in order: once the other app's clean exit has been
+	// applied, the echo of the stop before it has been handled too.
+	e.engine.Emit(docker.Event{ContainerID: otherCID, Action: "die", Time: e.clock.Now(),
+		Labels: map[string]string{"runova.app": strconv.FormatInt(other.ID, 10), "exitCode": "0"}})
+	waitFor(t, "barrier event handled", func() bool {
+		got, _ := e.store.App(ctx, other.ID)
+		return got.Status == store.AppStopped
+	})
+
 	if err := e.svc.Start(ctx, u, app.ID); err != nil {
 		t.Fatal(err)
 	}
