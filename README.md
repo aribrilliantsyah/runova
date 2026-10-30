@@ -138,7 +138,7 @@ curl -s -b jar 127.0.0.1:7071/api/me
 curl -s -b jar 127.0.0.1:7071/api/activity
 ```
 
-Subperintah lain: `runova admin reset-password <username>` membuat password acak baru. `serve` menolak start bila file kunci tidak ada, jadi jalankan `keygen` dulu. Variabel lingkungan: `RUNOVA_LISTEN` (bawaan `127.0.0.1:7070`), `RUNOVA_DATA` (`/var/lib/runova`), `RUNOVA_SECRET_KEY` (`/etc/runova/secret.key`).
+Subperintah lain: `runova admin reset-password <username>` membuat password acak baru. `serve` menolak start bila file kunci tidak ada, jadi jalankan `keygen` dulu. Variabel lingkungan: `RUNOVA_LISTEN` (bawaan `127.0.0.1:7070`), `RUNOVA_DATA` (`/var/lib/runova`), `RUNOVA_SECRET_KEY` (`/etc/runova/secret.key`), `RUNOVA_DOCKER_HOST` (`unix:///var/run/docker.sock`). `serve` juga menolak start bila Docker tidak bisa diakses.
 
 Semua mutasi API memakai `Content-Type: application/json`. Jalankan `go test ./...` untuk menguji.
 

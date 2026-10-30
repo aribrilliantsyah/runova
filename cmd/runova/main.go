@@ -14,7 +14,9 @@ import (
 	"time"
 
 	"runova/internal/api"
+	"runova/internal/apps"
 	"runova/internal/config"
+	"runova/internal/docker"
 	"runova/internal/secret"
 	"runova/internal/store"
 )
@@ -59,7 +61,8 @@ func serve(cfg config.Config, stderr io.Writer) int {
 	log := slog.New(slog.NewTextHandler(stderr, nil))
 	slog.SetDefault(log)
 
-	if _, err := secret.LoadKey(cfg.SecretKeyPath); err != nil {
+	box, err := secret.LoadKey(cfg.SecretKeyPath)
+	if err != nil {
 		fmt.Fprintf(stderr, "Tidak bisa memuat kunci rahasia: %v\nBuat dengan `runova keygen`.\n", err)
 		return 1
 	}
@@ -73,11 +76,26 @@ func serve(cfg config.Config, stderr io.Writer) int {
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
+	engine := docker.New(cfg.DockerHost)
+	if err := engine.Ping(ctx); err != nil {
+		fmt.Fprintf(stderr, "Docker tidak bisa diakses: %v\n", err)
+		return 1
+	}
+	svc := &apps.Service{Store: st, Engine: engine, Box: box, DataDir: cfg.DataDir}
+
+	if err := svc.Reconcile(ctx); err != nil {
+		log.Error("reconcile with docker", "err", err)
+	}
+	go func() {
+		if err := svc.Monitor(ctx); err != nil && ctx.Err() == nil {
+			log.Error("docker monitor stopped", "err", err)
+		}
+	}()
 	go cleanupLoop(ctx, st)
 
 	srv := &http.Server{
 		Addr:              cfg.Listen,
-		Handler:           api.New(api.Config{Store: st, Now: time.Now, DataDir: cfg.DataDir}),
+		Handler:           api.New(api.Config{Store: st, Now: time.Now, DataDir: cfg.DataDir, Apps: svc, Context: ctx}),
 		ReadHeaderTimeout: 10 * time.Second,
 	}
 	errc := make(chan error, 1)
