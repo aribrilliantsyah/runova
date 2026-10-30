@@ -1,4 +1,5 @@
-package pg
+// Package pgtest starts a throwaway PostgreSQL server in Docker for integration tests.
+package pgtest
 
 import (
 	"context"
@@ -18,9 +19,9 @@ const (
 	testStartupWait = 90 * time.Second
 )
 
-// startPG runs a throwaway PostgreSQL 18 container on a random host port and
+// StartPG runs a throwaway PostgreSQL 18 container on a random host port and
 // returns the DSN for its "runova" admin role. It skips unless RUNOVA_PG_TEST=1.
-func startPG(t *testing.T) string {
+func StartPG(t *testing.T) string {
 	t.Helper()
 	if os.Getenv("RUNOVA_PG_TEST") != "1" {
 		t.Skip("set RUNOVA_PG_TEST=1 to run PostgreSQL integration tests")

@@ -27,6 +27,12 @@ const (
 	ActTerminal       = "terminal.open"
 	ActEnvUpdate      = "env.update"
 	ActEnvReveal      = "env.reveal"
+	ActDBCreate       = "db.create"
+	ActDBDelete       = "db.delete"
+	ActDBBackup       = "db.backup"
+	ActDBRestore      = "db.restore"
+	ActDBPassword     = "db.password"
+	ActDBReveal       = "db.reveal"
 )
 
 type Activity struct {

@@ -12,6 +12,9 @@ import (
 
 var RuntimeIDs = []string{"java8", "java11", "java17", "java21", "java25", "static", "glibc"}
 
+// MaxPGAllowedNets caps Settings.PGAllowedNets.
+const MaxPGAllowedNets = 20
+
 type Settings struct {
 	DefaultQuota  Quota           `json:"default_quota"`
 	UploadLimitMB int             `json:"upload_limit_mb"`
@@ -19,6 +22,8 @@ type Settings struct {
 	PortMax       int             `json:"port_max"`
 	Runtimes      map[string]bool `json:"runtimes"`
 	PublicIP      string          `json:"public_ip"`
+	// PGAllowedNets lists extra CIDRs allowed to reach PostgreSQL from outside Docker.
+	PGAllowedNets []string `json:"pg_allowed_nets"`
 }
 
 func defaultSettings() Settings {
@@ -32,6 +37,7 @@ func defaultSettings() Settings {
 		PortMin:       20000,
 		PortMax:       20999,
 		Runtimes:      rt,
+		PGAllowedNets: []string{},
 	}
 }
 
@@ -53,6 +59,14 @@ func (s Settings) Validate() error {
 	if s.PublicIP != "" {
 		if _, err := netip.ParseAddr(s.PublicIP); err != nil {
 			return errors.New("IP publik tidak valid")
+		}
+	}
+	if len(s.PGAllowedNets) > MaxPGAllowedNets {
+		return fmt.Errorf("Jaringan PostgreSQL maksimal %d", MaxPGAllowedNets)
+	}
+	for _, n := range s.PGAllowedNets {
+		if _, err := netip.ParsePrefix(n); err != nil {
+			return fmt.Errorf("Jaringan PostgreSQL tidak valid: %s", n)
 		}
 	}
 	return nil
@@ -85,6 +99,9 @@ func (s *Store) SetSettings(ctx context.Context, v Settings) error {
 		rt[id] = v.Runtimes[id]
 	}
 	v.Runtimes = rt
+	if v.PGAllowedNets == nil {
+		v.PGAllowedNets = []string{}
+	}
 	raw, err := json.Marshal(v)
 	if err != nil {
 		return fmt.Errorf("encode settings: %w", err)
