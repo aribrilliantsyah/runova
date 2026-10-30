@@ -105,7 +105,7 @@ func TestIntegrationEngine(t *testing.T) {
 	if err := c.EnsureNetwork(ctx, netw, "172.30.250.0/24"); err != nil {
 		t.Fatalf("second EnsureNetwork: %v", err)
 	}
-	labels := map[string]string{"runova.app": "itest", "runova.user": "itest"}
+	labels := map[string]string{"runova.app": "dkitest", "runova.user": "dkitest"}
 
 	var ids []string
 	t.Cleanup(func() {
@@ -118,7 +118,7 @@ func TestIntegrationEngine(t *testing.T) {
 
 	bin := buildStatic(t)
 	hostPort := freePort(t)
-	id, err := c.CreateContainer(ctx, "runova-itest-static", ContainerSpec{
+	id, err := c.CreateContainer(ctx, "runova-dkitest-static", ContainerSpec{
 		Image: static, Cmd: []string{"/app/hello"}, Env: []string{"PORT=8080"}, User: uid,
 		Labels: labels, Network: netw, InternalPort: 8080, HostPort: hostPort,
 		Binds: []string{bin + ":/app/hello:ro"}, Tmpfs: map[string]string{"/tmp": "rw,size=64m"},
@@ -148,10 +148,10 @@ func TestIntegrationEngine(t *testing.T) {
 	}
 
 	st, err := c.InspectContainer(ctx, id)
-	if err != nil || !st.Running || st.Labels["runova.app"] != "itest" {
+	if err != nil || !st.Running || st.Labels["runova.app"] != "dkitest" {
 		t.Fatalf("inspect = %+v, %v", st, err)
 	}
-	list, err := c.ListContainers(ctx, map[string]string{"runova.app": "itest"})
+	list, err := c.ListContainers(ctx, map[string]string{"runova.app": "dkitest"})
 	if err != nil || len(list) != 1 || list[0].ID != id {
 		t.Fatalf("list = %+v, %v", list, err)
 	}
@@ -172,7 +172,7 @@ func TestIntegrationEngine(t *testing.T) {
 	}
 
 	evCtx, evCancel := context.WithCancel(ctx)
-	events, evErr := c.Events(evCtx, map[string]string{"runova.app": "itest"})
+	events, evErr := c.Events(evCtx, map[string]string{"runova.app": "dkitest"})
 	if err := c.StopContainer(ctx, id, 5*time.Second); err != nil {
 		t.Fatal(err)
 	}
@@ -195,7 +195,7 @@ func TestIntegrationEngine(t *testing.T) {
 		t.Fatalf("inspect after remove = %v, want ErrNotFound", err)
 	}
 
-	shell, err := c.CreateContainer(ctx, "runova-itest-glibc", ContainerSpec{
+	shell, err := c.CreateContainer(ctx, "runova-dkitest-glibc", ContainerSpec{
 		Image: glibc, Cmd: []string{"sleep", "300"}, User: uid, Labels: labels, Network: netw,
 		Tmpfs: map[string]string{"/tmp": "rw,size=64m"}, MemoryBytes: 64 << 20, NanoCPUs: 250_000_000, ReadOnly: true,
 	})
@@ -206,17 +206,21 @@ func TestIntegrationEngine(t *testing.T) {
 	if err := c.StartContainer(ctx, shell); err != nil {
 		t.Fatal(err)
 	}
-	sess, err := c.Exec(ctx, shell, uid, []string{"/bin/sh", "-c", "id -u"})
+	sess, err := c.Exec(ctx, shell, uid, []string{"/bin/sh", "-c", "id -u; sleep 1; stty size"})
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer sess.Close()
 	if err := sess.Resize(ctx, 24, 80); err != nil {
-		t.Logf("resize after exit: %v", err)
+		t.Fatalf("resize: %v", err)
 	}
 	var out bytes.Buffer
 	io.Copy(&out, sess)
-	if got := strings.TrimSpace(out.String()); got != "100001" {
-		t.Fatalf("id -u = %q, want 100001", got)
+	fields := strings.Fields(out.String())
+	if len(fields) != 3 || fields[0] != "100001" {
+		t.Fatalf("exec output = %q, want the uid 100001 first", out.String())
+	}
+	if fields[1] != "24" || fields[2] != "80" {
+		t.Fatalf("stty size = %q %q, want the resized 24 80", fields[1], fields[2])
 	}
 }
