@@ -35,3 +35,7 @@ Nama, signature, dan konstanta di blok Interfaces rencana tidak diubah. Hal-hal 
 - Caddy di Ubuntu 26.04 adalah **2.6.2**, sedangkan e2e memakai `caddy:2` (2.11). Konfigurasi JSON yang dikirim Runova (Bagian 4) diuji pada 2.11; fitur yang dipakai (`default_sni`, `automate`, `internal` issuer) ada di 2.6, tetapi belum diperiksa di versi itu.
 - Pada Caddy 2.6.2, `caddy.service` bawaan paket memakai `Type=notify`; drop-in mengganti `ExecStart` saja.
 - Image `eclipse-temurin:21-jre` ditarik saat deploy pertama (`docker pull`): server tanpa akses internet tidak bisa mendeploy JAR sampai image ada.
+
+## Perbaikan di luar Bagian 7
+
+22. **`TestStopEchoDoesNotSwallowLaterCrash` (Bagian 2–3) tidak stabil**, gagal sekitar 1 dari 15 putaran dengan "Deploy sedang berjalan": `Monitor` melakukan `Reconcile` tepat setelah subscribe dan memegang kunci aplikasi, sehingga `Stop` pertama di test mendapat `ErrBusy`. Bukan cacat kode produksi (`ErrBusy` adalah jawaban yang benar). Test kini mengulang `Stop` sampai diterima; 100 putaran dan `-race` lulus.
