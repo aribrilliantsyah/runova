@@ -140,7 +140,8 @@ func (s *Service) notifyUser(ctx context.Context, userID int64, level store.Noti
 	}
 }
 
-func (s *Service) notifyAdmins(ctx context.Context, level store.NotificationLevel, title, body string) {
+// NotifyAdmins tells every admin about a problem only they can fix.
+func (s *Service) NotifyAdmins(ctx context.Context, level store.NotificationLevel, title, body string) {
 	users, err := s.Store.Users(ctx)
 	if err != nil {
 		slog.Error("list users for notification", "err", err)

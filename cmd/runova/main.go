@@ -83,6 +83,14 @@ func serve(cfg config.Config, stderr io.Writer) int {
 	}
 	svc := &apps.Service{Store: st, Engine: engine, Box: box, DataDir: cfg.DataDir}
 
+	dbSvc, closePG, err := openDatabases(ctx, cfg, st, box)
+	if err != nil {
+		fmt.Fprintf(stderr, "Konfigurasi PostgreSQL tidak valid: %v\n", err)
+		return 1
+	}
+	defer closePG()
+	svc.DBEnv = dbSvc.AppEnv
+
 	if err := svc.Reconcile(ctx); err != nil {
 		log.Error("reconcile with docker", "err", err)
 	}
@@ -95,7 +103,7 @@ func serve(cfg config.Config, stderr io.Writer) int {
 
 	srv := &http.Server{
 		Addr:              cfg.Listen,
-		Handler:           api.New(api.Config{Store: st, Now: time.Now, DataDir: cfg.DataDir, Apps: svc, Context: ctx}),
+		Handler:           api.New(api.Config{Store: st, Now: time.Now, DataDir: cfg.DataDir, Apps: svc, DBs: dbSvc, Context: ctx}),
 		ReadHeaderTimeout: 10 * time.Second,
 	}
 	errc := make(chan error, 1)
