@@ -212,9 +212,27 @@ type (
 	}
 )
 
-// ErrRootUser is returned by CreateContainer for a spec that would run the
-// container as root; every Runova container runs as its owner's UID.
-var ErrRootUser = errors.New("docker: container user must be a non-root uid")
+// ErrInsecureSpec is returned (wrapped) by CreateContainer for a spec that
+// lacks what every Runova container must have: a non-root numeric user, a
+// memory and CPU limit, and a read-only root filesystem.
+var ErrInsecureSpec = errors.New("docker: insecure container spec")
+
+// checkSpec refuses specs that would weaken the isolation policy. The client
+// already forces cap-drop, no-new-privileges and the pids limit; these fields
+// come from the caller, so a zero value would mean "unlimited" or "root".
+func checkSpec(spec ContainerSpec) error {
+	switch {
+	case !nonRootUser(spec.User):
+		return fmt.Errorf("%w: user %q is not a non-root uid[:gid]", ErrInsecureSpec, spec.User)
+	case spec.MemoryBytes <= 0:
+		return fmt.Errorf("%w: no memory limit", ErrInsecureSpec)
+	case spec.NanoCPUs <= 0:
+		return fmt.Errorf("%w: no cpu limit", ErrInsecureSpec)
+	case !spec.ReadOnly:
+		return fmt.Errorf("%w: root filesystem must be read-only", ErrInsecureSpec)
+	}
+	return nil
+}
 
 // nonRootUser reports whether user is "uid" or "uid:gid" with nonzero numeric
 // ids. Names ("root", "") are refused: the image decides what they mean.
@@ -233,8 +251,8 @@ func nonRootUser(user string) bool {
 }
 
 func (c *Client) CreateContainer(ctx context.Context, name string, spec ContainerSpec) (string, error) {
-	if !nonRootUser(spec.User) {
-		return "", ErrRootUser
+	if err := checkSpec(spec); err != nil {
+		return "", err
 	}
 	cfg := map[string]any{
 		"Image":  spec.Image,

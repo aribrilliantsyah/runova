@@ -526,15 +526,25 @@ func TestLogsDemuxCapsLineLength(t *testing.T) {
 	}
 }
 
-// Every container must run as its owner's UID; a spec that would fall back to
-// the image's user (often root) is refused before anything is sent.
-func TestCreateContainerRefusesRoot(t *testing.T) {
+// Every container must run as its owner's UID with memory and CPU limits and a
+// read-only root; a spec missing any of them is refused before anything is sent.
+func TestCreateContainerRefusesInsecureSpec(t *testing.T) {
 	c := serve(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		t.Errorf("request sent for a root spec: %s", r.URL.Path)
+		t.Errorf("request sent for an insecure spec: %s", r.URL.Path)
 	}))
+	ok := ContainerSpec{Image: "img", User: "100001:100001", MemoryBytes: 64 << 20, NanoCPUs: 100_000_000, ReadOnly: true}
+	bad := map[string]ContainerSpec{}
 	for _, user := range []string{"", "root", "0", "0:0", "100001:0", "100001:root", "100001:", ":100001", "-1"} {
-		if _, err := c.CreateContainer(context.Background(), "x", ContainerSpec{Image: "img", User: user}); !errors.Is(err, ErrRootUser) {
-			t.Errorf("User %q: err = %v, want ErrRootUser", user, err)
+		s := ok
+		s.User = user
+		bad["user "+user] = s
+	}
+	noMem, noCPU, writable := ok, ok, ok
+	noMem.MemoryBytes, noCPU.NanoCPUs, writable.ReadOnly = 0, 0, false
+	bad["no memory"], bad["no cpu"], bad["writable root"] = noMem, noCPU, writable
+	for name, spec := range bad {
+		if _, err := c.CreateContainer(context.Background(), "x", spec); !errors.Is(err, ErrInsecureSpec) {
+			t.Errorf("%s: err = %v, want ErrInsecureSpec", name, err)
 		}
 	}
 }
