@@ -15,6 +15,7 @@ import (
 
 	"runova/internal/api"
 	"runova/internal/apps"
+	"runova/internal/caddy"
 	"runova/internal/config"
 	"runova/internal/docker"
 	"runova/internal/secret"
@@ -27,6 +28,8 @@ const usage = `Penggunaan: runova <perintah>
   admin create <username>        buat admin dengan password acak
   admin reset-password <user>    buat password acak baru
   keygen                         buat kunci enkripsi rahasia
+  panel set --domain <domain>    alamat panel di domain (HTTPS otomatis)
+  panel set --port <port>        alamat panel di IP:port (HTTPS)
 `
 
 func main() {
@@ -44,6 +47,8 @@ func run(args []string, getenv func(string) string, stdout, stderr io.Writer) in
 		return serve(cfg, stderr)
 	case "admin":
 		return admin(cfg, args[1:], stdout, stderr)
+	case "panel":
+		return panel(cfg, args[1:], stdout, stderr)
 	case "keygen":
 		if err := secret.GenerateKey(cfg.SecretKeyPath); err != nil {
 			fmt.Fprintf(stderr, "Gagal membuat kunci: %v\n", err)
@@ -81,7 +86,21 @@ func serve(cfg config.Config, stderr io.Writer) int {
 		fmt.Fprintf(stderr, "Docker tidak bisa diakses: %v\n", err)
 		return 1
 	}
-	svc := &apps.Service{Store: st, Engine: engine, Box: box, DataDir: cfg.DataDir}
+	panelUpstream, err := apps.PanelUpstream(cfg.Listen)
+	if err != nil {
+		fmt.Fprintln(stderr, err)
+		return 1
+	}
+	syncer := &caddy.Syncer{
+		Client: caddy.NewClient(cfg.CaddyAdmin),
+		State: func(ctx context.Context) (caddy.State, error) {
+			state, err := apps.CaddyState(ctx, st, panelUpstream)
+			state.AdminListen = cfg.CaddyAdminListen()
+			return state, err
+		},
+		OnError: func(err error) { log.Error("sync caddy", "err", err) },
+	}
+	svc := &apps.Service{Store: st, Engine: engine, Box: box, DataDir: cfg.DataDir, Caddy: syncer}
 
 	if err := svc.Reconcile(ctx); err != nil {
 		log.Error("reconcile with docker", "err", err)
@@ -91,6 +110,8 @@ func serve(cfg config.Config, stderr io.Writer) int {
 			log.Error("docker monitor stopped", "err", err)
 		}
 	}()
+	go syncer.Run(ctx)
+	go svc.WatchDomains(ctx)
 	go cleanupLoop(ctx, st)
 
 	srv := &http.Server{

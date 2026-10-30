@@ -27,6 +27,9 @@ const (
 	ActTerminal       = "terminal.open"
 	ActEnvUpdate      = "env.update"
 	ActEnvReveal      = "env.reveal"
+	ActDomainAdd      = "domain.add"
+	ActDomainRemove   = "domain.remove"
+	ActPanelAddress   = "panel.address"
 )
 
 type Activity struct {

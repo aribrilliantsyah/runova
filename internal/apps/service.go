@@ -54,6 +54,12 @@ type Service struct {
 	HealthInterval time.Duration // 0 means 500 ms
 	// ReconnectDelay is the pause before Monitor resubscribes to Docker events; 0 means 2 s.
 	ReconnectDelay time.Duration
+	// Caddy is told to reload after anything that changes what is served; nil means no Caddy.
+	Caddy interface {
+		Apply(ctx context.Context) error
+	}
+	// Probe checks a domain's HTTPS certificate; nil means caddy.ProbeTLS.
+	Probe func(ctx context.Context, host string) (ok bool, detail string)
 
 	locks     sync.Map   // app ID → *sync.Mutex held while the app is being changed
 	createMu  sync.Mutex // serializes quota checks with the inserts they guard
@@ -522,8 +528,17 @@ func (s *Service) UpdateSettings(ctx context.Context, user store.User, appID int
 		patch.MemoryMB, patch.CPUMilli = &mem, &cpu
 		redeploy = redeploy || mem != app.MemoryMB || cpu != app.CPUMilli
 	}
-	app, err = s.Store.UpdateApp(ctx, appID, patch)
-	return app, redeploy, err
+	updated, err := s.Store.UpdateApp(ctx, appID, patch)
+	if err != nil {
+		return store.App{}, false, err
+	}
+	if in.IPAccess != nil && *in.IPAccess != app.IPAccess {
+		if err := s.ApplyCaddy(ctx); err != nil {
+			s.revertApp(ctx, app)
+			return store.App{}, false, err
+		}
+	}
+	return updated, redeploy, nil
 }
 
 // minJava is the minimum Java version of the app's newest artifact.

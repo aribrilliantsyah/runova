@@ -8,7 +8,11 @@ import (
 	"fmt"
 	"net/netip"
 	"slices"
+
+	"runova/internal/caddy"
 )
+
+const caddyAdminPort = 2019
 
 var RuntimeIDs = []string{"java8", "java11", "java17", "java21", "java25", "static", "glibc"}
 
@@ -19,6 +23,10 @@ type Settings struct {
 	PortMax       int             `json:"port_max"`
 	Runtimes      map[string]bool `json:"runtimes"`
 	PublicIP      string          `json:"public_ip"`
+	// PanelDomain and PanelPort make the panel reachable through Caddy; both
+	// empty means only at RUNOVA_LISTEN. A port serves it over HTTPS on that IP port.
+	PanelDomain string `json:"panel_domain"`
+	PanelPort   int    `json:"panel_port"`
 }
 
 func defaultSettings() Settings {
@@ -53,6 +61,25 @@ func (s Settings) Validate() error {
 	if s.PublicIP != "" {
 		if _, err := netip.ParseAddr(s.PublicIP); err != nil {
 			return errors.New("IP publik tidak valid")
+		}
+	}
+	if s.PanelDomain != "" {
+		host, err := caddy.ValidateDomain(s.PanelDomain)
+		if err != nil {
+			return fmt.Errorf("domain panel: %w", err)
+		}
+		if host != s.PanelDomain {
+			return errors.New("Domain panel harus huruf kecil tanpa titik di akhir")
+		}
+	}
+	if s.PanelPort != 0 {
+		switch {
+		case s.PanelPort < 1024 || s.PanelPort > 65535:
+			return errors.New("Port panel harus di dalam 1024–65535")
+		case s.PanelPort == caddyAdminPort:
+			return fmt.Errorf("Port panel tidak boleh %d (dipakai Caddy)", caddyAdminPort)
+		case s.PanelPort >= s.PortMin && s.PanelPort <= s.PortMax:
+			return errors.New("Port panel tidak boleh berada di rentang port akses IP")
 		}
 	}
 	return nil

@@ -36,6 +36,7 @@ func (s *server) appRoutes(mux *http.ServeMux, user func(http.HandlerFunc) http.
 	mux.HandleFunc("GET /api/apps/{id}/deployments", user(s.listDeployments))
 	mux.HandleFunc("GET /api/apps/{id}/logs", user(s.logs))
 	mux.HandleFunc("GET /api/apps/{id}/terminal", user(s.terminal))
+	s.domainRoutes(mux, user)
 }
 
 func (s *server) appsRestart(ctx context.Context, u store.User, id int64) error {
@@ -68,6 +69,8 @@ func appError(w http.ResponseWriter, r *http.Request, err error) {
 		writeError(w, http.StatusNotFound, appNotFound)
 	case errors.Is(err, apps.ErrValidation):
 		writeError(w, http.StatusBadRequest, err.Error())
+	case errors.Is(err, apps.ErrCaddy):
+		writeError(w, http.StatusBadGateway, err.Error())
 	case errors.Is(err, apps.ErrQuota), errors.Is(err, store.ErrConflict):
 		writeError(w, http.StatusConflict, err.Error())
 	default:
