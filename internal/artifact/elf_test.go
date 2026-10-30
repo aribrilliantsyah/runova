@@ -286,7 +286,7 @@ func TestScanEnvCapsAtFifty(t *testing.T) {
 	var sb strings.Builder
 	sb.WriteString("getenv\x00")
 	for i := range 80 {
-		sb.WriteString("APP_VAR_")
+		sb.WriteString("APP_KEY_")
 		sb.WriteString(string(rune('A' + i/26)))
 		sb.WriteString(string(rune('A' + i%26)))
 		sb.WriteByte(0)
@@ -297,5 +297,23 @@ func TestScanEnvCapsAtFifty(t *testing.T) {
 	}
 	if len(env) != 50 {
 		t.Errorf("len = %d", len(env))
+	}
+}
+
+func TestScanEnvOverCapKeepsOnlyLikelyNames(t *testing.T) {
+	var sb strings.Builder
+	sb.WriteString("getenv\x00DATABASE_URL\x00")
+	for i := range 80 {
+		sb.WriteString("HTTP2_FRAME_")
+		sb.WriteString(string(rune('A' + i/26)))
+		sb.WriteString(string(rune('A' + i%26)))
+		sb.WriteByte(0)
+	}
+	env, err := scanEnv(strings.NewReader(sb.String()))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := envNames(env); !slices.Equal(got, []string{"DATABASE_URL"}) {
+		t.Errorf("env = %v", got)
 	}
 }

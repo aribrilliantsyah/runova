@@ -10,6 +10,7 @@ import (
 const (
 	scanChunk    = 1 << 20
 	scanMaxEnv   = 50
+	scanMaxCands = 4096
 	scanMinName  = 4
 	scanMaxName  = 64
 	scanOverflow = scanMaxName + 1
@@ -30,7 +31,16 @@ var scanIgnored = map[string]bool{
 	"PATH": true, "USER": true, "LANG": true,
 }
 
-var scanIgnoredPrefixes = []string{"GO", "CGO_", "RUST_", "LC_", "XDG_"}
+var scanIgnoredPrefixes = []string{"GO", "CGO_", "RUST_", "LC_", "XDG_", "GLIBC_"}
+
+// scanLikely marks words typical of configuration variables. When a binary
+// has more candidates than scanMaxEnv (any net/http program carries hundreds
+// of protocol constants), only names containing one of these are kept.
+var scanLikely = []string{"PASSWORD", "SECRET", "TOKEN", "KEY", "URL", "URI", "DSN", "HOST", "PORT", "ADDR", "DATABASE", "DB_", "USER", "ENV", "MODE", "LEVEL"}
+
+func scanLikelyName(name string) bool {
+	return slices.ContainsFunc(scanLikely, func(w string) bool { return strings.Contains(name, w) })
+}
 
 func isEnvChar(c byte) bool { return c >= 'A' && c <= 'Z' || c >= '0' && c <= '9' || c == '_' }
 
@@ -52,9 +62,8 @@ func scanCandidate(name string) bool {
 
 // scanEnv streams r looking for env var names. Names count only when the data
 // also holds a marker for reading the environment. Names are runs of
-// [A-Z0-9_]; leading digits and underscores are dropped, since Go packs string
-// literals back to back without separators. Result is sorted, at most
-// scanMaxEnv entries, and never includes file contents beyond those names.
+// [A-Z0-9_]; leading digits and underscores are dropped. Result is sorted, at
+// most scanMaxEnv entries (only likely config names when there are more candidates), and never includes file contents beyond those names.
 func scanEnv(r io.Reader) ([]EnvVar, error) {
 	var (
 		buf      = make([]byte, scanChunk)
@@ -67,7 +76,7 @@ func scanEnv(r io.Reader) ([]EnvVar, error) {
 	endRun := func() {
 		if !overflow {
 			name := strings.TrimLeft(string(run), "0123456789_")
-			if scanCandidate(name) && len(names) < scanMaxEnv && !slices.Contains(names, name) {
+			if scanCandidate(name) && len(names) < scanMaxCands && !slices.Contains(names, name) {
 				names = append(names, name)
 			}
 		}
@@ -112,6 +121,10 @@ func scanEnv(r io.Reader) ([]EnvVar, error) {
 	endRun()
 	if !found {
 		return []EnvVar{}, nil
+	}
+	if len(names) > scanMaxEnv {
+		names = slices.DeleteFunc(names, func(n string) bool { return !scanLikelyName(n) })
+		names = names[:min(len(names), scanMaxEnv)]
 	}
 	slices.Sort(names)
 	out := make([]EnvVar, len(names))
