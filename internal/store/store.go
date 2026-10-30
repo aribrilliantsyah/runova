@@ -32,7 +32,8 @@ CREATE TABLE IF NOT EXISTS users(
 	quota_cpu_milli INTEGER NOT NULL,
 	quota_databases INTEGER NOT NULL,
 	quota_pg_connections INTEGER NOT NULL,
-	created_at INTEGER NOT NULL
+	created_at INTEGER NOT NULL,
+	net_index INTEGER NULL UNIQUE
 );
 CREATE TABLE IF NOT EXISTS sessions(
 	token_hash TEXT PRIMARY KEY,
@@ -70,6 +71,63 @@ CREATE TABLE IF NOT EXISTS uploads(
 	created_at INTEGER NOT NULL
 );
 CREATE INDEX IF NOT EXISTS uploads_created ON uploads(created_at);
+CREATE TABLE IF NOT EXISTS apps(
+	id INTEGER PRIMARY KEY,
+	user_id INTEGER NOT NULL REFERENCES users ON DELETE CASCADE,
+	name TEXT NOT NULL,
+	kind TEXT NOT NULL,
+	java_version INTEGER NULL,
+	jvm_opts TEXT NOT NULL DEFAULT '',
+	internal_port INTEGER NOT NULL,
+	ip_port INTEGER NOT NULL UNIQUE,
+	ip_access INTEGER NOT NULL DEFAULT 0,
+	memory_mb INTEGER NOT NULL,
+	cpu_milli INTEGER NOT NULL,
+	status TEXT NOT NULL,
+	current_deployment_id INTEGER NULL,
+	deploy_mode TEXT NOT NULL DEFAULT 'stopstart',
+	created_at INTEGER NOT NULL,
+	UNIQUE(user_id, name)
+);
+CREATE TABLE IF NOT EXISTS app_env(
+	app_id INTEGER NOT NULL REFERENCES apps ON DELETE CASCADE,
+	name TEXT NOT NULL,
+	value TEXT NOT NULL,
+	secret INTEGER NOT NULL DEFAULT 0,
+	PRIMARY KEY(app_id, name)
+);
+CREATE TABLE IF NOT EXISTS deployments(
+	id INTEGER PRIMARY KEY,
+	app_id INTEGER NOT NULL REFERENCES apps ON DELETE CASCADE,
+	number INTEGER NOT NULL,
+	artifact_path TEXT NOT NULL,
+	file_name TEXT NOT NULL,
+	sha256 TEXT NOT NULL,
+	report TEXT NOT NULL,
+	env_snapshot TEXT NOT NULL DEFAULT '',
+	java_version INTEGER NULL,
+	jvm_opts TEXT NOT NULL DEFAULT '',
+	internal_port INTEGER NOT NULL DEFAULT 0,
+	host_port INTEGER NOT NULL DEFAULT 0,
+	container_id TEXT NOT NULL DEFAULT '',
+	status TEXT NOT NULL,
+	failure_log TEXT NOT NULL DEFAULT '',
+	created_by INTEGER NULL REFERENCES users ON DELETE SET NULL,
+	created_at INTEGER NOT NULL,
+	finished_at INTEGER NOT NULL DEFAULT 0,
+	UNIQUE(app_id, number)
+);
+CREATE TABLE IF NOT EXISTS notifications(
+	id INTEGER PRIMARY KEY,
+	user_id INTEGER NOT NULL REFERENCES users ON DELETE CASCADE,
+	at INTEGER NOT NULL,
+	level TEXT NOT NULL,
+	title TEXT NOT NULL,
+	body TEXT NOT NULL DEFAULT '',
+	app_id INTEGER NULL,
+	read INTEGER NOT NULL DEFAULT 0
+);
+CREATE INDEX IF NOT EXISTS notifications_user ON notifications(user_id, at);
 `
 
 type Store struct{ db *sql.DB }
