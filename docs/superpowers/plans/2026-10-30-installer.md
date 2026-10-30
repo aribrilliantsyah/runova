@@ -24,6 +24,7 @@
 - Docker: `/etc/docker/daemon.json` digabung (bukan ditimpa) dengan `{"default-address-pools":[{"base":"172.31.0.0/16","size":24}]}` agar jaringan bawaan Docker tidak bentrok dengan `172.30.0.0/16` milik Runova.
 - Output akhir (sekali): alamat panel, username `admin`, password. Pada pemasangan ulang password tidak dibuat ulang (admin sudah ada) dan tidak dicetak.
 - Uninstall tidak disediakan di versi pertama; dokumentasikan langkah manual di README.
+- Semua subperintah `runova` yang menulis ke `/etc/runova` atau `/var/lib/runova` (`keygen`, `admin create`, `panel set`) dijalankan sebagai user `runova` (`runuser -u runova --`), dan direktori sudah milik `runova` sebelumnya — kalau tidak, `secret.key`/`runova.db` jadi milik root dan service tidak bisa membukanya (temuan review Bagian 1).
 
 ## Review Focus
 
