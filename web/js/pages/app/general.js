@@ -1,5 +1,5 @@
 import * as api from "/assets/js/api.js";
-import { h, icon, fmtBytes, fmtMB, fmtNum, fmtTime, pct, bar, setBar, clear, fill } from "/assets/js/dom.js";
+import { h, icon, fmtClock, fmtBytes, fmtMB, fmtNum, fmtTime, pct, bar, setBar, clear, fill } from "/assets/js/dom.js";
 import { act } from "/assets/js/components/act.js";
 import { dialog, confirm } from "/assets/js/components/dialog.js";
 import { uploader } from "/assets/js/components/uploader.js";
@@ -134,11 +134,14 @@ export function renderGeneral(page) {
   }
 
   function paintLog(pre) {
-    pre.replaceChildren(...(logCache.length ? logCache.map((l) => h("span", { class: `ln ${l.level}` }, h("b", {}, new Date(l.time).toLocaleTimeString("id", { hour12: false })), "  ", l.text)) : [h("span", { class: "empty-log" }, "Belum ada log")]));
+    pre.replaceChildren(...(logCache.length ? logCache.map((l) => h("span", { class: `ln ${l.level}` }, h("b", {}, fmtClock(l.time)), "  ", l.text)) : [h("span", { class: "empty-log" }, "Belum ada log")]));
   }
 
   // The last few lines for the card: a plain GET-less tail over a short-lived WebSocket.
+  let tailFor = null;
   async function loadTail() {
+    tailFor = page.state.deployment?.id ?? null;
+    if (tailFor === null) return () => {};
     const { logStream } = await import("/assets/js/components/logstream.js");
     const lines = [];
     let timer = null;
@@ -154,13 +157,19 @@ export function renderGeneral(page) {
   const domainsPoll = () => api.get(`/api/apps/${page.id}/domains`).then((r) => { page.domains = r.domains; page.setDomains?.(r.domains); }).catch(() => {});
   render();
   domainsPoll().then(render);
-  loadTail().then((stop) => { stopLog = stop; });
+  const startTail = () => loadTail().then((stop) => { stopLog = stop; });
+  startTail();
 
   return {
     node,
     update() {
       domainsPoll();
       render();
+      if ((page.state.deployment?.id ?? null) !== tailFor) {
+        stopLog?.();
+        logCache = [];
+        startTail();
+      }
     },
     cleanup() {
       stopLog?.();

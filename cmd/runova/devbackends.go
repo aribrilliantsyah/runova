@@ -151,7 +151,7 @@ func fakeApps(svc *apps.Service) {
 
 // fakeDatabases builds the database service over an in-memory PostgreSQL.
 // pg_dump and pg_restore become scripts that write and accept a stub dump.
-func fakeDatabases(cfg config.Config, st *store.Store, box *secret.Box) (*dbs.Service, func(), error) {
+func fakeDatabases(ctx context.Context, cfg config.Config, st *store.Store, box *secret.Box) (*dbs.Service, func(), error) {
 	bin := filepath.Join(cfg.DataDir, "fakebin")
 	if err := os.MkdirAll(bin, 0o755); err != nil {
 		return nil, nil, err
@@ -168,6 +168,10 @@ func fakeDatabases(cfg config.Config, st *store.Store, box *secret.Box) (*dbs.Se
 	svc := &dbs.Service{
 		Store: st, PG: admin, Box: box, BackupDir: cfg.BackupDir(),
 		HBAPath: filepath.Join(cfg.DataDir, "pg_hba.conf"), PGDump: dump, PGRestore: restore,
+	}
+	// Like the real startup: users that exist before this process (the installer's admin) get their roles.
+	if err := svc.ReconcileRoles(ctx); err != nil {
+		return nil, nil, err
 	}
 	return svc, func() {}, nil
 }

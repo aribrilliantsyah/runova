@@ -68,6 +68,6 @@ export function dbPick({ databases, used, limit, username, pgDown, onChange }) {
     suffix: () => suffix,
     autoNames: () => (choice === "none" ? [] : DB_ENV_NAMES),
     error: () => (choice === "new" ? (suffix ? dbSuffixError(suffix) : "Isi nama database baru") : ""),
-    label: () => (choice === "none" ? "–" : choice === "new" ? `${username}_${suffix || "…"} (baru)` : databases.find((d) => d.id === choice)?.name || "–"),
+    label: () => (choice === "none" ? "Tanpa database" : choice === "new" ? `${username}_${suffix || "…"} (baru)` : databases.find((d) => d.id === choice)?.name || "–"),
   };
 }

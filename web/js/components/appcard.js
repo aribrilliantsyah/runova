@@ -1,4 +1,4 @@
-import { h, icon, fmtTime, fmtMB, pct, bar } from "/assets/js/dom.js";
+import { h, icon, fmtTime, fmtMB, fmtCPU } from "/assets/js/dom.js";
 import { kindLogo, runtimeLabel, statusOf } from "/assets/js/kinds.js";
 
 /** appCard(app, summary, publicIP) → the clickable card of the app list. */
@@ -15,7 +15,7 @@ export function appCard(app, summary, publicIP) {
     : h("div", {}, icon("network"), h("span", {}, "Akses IP ditutup"));
   const settled = app.status === "running";
   const foot = settled
-    ? [h("span", {}, `${fmtMB(app.memory_mb)} · ${app.cpu_milli / 1000} core`)]
+    ? [h("span", {}, `${fmtMB(app.memory_mb)} · ${fmtCPU(app.cpu_milli)}`)]
     : [h("span", { class: `chip ${cls}` }, label)];
   const when = summary?.deployed_at ? fmtTime(summary.deployed_at) : "belum pernah";
   return h(

@@ -114,7 +114,7 @@ func serve(cfg config.Config, stderr io.Writer) int {
 	)
 	if cfg.FakeBackends {
 		fakeApps(svc)
-		dbSvc, closePG, err = fakeDatabases(cfg, st, box)
+		dbSvc, closePG, err = fakeDatabases(ctx, cfg, st, box)
 	} else {
 		dbSvc, closePG, err = openDatabases(ctx, cfg, st, box)
 	}

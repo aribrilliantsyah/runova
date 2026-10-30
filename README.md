@@ -10,8 +10,8 @@
 </p>
 
 <p align="center">
-  <b>Status: fondasi berjalan.</b> Sudah ada binary <code>runova</code> dengan API JSON untuk login, pengguna, kuota, setelan server, dan log aktivitas.
-  Unggah dan jalankan aplikasi, domain, database, serta panel web belum ada. Lihat <a href="preview-dashboard.html">preview tampilan</a> (buka file itu di browser).
+  <b>Status: panel web berjalan.</b> Binary <code>runova</code> membawa API JSON dan panel web tertanam: login, daftar aplikasi, wizard deploy, detail aplikasi, database, aktivitas, pengguna, dan server.
+  Installer dan rilis belum ada. <a href="preview-dashboard.html">Preview tampilan</a> (buka file itu di browser) adalah acuan desainnya.
 </p>
 
 <p align="center">
@@ -94,11 +94,14 @@ Untuk DNS langsung dan proxy, sertifikat diterbitkan Caddy di server. Untuk Tunn
 <table>
   <tr>
     <td width="66%"><img src="docs/screenshots/desktop-app-dark.png" alt="Detail aplikasi dalam mode gelap: kontrol, deployment aktif, akses IP dan domain, log, resource"></td>
-    <td><img src="docs/screenshots/mobile-apps.png" alt="Daftar aplikasi di HP dengan navigasi bawah: Aplikasi, Aktivitas, Deploy, Pengguna, Lainnya"></td>
+    <td><img src="docs/screenshots/mobile-apps.png" alt="Daftar aplikasi di HP dengan navigasi bawah: Aplikasi, Database, Deploy, Pengguna, Lainnya"></td>
   </tr>
 </table>
 
-- Mode terang dan gelap, padat seperti Dokploy dan Railway, tanpa gradien.
+Tangkapan layar di atas diambil dari panel sungguhan (`node web/test/screenshots.mjs`), bukan dari preview.
+
+- Mode terang dan gelap mengikuti sistem, bisa dipaksa dari menu akun, padat seperti Dokploy dan Railway, tanpa gradien.
+- Panel tidak memuat apa pun dari luar server: font, ikon, logo, dan xterm.js ada di `web/vendor/`, dan header CSP menolak sumber lain. Jadi panel jalan di server tanpa internet keluar.
 - Di HP, menu pindah ke navigasi bawah. Selama deploy, navigasi bawah diganti tombol **Kembali** dan **Lanjut**.
 - Ikon: [Lucide](https://lucide.dev). Logo bahasa: [Devicon](https://devicon.dev).
 
@@ -140,7 +143,23 @@ curl -s -b jar 127.0.0.1:7071/api/activity
 
 Subperintah lain: `runova admin reset-password <username>` membuat password acak baru. `serve` menolak start bila file kunci tidak ada, jadi jalankan `keygen` dulu. Variabel lingkungan: `RUNOVA_LISTEN` (bawaan `127.0.0.1:7070`), `RUNOVA_DATA` (`/var/lib/runova`), `RUNOVA_SECRET_KEY` (`/etc/runova/secret.key`), `RUNOVA_DOCKER_HOST` (`unix:///var/run/docker.sock`). `serve` juga menolak start bila Docker tidak bisa diakses.
 
-Semua mutasi API memakai `Content-Type: application/json`. Jalankan `go test ./...` untuk menguji.
+Panel web dilayani dari binary yang sama: buka `http://127.0.0.1:7071/` dan masuk dengan admin tadi. Tanpa Docker, Caddy, dan PostgreSQL di mesin pengembangan, jalankan dengan engine palsu (ditolak bila `RUNOVA_DATA=/var/lib/runova`):
+
+```bash
+RUNOVA_FAKE_BACKENDS=1 ./runova serve
+```
+
+Semua mutasi API memakai `Content-Type: application/json`. Jalankan `go test ./...` untuk menguji server. Uji panel (Chromium lewat Playwright, tanpa dependensi JS di produksi):
+
+```bash
+node web/test/unit.mjs            # halaman uji web/test/*.test.html
+node web/test/smoke-deploy.mjs    # login, wizard, deploy
+node web/test/smoke-app.mjs       # tab detail aplikasi, log, terminal
+node web/test/smoke-admin.mjs     # pengguna, database, aktivitas, server
+node web/test/smoke-layout.mjs    # 5 lebar layar, terang dan gelap, aksesibilitas
+```
+
+Ikon dibuat dari `web/icons.txt` dengan `go run ./cmd/genicons` (hasilnya di-commit).
 
 ## Kredit
 

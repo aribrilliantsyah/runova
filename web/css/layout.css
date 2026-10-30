@@ -52,6 +52,9 @@
 .top .right{margin-left:auto;display:flex;align-items:center;gap:6px}
 .sheet{flex:1;min-height:0;background:var(--panel);border:1px solid var(--line);border-radius:var(--r-lg);overflow:auto}
 .sheet:focus{outline:none}
+/* A page fills the sheet (the wizard's summary column runs to the bottom) and scrolls when it is taller. */
+.sheet{display:flex;flex-direction:column}
+.sheet > *{flex:1 0 auto;min-width:0}
 
 /* Page head */
 .ph{display:flex;align-items:center;gap:14px;padding:18px 22px 16px;border-bottom:1px solid var(--line)}

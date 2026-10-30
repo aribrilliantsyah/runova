@@ -127,8 +127,10 @@ export function fmtDateTime(ms) {
   return new Date(ms).toLocaleString("id", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
 }
 
+/** fmtClock(ms) → "10:42:07" (the id locale writes 10.42.07). */
 export function fmtClock(ms) {
-  return new Date(ms).toLocaleTimeString("id", { hour12: false });
+  const d = new Date(ms);
+  return [d.getHours(), d.getMinutes(), d.getSeconds()].map((n) => String(n).padStart(2, "0")).join(":");
 }
 
 export const pct = (used, total) => (total > 0 ? Math.min(100, Math.round((used / total) * 100)) : 0);

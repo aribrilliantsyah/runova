@@ -1,4 +1,5 @@
-import { h, icon, clear, copyText, fmtClock } from "/assets/js/dom.js";
+import * as api from "/assets/js/api.js";
+import { h, icon, fill, copyText, fmtClock } from "/assets/js/dom.js";
 import { logStream } from "/assets/js/components/logstream.js";
 import { toast } from "/assets/js/toast.js";
 
@@ -29,15 +30,15 @@ export function renderLogs(page) {
   const lineEl = (l) => h("span", { class: `ln ${l.level}` }, h("b", {}, fmtClock(l.time)), "  ", l.text);
 
   function paintState() {
-    const label = paused ? "Dijeda" : state === "live" ? "Live" : state === "connecting" ? "Menyambung…" : "Terputus";
-    const cls = paused ? "warn" : state === "live" ? "ok" : state === "connecting" ? "" : "err";
+    const label = paused ? "Dijeda" : state === "live" ? "Live" : state === "connecting" ? "Menyambung…" : state === "none" ? "Tidak ada container" : "Terputus";
+    const cls = paused ? "warn" : state === "live" ? "ok" : state === "connecting" || state === "none" ? "" : "err";
     live.className = `chip ${cls}`;
     live.replaceChildren(h("span", { class: `dot ${cls}` }), label + (paused && pending.length ? ` (+${pending.length})` : ""));
     pauseBtn.replaceChildren(icon(paused ? "play" : "square"), paused ? "Lanjut" : "Jeda");
   }
 
   function placeholder() {
-    return h("span", { class: "empty-log" }, all.length ? "Tidak ada baris yang cocok dengan filter" : state === "live" ? "Belum ada log" : "Menunggu log…");
+    return h("span", { class: "empty-log" }, all.length ? "Tidak ada baris yang cocok dengan filter" : state === "live" ? "Belum ada log" : state === "none" ? "Log tampil setelah deployment berjalan." : "Menunggu log…");
   }
 
   function repaint() {
@@ -92,10 +93,45 @@ export function renderLogs(page) {
     toast((await copyText(text)) ? "Log disalin" : "Tidak bisa menyalin", text ? "ok" : "err");
   });
 
-  const stream = logStream({ id: page.id, tail: 500, onLine, onState: (s) => { state = s; paintState(); if (!all.length) repaint(); } });
+  // The container only exists while a deployment is active; without one the server answers 409,
+  // so the stream starts when the page learns of an active deployment and restarts for a new one.
+  let stream = null;
+  let streamFor = null;
+  const failure = h("div", { class: "banner warn", hidden: true, role: "status" });
+  function sync() {
+    const d = page.state.deployment;
+    if (!d) {
+      stream?.close();
+      stream = streamFor = null;
+      state = "none";
+      paintState();
+      showFailure();
+      if (!all.length) repaint();
+      return;
+    }
+    failure.hidden = true;
+    if (streamFor === d.id) return;
+    stream?.close();
+    all.length = 0;
+    streamFor = d.id;
+    stream = logStream({ id: page.id, tail: 500, onLine, onState: (s) => { state = s; paintState(); if (!all.length) repaint(); } });
+  }
+
+  async function showFailure() {
+    try {
+      const list = await api.get(`/api/apps/${page.id}/deployments`);
+      const last = list.find((d) => d.status === "failed" && d.failure_log);
+      failure.hidden = !last;
+      if (last) fill(failure, icon("triangle-alert"), h("span", {}, `Deploy v${last.number} gagal. Log terakhirnya:`), h("pre", { class: "log", style: { "flex-basis": "100%", margin: "6px 0 0", "border-radius": "8px", "max-height": "240px" } }, last.failure_log));
+    } catch {
+      // the placeholder in the log area is enough
+    }
+  }
+
   paintState();
   repaint();
+  sync();
 
-  const node = h("section", { class: "card" }, h("header", {}, h("div", { class: "logbar" }, search, seg), h("div", { class: "r" }, live, pauseBtn, copyBtn)), pre);
-  return { node, cleanup: () => { cancelAnimationFrame(raf); stream.close(); } };
+  const node = h("div", {}, failure, h("section", { class: "card" }, h("header", {}, h("div", { class: "logbar" }, search, seg), h("div", { class: "r" }, live, pauseBtn, copyBtn)), pre));
+  return { node, update: sync, cleanup: () => { cancelAnimationFrame(raf); stream?.close(); } };
 }
