@@ -166,6 +166,10 @@ func TestDatabaseOwnership(t *testing.T) {
 		{"GET", dbPath(id, "/connection"), nil},
 		{"POST", dbPath(id, "/connection/reveal"), nil},
 		{"DELETE", dbPath(id, ""), obj{"confirm": "andi_secret"}},
+		{"GET", dbPath(id, "/backups"), nil},
+		{"POST", dbPath(id, "/backups"), nil},
+		{"GET", dbPath(id, "/backups/20261030-020000.dump"), nil},
+		{"POST", dbPath(id, "/backups/20261030-020000.dump/restore"), obj{"confirm": "andi_secret"}},
 	} {
 		r := b.do(tc.method, tc.path, tc.body)
 		if r.status != 404 || r.errMsg(t) != "Database tidak ditemukan" {

@@ -81,6 +81,7 @@ type Service struct {
 
 	roleLocks sync.Map   // username → *sync.Mutex
 	createMu  sync.Mutex // serializes quota checks with the creates they guard
+	dbLocks   sync.Map   // database name → *sync.Mutex held during a backup or restore
 }
 
 func (s *Service) now() time.Time {

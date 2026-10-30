@@ -22,6 +22,7 @@ func (s *server) dbRoutes(mux *http.ServeMux, user, admin func(http.HandlerFunc)
 	mux.HandleFunc("GET /api/databases/{id}/connection", user(s.databaseConnection(false)))
 	mux.HandleFunc("POST /api/databases/{id}/connection/reveal", user(s.databaseConnection(true)))
 	mux.HandleFunc("GET /api/admin/databases", admin(s.adminDatabases))
+	s.backupRoutes(mux, user)
 }
 
 // dbID parses {id}; any other database, not just a malformed ID, looks the same to the caller.
@@ -38,6 +39,8 @@ func dbID(w http.ResponseWriter, r *http.Request) (int64, bool) {
 // written for the user; anything else is a server error.
 func dbError(w http.ResponseWriter, r *http.Request, err error) {
 	switch {
+	case errors.Is(err, dbs.ErrBackupNotFound):
+		writeError(w, http.StatusNotFound, err.Error())
 	case errors.Is(err, dbs.ErrNotFound):
 		writeError(w, http.StatusNotFound, dbNotFound)
 	case errors.Is(err, dbs.ErrValidation):

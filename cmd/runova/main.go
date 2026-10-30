@@ -100,6 +100,7 @@ func serve(cfg config.Config, stderr io.Writer) int {
 		}
 	}()
 	go cleanupLoop(ctx, st)
+	go dbSvc.RunSchedule(ctx)
 
 	srv := &http.Server{
 		Addr:              cfg.Listen,
