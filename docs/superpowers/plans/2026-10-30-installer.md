@@ -4,9 +4,9 @@
 
 **Goal:** Satu perintah memasang Runova di Ubuntu Server 26.04 polos sampai panel bisa dibuka dan aplikasi contoh bisa di-deploy; menjalankan ulang perintah yang sama memperbarui Runova tanpa menyentuh data.
 
-**Architecture:** `install.sh` (bash, `set -euo pipefail`) hanya mengurus hal yang butuh root dan paket OS; setiap langkah berupa fungsi `step_*` yang memeriksa dulu apakah sudah beres (idempoten). Konfigurasi yang bisa dikerjakan binary (kunci, admin, alamat panel) didelegasikan ke subperintah `runova`. Rilis dibangun oleh `scripts/release.sh`. Uji end-to-end di VM Ubuntu 26.04 sungguhan (cloud image + QEMU/KVM lewat `scripts/e2e-vm.sh`), karena Docker-in-container tidak mewakili systemd, ufw, dan Caddy di port 80/443.
+**Architecture:** `install.sh` (bash, `set -euo pipefail`) hanya mengurus hal yang butuh root dan paket OS; setiap langkah berupa fungsi `step_*` yang memeriksa dulu apakah sudah beres (idempoten). Konfigurasi yang bisa dikerjakan binary (kunci, admin, alamat panel) didelegasikan ke subperintah `runova`. Rilis dibangun oleh `scripts/release.sh`. Uji end-to-end memakai stack lokal (Runova dari source + Docker + Caddy + PostgreSQL 18 di container), **tanpa VM/KVM** atas keputusan user (2026-10-30): installer diuji dengan bats + stub, alur produk diuji end-to-end lokal. Uji di Ubuntu 26.04 sungguhan dilakukan manual oleh user nanti.
 
-**Tech Stack:** bash, systemd, apt, ufw; `shellcheck` untuk lint; QEMU + cloud-init untuk uji.
+**Tech Stack:** bash, systemd, apt, ufw; `shellcheck` dan `bats` untuk uji installer.
 
 **Spec:** `docs/spec.md` §2 (lokasi file, konfigurasi, capability), §6 (alamat panel), §7 (pg_hba, role `runova`), §10.
 
@@ -27,11 +27,11 @@
 
 ## Review Focus
 
-- **Installer dijalankan dua kali** → kali kedua hanya memperbarui binary dan unit, layanan di-restart, data/kunci/admin/aplikasi utuh, tidak ada password baru dicetak. Test di Task 3 (`e2e: reinstall`).
+- **Installer dijalankan dua kali** → kali kedua hanya memperbarui binary dan unit, layanan di-restart, data/kunci/admin/aplikasi utuh, tidak ada password baru dicetak. Test di Task 2 (`bats: rerun is idempotent` — jalankan semua `step_*` dua kali dengan stub, kali kedua tidak memanggil `admin create`/`keygen` dan tidak mencetak password).
 - **Caddyfile sudah dipakai untuk situs lain** → installer berhenti sebelum mengubah apa pun dengan pesan yang menyebut file dan opsi `--yes`. Test di Task 2 (`bats: refuses modified Caddyfile`).
 - **SSH di port non-standar** → ufw tidak mengunci admin keluar: installer membaca port `sshd` dari `sshd -T` dan mengizinkannya. Test di Task 2 (`bats: ssh port detected`).
-- **Server tanpa IP publik / di belakang NAT** → instalasi tetap selesai; panel mode IP; pesan akhir menyarankan Cloudflare Tunnel untuk domain. Test di Task 3 (VM tanpa `--public-ip`).
-- **Reboot server** → Docker, Caddy, PostgreSQL, Runova hidup kembali; aplikasi berjalan lagi; route Caddy kembali dalam ≤ 30 detik. Test di Task 3 (`e2e: reboot`).
+- **Server tanpa IP publik / di belakang NAT** → instalasi tetap selesai; panel mode IP; pesan akhir menyarankan Cloudflare Tunnel untuk domain. Test di Task 2 (`bats: no public ip summary`).
+- **Reboot server** → Docker, Caddy, PostgreSQL, Runova hidup kembali; aplikasi berjalan lagi; route Caddy kembali dalam ≤ 30 detik. Dijamin lewat unit systemd (`Wants`/`After`, `Restart=on-failure`), Caddy `--resume`, dan Syncer Bagian 4; test di Task 1 (`TestServiceUnit` memeriksa isi `packaging/runova.service`) — uji reboot nyata manual oleh user.
 
 ---
 
@@ -50,6 +50,7 @@
 ```go
 func TestVersion(t *testing.T) { /* run(["version"]) stdout "runova dev\n" when not injected */ }
 func TestCheckReportsFailures(t *testing.T) { /* RUNOVA_DOCKER_HOST=unix:///nonexistent → exit 1, stdout has "fail docker" */ }
+func TestServiceUnit(t *testing.T) { /* packaging/runova.service has Restart=on-failure, Wants/After docker caddy postgresql, NoNewPrivileges=yes, AmbientCapabilities exact */ }
 func TestPanelSetPublicIP(t *testing.T) { /* "--public-ip 203.0.113.5" stored; "abc" → exit 1 */ }
 ```
 
@@ -77,6 +78,8 @@ func TestPanelSetPublicIP(t *testing.T) { /* "--public-ip 203.0.113.5" stored; "
 @test "pg_hba include added once" { step_postgres; step_postgres; [ "$(grep -c "include_dir 'pg_hba.d'" "$RUNOVA_ROOT/etc/postgresql/18/main/pg_hba.conf")" -eq 1 ]; }
 @test "secret kept on rerun" { step_secret; sum1=$(sha256sum "$RUNOVA_ROOT/etc/runova/secret.key"); step_secret; [ "$sum1" = "$(sha256sum "$RUNOVA_ROOT/etc/runova/secret.key")" ]; }
 @test "admin created only once" { step_admin; step_admin; [ "$(grep -c 'admin create' "$CALLS")" -eq 1 ]; }
+@test "rerun is idempotent" { run_all_steps; run_all_steps; [ "$(grep -c 'admin create' "$CALLS")" -eq 1 ]; [ "$(grep -c keygen "$CALLS")" -eq 1 ]; }
+@test "no public ip summary" { run summary; [[ "$output" == *"Cloudflare Tunnel"* ]]; }
 @test "domain and port exclusive" { run parse_args --domain a.co --port 1; [ "$status" -ne 0 ]; }
 ```
 
@@ -85,27 +88,25 @@ func TestPanelSetPublicIP(t *testing.T) { /* "--public-ip 203.0.113.5" stored; "
 
 ---
 
-### Task 3: Uji end-to-end di VM dan dokumentasi
+### Task 3: Uji end-to-end lokal dan dokumentasi
 
 **Files:**
-- Create: `scripts/e2e-vm.sh`, `test/e2e/run.sh`, `test/e2e/hello/` (aplikasi Go contoh: `GET /` → "hello <versi>", `GET /db` → jumlah baris tabel di `DATABASE_URL`), `test/e2e/hello-spring/` (JAR Spring Boot kecil yang sudah dibangun, di-commit < 25 MB, atau dibangun di VM dengan Maven bila tersedia — pilih yang pertama)
-- Modify: `README.md` (Instalasi, Pembaruan, Uninstall manual, status proyek)
+- Create: `test/e2e/run.sh`, `test/e2e/stack.sh`, `test/e2e/hello/` (aplikasi Go contoh: `GET /` → "hello <versi>", `GET /db` → jumlah baris tabel di `DATABASE_URL`), `test/e2e/hello-spring/` (JAR Spring Boot kecil yang dibangun di container `maven:3-eclipse-temurin-21` saat skrip jalan dan di-cache di `test/e2e/.cache/`, tidak di-commit)
+- Modify: `README.md` (Instalasi, Pembaruan, Uninstall manual, Pengembangan lokal, status proyek), `.gitignore` (`test/e2e/.cache/`)
 
 **Interfaces:**
-- `scripts/e2e-vm.sh`: unduh cloud image Ubuntu 26.04 (`https://cloud-images.ubuntu.com/releases/26.04/release/ubuntu-26.04-server-cloudimg-amd64.img`, checksum dari `SHA256SUMS`), buat disk overlay, cloud-init dengan kunci SSH sementara, boot QEMU/KVM (4 GB, 2 vCPU, port forward SSH), salin arsip rilis, jalankan `test/e2e/run.sh` lewat SSH, hapus VM.
-- `test/e2e/run.sh` (di dalam VM) menjalankan skenario berurutan dan berhenti di kegagalan pertama dengan pesan jelas.
+- `test/e2e/stack.sh up|down`: PostgreSQL 18 (`postgres:18`, `--network host`, role `runova` dengan password; Runova memakai `RUNOVA_PG_DSN` TCP), Caddy (`caddy:2`, `--network host`, admin `localhost:2019`, `--resume`), Runova `go run ./cmd/runova serve` dengan `RUNOVA_DATA` sementara, panel mode IP di port 8443. Tidak butuh root kecuali yang memang dibutuhkan Docker.
+- `test/e2e/run.sh`: menjalankan skenario berurutan terhadap stack itu dan berhenti di kegagalan pertama dengan pesan jelas.
 
 - [ ] **Step 1: Tulis skenario** `test/e2e/run.sh`:
-  1. `install` → pesan akhir berisi alamat panel dan password; `runova check` semua ok.
-  2. `login` → API login dengan password itu (curl ke `https://127.0.0.1:8443` dengan `-k`).
-  3. `user+db` → buat pengguna `budi`, login sebagai budi, buat database `app`.
-  4. `deploy-binary` → unggah `hello` (`.tar.gz` dengan `.env.example`), pilih database, akses IP nyala → `curl <ip>:<ip_port>/db` 200.
-  5. `deploy-jar` → unggah JAR Spring Boot, Java 21 → `curl` 200.
-  6. `zero-downtime` → loop curl selama deploy versi baru `hello` → tidak ada kegagalan, respons berubah ke versi baru.
-  7. `isolation` → dari container budi, `psql` ke database pengguna lain → ditolak; `curl` ke container pengguna lain di jaringan Docker → timeout.
-  8. `reinstall` → jalankan installer lagi → tidak ada password baru dicetak, aplikasi tetap 200, admin login dengan password lama.
-  9. `reboot` → `sudo reboot`, tunggu SSH, ≤ 60 detik kemudian kedua aplikasi 200.
-  10. `backup` → backup manual → restore → data kembali.
-- [ ] **Step 2:** `scripts/e2e-vm.sh dist/runova-0.1.0-linux-amd64.tar.gz` → catat kegagalan. **Step 3:** perbaiki di bagian terkait (installer, unit, atau kode). **Step 4:** semua skenario lulus.
-- [ ] **Step 5:** Perbarui README: hapus "tahap rancangan", tambahkan Instalasi (`curl -LO …; tar xzf …; sudo ./install.sh --domain panel.contoh.id`), Pembaruan (jalankan ulang), Uninstall manual (hentikan service, hapus `/usr/local/bin/runova`, `/etc/runova`, `/var/lib/runova`, role & database PostgreSQL, container berlabel `runova.app`).
-- [ ] **Step 6: Commit** `git commit -m "e2e on ubuntu 26.04 vm, installation docs"`
+  1. `login` → admin dibuat dengan `runova admin create`, login API.
+  2. `user+db` → buat pengguna `budi`, login sebagai budi, buat database `app`.
+  3. `deploy-binary` → unggah `hello` (`.tar.gz` dengan `.env.example`), pilih database, akses IP nyala → `curl 127.0.0.1:<ip_port>/db` 200.
+  4. `deploy-jar` → unggah JAR Spring Boot, Java 21 → `curl` 200.
+  5. `zero-downtime` → loop curl selama deploy versi baru `hello` → tidak ada kegagalan, respons berubah ke versi baru.
+  6. `isolation` → pengguna kedua `andi`; dari container budi, koneksi ke database andi → ditolak; `curl` ke container andi lewat jaringan Docker → gagal.
+  7. `restart-runova` → hentikan dan jalankan ulang Runova → aplikasi tetap 200, status tetap `running`.
+  8. `backup` → backup manual → hapus baris → restore → data kembali.
+- [ ] **Step 2:** `test/e2e/stack.sh up && test/e2e/run.sh` → catat kegagalan. **Step 3:** perbaiki di bagian terkait. **Step 4:** semua skenario lulus; `test/e2e/stack.sh down` bersih (tidak ada container `runova-*` tersisa).
+- [ ] **Step 5:** Perbarui README: hapus "tahap rancangan", tambahkan Instalasi (`curl -LO …; tar xzf …; sudo ./install.sh --domain panel.contoh.id`), Pembaruan (jalankan ulang), Uninstall manual (hentikan service, hapus `/usr/local/bin/runova`, `/etc/runova`, `/var/lib/runova`, role & database PostgreSQL, container berlabel `runova.app`), Pengembangan lokal (`test/e2e/stack.sh`), dan catatan bahwa installer belum diuji di server Ubuntu 26.04 sungguhan.
+- [ ] **Step 6: Commit** `git commit -m "local e2e, installation docs"`

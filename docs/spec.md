@@ -166,6 +166,6 @@ Setiap bagian punya rencana sendiri di `docs/superpowers/plans/` dan bisa diuji 
 | 4 | Caddy, domain, akses IP, deploy tanpa jeda | `2026-10-30-caddy.md` |
 | 5 | PostgreSQL per pengguna dan backup | `2026-10-30-postgres.md` |
 | 6 | Panel web | `2026-10-30-panel.md` |
-| 7 | Installer, rilis, uji end-to-end di VM | `2026-10-30-installer.md` |
+| 7 | Installer, rilis, uji end-to-end lokal (tanpa VM) | `2026-10-30-installer.md` |
 
 Bagian 2 dan Bagian 5 Task 1 (admin PostgreSQL) hanya bergantung pada Bagian 1, jadi bisa dikerjakan paralel dengan Bagian 3. Bagian 4 butuh 3; Bagian 6 butuh 1–5; Bagian 7 butuh semuanya.

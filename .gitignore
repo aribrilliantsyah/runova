@@ -2,3 +2,4 @@
 /runova
 /dist/
 *.sqlite*
+.brief-*.md
