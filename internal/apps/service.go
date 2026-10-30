@@ -47,6 +47,8 @@ type Service struct {
 	PortFree func(port int) bool
 	// Chown hands path to the user's container UID; nil means OSChown.
 	Chown func(path string, uid int) error
+	// DBEnv returns the database variables ("NAME=value") for an app; nil means no app has any.
+	DBEnv func(ctx context.Context, app store.App) ([]string, error)
 	// Dial probes the deployed app; nil means net.DialTimeout.
 	Dial func(network, addr string, timeout time.Duration) (net.Conn, error)
 
@@ -174,6 +176,8 @@ type CreateInput struct {
 	CPUMilli     int              `json:"cpu_milli"`
 	IPAccess     bool             `json:"ip_access"`
 	Env          []store.EnvEntry `json:"env"`
+	// DatabaseID binds the app to one of the user's PostgreSQL databases; nil means none.
+	DatabaseID *int64 `json:"database_id"`
 }
 
 // takeUpload loads the user's upload and requires a clean report.
@@ -269,6 +273,11 @@ func (s *Service) Create(ctx context.Context, user store.User, in CreateInput) (
 	if err := ValidateEnv(in.Env); err != nil {
 		return store.App{}, store.Deployment{}, err
 	}
+	if in.DatabaseID != nil {
+		if err := s.checkDatabase(ctx, user, *in.DatabaseID); err != nil {
+			return store.App{}, store.Deployment{}, err
+		}
+	}
 	up, err := s.takeUpload(ctx, user, in.UploadID)
 	if err != nil {
 		return store.App{}, store.Deployment{}, err
@@ -282,7 +291,7 @@ func (s *Service) Create(ctx context.Context, user store.User, in CreateInput) (
 	app := store.App{
 		UserID: user.ID, Name: in.Name, Kind: rep.Kind, JVMOpts: in.JVMOpts,
 		InternalPort: in.InternalPort, IPAccess: in.IPAccess, MemoryMB: in.MemoryMB, CPUMilli: in.CPUMilli,
-		Status: store.AppStopped, DeployMode: store.DeployModeZero, CreatedAt: s.now().UnixMilli(),
+		Status: store.AppStopped, DeployMode: store.DeployModeZero, CreatedAt: s.now().UnixMilli(), DatabaseID: in.DatabaseID,
 	}
 	if app.InternalPort == 0 {
 		app.InternalPort = rep.Port
@@ -444,6 +453,8 @@ type SettingsInput struct {
 	CPUMilli     *int    `json:"cpu_milli"`
 	IPAccess     *bool   `json:"ip_access"`
 	DeployMode   *string `json:"deploy_mode"`
+	// DatabaseID binds the app to one of the owner's databases; 0 detaches it. A change needs a redeploy.
+	DatabaseID *int64 `json:"database_id"`
 }
 
 // deployModes lists the modes this build can run.
@@ -502,6 +513,18 @@ func (s *Service) UpdateSettings(ctx context.Context, user store.User, appID int
 		}
 		patch.DeployMode = in.DeployMode
 	}
+	var bindDB bool
+	var dbID *int64
+	if in.DatabaseID != nil {
+		if *in.DatabaseID != 0 {
+			if err := s.checkDatabase(ctx, owner, *in.DatabaseID); err != nil {
+				return store.App{}, false, err
+			}
+			dbID = in.DatabaseID
+		}
+		bindDB = true
+		redeploy = redeploy || !sameID(app.DatabaseID, dbID)
+	}
 	mem, cpu := app.MemoryMB, app.CPUMilli
 	if in.MemoryMB != nil {
 		mem = *in.MemoryMB
@@ -533,6 +556,12 @@ func (s *Service) UpdateSettings(ctx context.Context, user store.User, appID int
 	updated, err := s.Store.UpdateApp(ctx, appID, patch)
 	if err != nil {
 		return store.App{}, false, err
+	}
+	if bindDB {
+		if err := s.Store.SetAppDatabase(ctx, appID, dbID); err != nil {
+			return store.App{}, false, err
+		}
+		updated.DatabaseID = dbID
 	}
 	if in.IPAccess != nil && *in.IPAccess != app.IPAccess {
 		if err := s.ApplyCaddy(ctx); err != nil {

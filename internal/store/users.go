@@ -243,6 +243,10 @@ func (s *Store) DeleteUser(ctx context.Context, id int64) error {
 				return err
 			}
 		}
+		// Apps go first: they reference the user's databases with ON DELETE RESTRICT.
+		if _, err := tx.ExecContext(ctx, `DELETE FROM apps WHERE user_id = ?`, id); err != nil {
+			return fmt.Errorf("delete user apps: %w", err)
+		}
 		if _, err := tx.ExecContext(ctx, `DELETE FROM users WHERE id = ?`, id); err != nil {
 			return fmt.Errorf("delete user: %w", err)
 		}

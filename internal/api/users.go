@@ -90,6 +90,7 @@ func (s *server) createUser(w http.ResponseWriter, r *http.Request) {
 		serverError(w, r, err)
 		return
 	}
+	s.userRoleHook(r, "Role PostgreSQL untuk "+u.Username+" belum dibuat", func() error { return s.dbs.OnUserCreated(r.Context(), u) })
 	s.record(r, auth.FromContext(r.Context()), store.ActUserCreate, u.Username, "role="+string(u.Role))
 	writeJSON(w, http.StatusCreated, u)
 }
@@ -158,6 +159,9 @@ func (s *server) updateUser(w http.ResponseWriter, r *http.Request) {
 	case err != nil:
 		serverError(w, r, err)
 		return
+	}
+	if body.Quota != nil {
+		s.userRoleHook(r, "Batas koneksi PostgreSQL untuk "+u.Username+" belum diterapkan", func() error { return s.dbs.OnQuotaChanged(r.Context(), u) })
 	}
 
 	if body.DisplayName != nil || body.Email != nil || body.Role != nil {
@@ -262,6 +266,7 @@ func (s *server) deleteUser(w http.ResponseWriter, r *http.Request) {
 		serverError(w, r, err)
 		return
 	}
+	s.userRoleHook(r, "Role PostgreSQL untuk "+target.Username+" belum dihapus", func() error { return s.dbs.OnUserDeleted(r.Context(), target.Username) })
 	s.record(r, actor, store.ActUserDelete, target.Username, "")
 	writeJSON(w, http.StatusOK, okBody)
 }

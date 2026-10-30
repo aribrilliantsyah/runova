@@ -56,6 +56,7 @@ type App struct {
 	CurrentDeploymentID *int64        `json:"current_deployment_id"`
 	DeployMode          string        `json:"deploy_mode"`
 	CreatedAt           int64         `json:"created_at"`
+	DatabaseID          *int64        `json:"database_id"`
 }
 
 // EnvEntry is one environment variable. Secret values are sealed in the
@@ -87,21 +88,21 @@ type Deployment struct {
 	FinishedAt   int64           `json:"finished_at"`
 }
 
-const appCols = `id, user_id, name, kind, java_version, jvm_opts, internal_port, ip_port, ip_access, memory_mb, cpu_milli, status, current_deployment_id, deploy_mode, created_at`
+const appCols = `id, user_id, name, kind, java_version, jvm_opts, internal_port, ip_port, ip_access, memory_mb, cpu_milli, status, current_deployment_id, deploy_mode, created_at, database_id`
 
 func scanApp(r scanner) (App, error) {
 	var a App
 	err := r.Scan(&a.ID, &a.UserID, &a.Name, &a.Kind, &a.JavaVersion, &a.JVMOpts, &a.InternalPort, &a.IPPort, &a.IPAccess,
-		&a.MemoryMB, &a.CPUMilli, &a.Status, &a.CurrentDeploymentID, &a.DeployMode, &a.CreatedAt)
+		&a.MemoryMB, &a.CPUMilli, &a.Status, &a.CurrentDeploymentID, &a.DeployMode, &a.CreatedAt, &a.DatabaseID)
 	return a, err
 }
 
 // CreateApp inserts a; ErrConflict when the name is taken for that user or the IP port is in use.
 func (s *Store) CreateApp(ctx context.Context, a App) (App, error) {
 	res, err := s.db.ExecContext(ctx,
-		`INSERT INTO apps(user_id, name, kind, java_version, jvm_opts, internal_port, ip_port, ip_access, memory_mb, cpu_milli, status, deploy_mode, created_at)
-		 VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)`,
-		a.UserID, a.Name, a.Kind, a.JavaVersion, a.JVMOpts, a.InternalPort, a.IPPort, a.IPAccess, a.MemoryMB, a.CPUMilli, a.Status, a.DeployMode, a.CreatedAt)
+		`INSERT INTO apps(user_id, name, kind, java_version, jvm_opts, internal_port, ip_port, ip_access, memory_mb, cpu_milli, status, deploy_mode, created_at, database_id)
+		 VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+		a.UserID, a.Name, a.Kind, a.JavaVersion, a.JVMOpts, a.InternalPort, a.IPPort, a.IPAccess, a.MemoryMB, a.CPUMilli, a.Status, a.DeployMode, a.CreatedAt, a.DatabaseID)
 	if isUnique(err) {
 		return App{}, ErrConflict
 	}

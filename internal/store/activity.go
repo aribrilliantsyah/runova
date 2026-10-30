@@ -30,6 +30,12 @@ const (
 	ActDomainAdd      = "domain.add"
 	ActDomainRemove   = "domain.remove"
 	ActPanelAddress   = "panel.address"
+	ActDBCreate       = "db.create"
+	ActDBDelete       = "db.delete"
+	ActDBBackup       = "db.backup"
+	ActDBRestore      = "db.restore"
+	ActDBPassword     = "db.password"
+	ActDBReveal       = "db.reveal"
 )
 
 type Activity struct {

@@ -15,6 +15,10 @@ type Config struct {
 	DockerHost string
 	// CaddyAdmin is the URL of Caddy's admin API.
 	CaddyAdmin string
+	// PGDSN is the admin connection to PostgreSQL.
+	PGDSN string
+	// PGHBAPath is the pg_hba.d file Runova writes.
+	PGHBAPath string
 }
 
 // Load reads configuration through getenv, falling back to the defaults.
@@ -31,6 +35,8 @@ func Load(getenv func(string) string) Config {
 		SecretKeyPath: get("RUNOVA_SECRET_KEY", "/etc/runova/secret.key"),
 		DockerHost:    get("RUNOVA_DOCKER_HOST", ""),
 		CaddyAdmin:    get("RUNOVA_CADDY_ADMIN", "http://127.0.0.1:2019"),
+		PGDSN:         get("RUNOVA_PG_DSN", "host=/var/run/postgresql user=runova dbname=postgres"),
+		PGHBAPath:     get("RUNOVA_PG_HBA", "/etc/postgresql/18/main/pg_hba.d/runova.conf"),
 	}
 }
 
@@ -45,3 +51,6 @@ func (c Config) CaddyAdminListen() string {
 	}
 	return u.Host
 }
+
+// BackupDir is where PostgreSQL backups are kept.
+func (c Config) BackupDir() string { return filepath.Join(c.DataDir, "backup") }

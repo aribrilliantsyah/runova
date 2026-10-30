@@ -10,11 +10,13 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
+
+	"runova/internal/pg/pgtest"
 )
 
 func newAdmin(t *testing.T) (*PgxAdmin, string) {
 	t.Helper()
-	dsn := startPG(t)
+	dsn := pgtest.StartPG(t)
 	a, err := Open(context.Background(), dsn)
 	if err != nil {
 		t.Fatal(err)

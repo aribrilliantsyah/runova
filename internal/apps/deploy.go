@@ -139,7 +139,11 @@ func (s *Service) rollout(ctx context.Context, owner store.User, app store.App, 
 	if err != nil {
 		return "", err
 	}
-	spec := s.ContainerSpec(app, owner, *d, env, nil)
+	dbEnv, err := s.dbEnv(ctx, app)
+	if err != nil {
+		return "", fmt.Errorf("database env: %w", err)
+	}
+	spec := s.ContainerSpec(app, owner, *d, env, dbEnv)
 
 	if replaceFirst {
 		if err := s.removeActive(ctx, app); err != nil {

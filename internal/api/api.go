@@ -16,6 +16,7 @@ import (
 
 	"runova/internal/apps"
 	"runova/internal/auth"
+	"runova/internal/dbs"
 	"runova/internal/store"
 )
 
@@ -29,6 +30,8 @@ type Config struct {
 	Context context.Context
 	// TerminalIdle closes a terminal WebSocket after this long without traffic; 0 means 30 minutes.
 	TerminalIdle time.Duration
+	// DBs serves the database endpoints and runs the user role hooks; without it neither exists.
+	DBs *dbs.Service
 }
 
 type server struct {
@@ -41,6 +44,7 @@ type server struct {
 	sessions *auth.Sessions
 	throttle *auth.Throttle
 	loginMu  sync.Mutex // serializes the login throttle's check-and-count
+	dbs      *dbs.Service
 }
 
 // New builds the API handler; every route lives under /api.
@@ -51,6 +55,7 @@ func New(cfg Config) http.Handler {
 		now:      cfg.Now,
 		dataDir:  cfg.DataDir,
 		apps:     cfg.Apps,
+		dbs:      cfg.DBs,
 		ctx:      cfg.Context,
 		idle:     cfg.TerminalIdle,
 		sessions: &auth.Sessions{Store: cfg.Store, Now: cfg.Now},
@@ -89,6 +94,9 @@ func New(cfg Config) http.Handler {
 	mux.HandleFunc("POST /api/notifications/read", user(s.readNotifications))
 	if s.apps != nil {
 		s.appRoutes(mux, user)
+	}
+	if s.dbs != nil {
+		s.dbRoutes(mux, user, admin)
 	}
 
 	mux.HandleFunc("/api/", func(w http.ResponseWriter, r *http.Request) {
