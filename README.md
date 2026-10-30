@@ -115,7 +115,7 @@ Untuk DNS langsung dan proxy, sertifikat diterbitkan Caddy di server. Untuk Tunn
 | Port aplikasi | Dialokasikan otomatis dari rentang yang diatur admin |
 | IP publik server | Diisi admin sekali. Kalau kosong, panduan domain hanya menawarkan Cloudflare Tunnel |
 
-Rancangan rinci (arsitektur, cara membaca artefak, Docker, Caddy, keamanan antar-pengguna, pengujian) akan ditulis di `docs/spec.md` sebelum implementasi dimulai.
+Rancangan rinci ada di [`docs/spec.md`](docs/spec.md). Rencana implementasi per bagian ada di `docs/superpowers/plans/`.
 
 ## Kredit
 
