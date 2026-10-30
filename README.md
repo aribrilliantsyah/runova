@@ -111,7 +111,7 @@ Untuk DNS langsung dan proxy, sertifikat diterbitkan Caddy di server. Untuk Tunn
 | Isolasi aplikasi | Docker, satu container per aplikasi, batas memori dan CPU |
 | Domain & HTTPS | Caddy, sertifikat otomatis |
 | Database | PostgreSQL 18 dari apt Ubuntu, service systemd di host. Hanya menerima koneksi dari jaringan Docker dan jaringan yang diizinkan admin |
-| Akses IP | Nyala: port terbuka di `0.0.0.0`. Mati: hanya `127.0.0.1`, cuma Caddy yang bisa mengakses |
+| Akses IP | Container hanya terbuka di `127.0.0.1`. Nyala: Caddy membuka port akses IP aplikasi dan meneruskannya. Mati: port itu ditutup |
 | Port aplikasi | Dialokasikan otomatis dari rentang yang diatur admin |
 | IP publik server | Diisi admin sekali. Kalau kosong, panduan domain hanya menawarkan Cloudflare Tunnel |
 

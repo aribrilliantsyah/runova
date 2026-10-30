@@ -16,13 +16,16 @@ Browser ──HTTPS──► Caddy (:80/:443) ──► runova (127.0.0.1:7070, 
                      │                     ├─ SQLite /var/lib/runova/runova.db
                      │                     ├─ Docker Engine API (/var/run/docker.sock)
                      │                     ├─ Caddy admin API (127.0.0.1:2019)
-                     │                     └─ PostgreSQL 18 (peer auth sebagai superuser lokal)
-                     └──► container aplikasi (jaringan Docker per pengguna)
+                     │                     └─ PostgreSQL 18 (peer auth, role `runova` CREATEDB CREATEROLE)
+                     ├──► container aplikasi via 127.0.0.1:<port acak>  (domain)
+                     └─ :20000–20999 (akses IP, listener Caddy) ──► container yang sama
 ```
 
-- `runova` berjalan sebagai service systemd, user Linux `runova`, anggota grup `docker`. Akses Docker setara root: panel harus dijaga (HTTPS, password kuat, batas percobaan login).
-- Caddy dikonfigurasi lewat admin API-nya (localhost saja), bukan dengan menulis Caddyfile.
-- Setiap pengguna punya jaringan Docker sendiri (`runova-u<id>`); container milik pengguna lain tidak saling terjangkau.
+- `runova` berjalan sebagai service systemd, user Linux `runova`, anggota grup `docker`, dengan `AmbientCapabilities=CAP_CHOWN CAP_FOWNER CAP_DAC_OVERRIDE` (untuk folder `/data` milik UID pengguna). Akses Docker setara root: panel harus dijaga (HTTPS, password kuat, batas percobaan login).
+- **Semua lalu lintas aplikasi lewat Caddy.** Container hanya mem-publish port internalnya ke `127.0.0.1:<port acak>`. Domain dan akses IP sama-sama route Caddy ke port itu, sehingga deploy tanpa jeda cukup mengganti upstream.
+- Caddy dikonfigurasi lewat admin API-nya (localhost saja). Runova adalah sumber kebenaran: konfigurasi lengkap dibangun dari SQLite dan dikirim dengan `POST /load` saat start, setiap perubahan, dan saat Runova mendeteksi Caddy restart (cek tiap 30 detik).
+- Setiap pengguna punya jaringan Docker sendiri (`runova-u<id>`, subnet `172.30.<n>.0/24`, n = 1–254, sehingga maksimal 254 pengguna); container milik pengguna lain tidak saling terjangkau.
+- Runova berbicara langsung dengan Docker Engine API lewat `/var/run/docker.sock` (API `v1.44`), tanpa SDK.
 
 ### Lokasi file
 
@@ -102,27 +105,31 @@ Deteksi:
   - glibc: `ubuntu:26.04`
 - Artefak di-mount read-only; `/data` di-mount dari folder persisten; env `RUNOVA_DATA_DIR=/data`.
 - Container berjalan sebagai UID pengguna (`100000 + user.id`), `--read-only` rootfs dengan `/tmp` tmpfs, `--cap-drop ALL`, `--security-opt no-new-privileges`, batas `--memory` dan `--cpus` dari alokasi aplikasi, `--restart on-failure`.
-- **Akses IP:** port tetap dari rentang 20000–20999 (dicek bebas saat alokasi). Nyala: publish di `0.0.0.0`; mati: `127.0.0.1` saja (hanya Caddy).
+- **Akses IP:** port tetap dari rentang 20000–20999, dialokasikan saat aplikasi dibuat dan tidak berubah. Nyala: Caddy mendengarkan `:<port>` (HTTP, tanpa HTTPS otomatis) dan meneruskan ke aplikasi; mati: listener itu dihapus.
+- Container mendapat `host.docker.internal` → gateway host (untuk PostgreSQL), env `HOME=/tmp`.
 - **Deploy:** mode *tanpa jeda* (bawaan: container baru jalan dan sehat dulu, lalu Caddy dialihkan, lalu container lama dihentikan) atau *stop-start* per aplikasi. Sehat = port internal menerima koneksi TCP dalam 60 detik.
 - **Versi dan rollback:** 10 versi terakhir disimpan; kembalikan = deploy ulang versi lama dengan env saat itu.
 - **Crash:** Docker menjalankan ulang. Lebih dari 5 restart dalam 10 menit → status "Gagal", container dihentikan, notifikasi di panel (ikon lonceng). Email/Telegram tidak termasuk versi pertama.
 - **Log:** dari Docker (`json-file`, maks 3×10 MB per container), ditampilkan live di panel.
-- **Terminal web:** `docker exec` sebagai UID pengguna (bukan root) ke container milik pengguna sendiri lewat WebSocket. Setiap sesi tercatat di Aktivitas.
+- **Terminal web:** `docker exec` `/bin/sh` sebagai UID pengguna (bukan root) ke container milik pengguna sendiri lewat WebSocket. Hanya untuk JAR dan binary glibc; image distroless (binary statis) tidak punya shell, tombolnya nonaktif dengan alasan itu. Setiap sesi tercatat di Aktivitas.
 
 ## 6. Domain dan HTTPS
 
-- Caddy dikelola lewat admin API (`127.0.0.1:2019`), satu route per domain → `127.0.0.1:<port aplikasi>`.
-- Panel sendiri: saat instalasi pilih domain (HTTPS otomatis) atau `IP:port`. Bisa diubah di Pengaturan; flag installer `--domain` / `--port`.
+- Caddy dikelola lewat admin API (`127.0.0.1:2019`). Server `runova-https` (`:80`, `:443`) berisi satu route per domain → `127.0.0.1:<port acak aplikasi>`; server `runova-ip-<port>` per aplikasi yang akses IP-nya nyala.
+- Domain: nama host valid (huruf kecil, label 1–63, total ≤253, minimal dua label), unik di seluruh server, maksimal 5 per aplikasi. Status sertifikat diambil dari Caddy (`/pki` tidak cukup; Runova mencoba koneksi TLS ke domain di 127.0.0.1:443 dengan SNI).
+- Panel sendiri: saat instalasi pilih domain (HTTPS otomatis) atau `IP:port`. Bisa diubah di Pengaturan; flag installer `--domain` / `--port`, disimpan lewat `runova panel set`.
 - Panduan domain tiga cara (DNS langsung, Proxy Cloudflare, Cloudflare Tunnel) sesuai README.
 
 ## 7. Database PostgreSQL
 
-- PostgreSQL 18 dari apt Ubuntu, di host. `listen_addresses` = localhost + gateway jaringan Docker Runova; `pg_hba.conf` hanya mengizinkan subnet Docker Runova dan jaringan tambahan yang diizinkan admin, `scram-sha-256`.
-- Satu role per pengguna Runova (nama = username), dibuat saat pengguna dibuat: `LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT CONNECTION LIMIT <kuota>`. Password acak, disimpan terenkripsi.
+- PostgreSQL 18 dari apt Ubuntu, di host. `listen_addresses = '*'`. Gerbangnya `pg_hba.conf`: baris `include_dir pg_hba.d` mengarah ke `/etc/postgresql/18/main/pg_hba.d/runova.conf` yang ditulis Runova (subnet `172.30.0.0/16` + jaringan yang diizinkan admin, `scram-sha-256`), lalu `SELECT pg_reload_conf()` (EXECUTE di-grant ke `runova`). Jaringan lain ditolak sebelum autentikasi.
+- Runova terhubung lewat socket Unix dengan peer auth sebagai role `runova` (`LOGIN CREATEDB CREATEROLE`, bukan superuser).
+- Satu role per pengguna Runova (nama = username), dibuat saat pengguna dibuat: `LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT CONNECTION LIMIT <kuota>`, lalu `GRANT <role> TO runova WITH INHERIT TRUE, SET TRUE` agar Runova bisa membuat, mem-backup, dan menghapus database milik role itu. Password acak 32 karakter, disimpan terenkripsi.
 - Pengguna membuat database di panel: nama `<username>_<nama>`, `<nama>` = `^[a-z][a-z0-9_]{0,30}$`. Runova menjalankan `CREATE DATABASE … OWNER <role>` lalu `REVOKE CONNECT, TEMPORARY ON DATABASE … FROM PUBLIC`. Jumlah dibatasi kuota.
-- Saat deploy pengguna memilih satu database miliknya (atau tanpa). Env yang diisi: `DATABASE_URL`, `SPRING_DATASOURCE_URL`, `SPRING_DATASOURCE_USERNAME`, `SPRING_DATASOURCE_PASSWORD`, `PGHOST`, `PGPORT`, `PGUSER`, `PGPASSWORD`, `PGDATABASE`.
+- Saat deploy pengguna memilih satu database miliknya (atau tanpa). `PGHOST=host.docker.internal`, `PGPORT=5432`. Env yang diisi: `DATABASE_URL`, `SPRING_DATASOURCE_URL`, `SPRING_DATASOURCE_USERNAME`, `SPRING_DATASOURCE_PASSWORD`, `PGHOST`, `PGPORT`, `PGUSER`, `PGPASSWORD`, `PGDATABASE`.
 - Hapus database hanya oleh pemilik dengan konfirmasi nama. Hapus pengguna → semua aplikasi, data, database, dan role-nya ikut dihapus.
-- **Backup:** `pg_dump -Fc` tiap malam pukul 02:00 waktu server per database, disimpan 7 hari. Pemilik bisa mengunduh dan me-restore dari halaman Database.
+- **Backup:** `pg_dump -Fc` tiap malam pukul 02:00 waktu server per database, disimpan 7 hari. Pemilik bisa mengunduh, membuat backup manual, dan me-restore (`pg_restore --clean --if-exists --no-owner --role=<role>`) dari halaman Database.
+- Detail koneksi untuk alat luar (DBeaver): host = IP publik server (atau domain panel), port 5432; hanya dari jaringan yang diizinkan admin.
 
 ## 8. Rahasia
 
@@ -135,23 +142,30 @@ Dicatat dengan pelaku, target, dan waktu: login berhasil/gagal, pengguna dibuat/
 
 ## 10. Installer
 
-`curl … | sudo bash -s -- [--domain panel.contoh.id | --port 8443]`:
+Rilis = `runova-<versi>-linux-amd64.tar.gz` berisi `runova` dan `install.sh`. Jalankan `sudo ./install.sh [--domain panel.contoh.id | --port 8443]`:
 
-1. Cek Ubuntu 26.04 amd64.
-2. `apt install docker.io caddy postgresql-18`.
-3. Buat user `runova`, direktori, `secret.key`, `runova.env`, unit systemd.
-4. Pasang binary, `systemctl enable --now runova`.
-5. Firewall (`ufw`): izinkan 22, 80, 443, rentang port akses IP, port panel bila mode IP.
-6. `runova admin create admin`, tampilkan alamat panel dan password sekali.
+1. Cek Ubuntu 26.04 amd64 dan root.
+2. `apt install docker.io caddy postgresql-18 ufw`.
+3. Buat user `runova` (grup `docker`), direktori, `secret.key` (`runova keygen`), `runova.env`, unit systemd.
+4. Caddy: Caddyfile minimal `{ admin localhost:2019 }`; Runova mengirim konfigurasi lengkap.
+5. PostgreSQL: role `runova`, `include_dir pg_hba.d`, `listen_addresses='*'`, grant `pg_reload_conf`.
+6. Firewall (`ufw`): izinkan 22, 80, 443, 20000–20999, 5432, dan port panel bila mode IP.
+7. `runova panel set …`, `systemctl enable --now runova`, `runova admin create admin`; tampilkan alamat panel dan password sekali.
+
+Menjalankan ulang installer aman (idempoten): langkah yang sudah beres dilewati, binary diperbarui, data tidak disentuh.
 
 ## 11. Urutan pembangunan
 
-Setiap bagian punya rencana sendiri di `docs/superpowers/plans/` dan bisa diuji sendiri:
+Setiap bagian punya rencana sendiri di `docs/superpowers/plans/` dan bisa diuji sendiri. Sampai rilis pertama belum ada instalasi nyata, jadi perubahan skema SQLite langsung mengubah `schema` (tanpa migrasi); DB lokal pengembangan cukup dihapus.
 
-1. Fondasi: binary, konfigurasi, SQLite, rahasia, login, pengguna dan kuota, aktivitas, API JSON.
-2. Membaca artefak.
-3. Menjalankan aplikasi di Docker: deploy, versi, rollback, log, crash, terminal.
-4. Caddy dan domain.
-5. PostgreSQL per pengguna dan backup.
-6. Panel web.
-7. Installer.
+| # | Bagian | Rencana |
+|---|---|---|
+| 1 | Fondasi: binary, konfigurasi, SQLite, rahasia, login, pengguna dan kuota, aktivitas, API JSON | `2026-10-30-fondasi.md` |
+| 2 | Membaca artefak dan unggahan | `2026-10-30-artefak.md` |
+| 3 | Menjalankan aplikasi di Docker: deploy, versi, rollback, log, crash, terminal | `2026-10-30-docker.md` |
+| 4 | Caddy, domain, akses IP, deploy tanpa jeda | `2026-10-30-caddy.md` |
+| 5 | PostgreSQL per pengguna dan backup | `2026-10-30-postgres.md` |
+| 6 | Panel web | `2026-10-30-panel.md` |
+| 7 | Installer, rilis, uji end-to-end di VM | `2026-10-30-installer.md` |
+
+Bagian 2 dan Bagian 5 Task 1 (admin PostgreSQL) hanya bergantung pada Bagian 1, jadi bisa dikerjakan paralel dengan Bagian 3. Bagian 4 butuh 3; Bagian 6 butuh 1–5; Bagian 7 butuh semuanya.
