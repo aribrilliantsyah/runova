@@ -456,3 +456,44 @@ func TestExecHijack(t *testing.T) {
 		t.Errorf("resize query = %q", resize)
 	}
 }
+
+// A closed terminal must tell the shell to quit: dropping the hijacked
+// connection alone leaves /bin/sh running in the container.
+func TestExecCloseHangsUpShell(t *testing.T) {
+	received := make(chan string, 1)
+	c := serve(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/v1.44/containers/abc/exec":
+			w.WriteHeader(http.StatusCreated)
+			io.WriteString(w, `{"Id":"e1"}`)
+		case "/v1.44/exec/e1/start":
+			conn, brw, err := w.(http.Hijacker).Hijack()
+			if err != nil {
+				t.Error(err)
+				return
+			}
+			defer conn.Close()
+			io.WriteString(conn, "HTTP/1.1 101 UPGRADED\r\nConnection: Upgrade\r\nUpgrade: tcp\r\n\r\n")
+			data, _ := io.ReadAll(brw)
+			received <- string(data)
+		}
+	}))
+	s, err := c.Exec(context.Background(), "abc", "100001:100001", []string{"/bin/sh"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := s.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.Close(); err != nil {
+		t.Fatalf("second Close = %v", err)
+	}
+	select {
+	case got := <-received:
+		if !strings.HasSuffix(got, "\x03\x04\x04") {
+			t.Errorf("shell received %q on close, want it to end with Ctrl-C then Ctrl-D", got)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("server never saw the session end")
+	}
+}

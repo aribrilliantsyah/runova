@@ -16,6 +16,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -556,7 +557,7 @@ func (c *Client) Exec(ctx context.Context, id string, user string, cmd []string)
 		return nil, readError(resp)
 	}
 	s := &execSession{c: c, id: created.Id, conn: conn, r: br}
-	s.stop = context.AfterFunc(ctx, func() { conn.Close() })
+	s.stop = context.AfterFunc(ctx, func() { s.shutdown() })
 	return s, nil
 }
 
@@ -566,14 +567,38 @@ type execSession struct {
 	conn net.Conn
 	r    *bufio.Reader // may hold bytes the Engine sent right after the 101 headers
 	stop func() bool
+	once sync.Once
+	err  error
 }
 
 func (s *execSession) Read(p []byte) (int, error)  { return s.r.Read(p) }
 func (s *execSession) Write(p []byte) (int, error) { return s.conn.Write(p) }
 
+// hangupGap separates Ctrl-C from Ctrl-D: sent in one write the shell can
+// still be busy reading the interrupt and swallow the end-of-file (measured
+// against a real Engine), leaving it running.
+const hangupGap = 100 * time.Millisecond
+
+// Close ends the session. Dropping the hijacked connection alone leaves the
+// exec'd shell running inside the container (the Engine keeps the TTY open
+// and never sends SIGHUP), so every closed terminal would leak a process.
+// The shell gets Ctrl-C (ends the foreground job) and then Ctrl-D (ends the
+// shell at its empty prompt) before the connection is dropped.
 func (s *execSession) Close() error {
 	s.stop()
-	return s.conn.Close()
+	return s.shutdown()
+}
+
+func (s *execSession) shutdown() error {
+	s.once.Do(func() {
+		s.conn.SetWriteDeadline(time.Now().Add(time.Second))
+		if _, err := s.conn.Write([]byte{0x03}); err == nil {
+			time.Sleep(hangupGap)
+			s.conn.Write([]byte{0x04, 0x04})
+		}
+		s.err = s.conn.Close()
+	})
+	return s.err
 }
 
 func (s *execSession) Resize(ctx context.Context, rows, cols uint) error {
