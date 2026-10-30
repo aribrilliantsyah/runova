@@ -10,8 +10,8 @@
 </p>
 
 <p align="center">
-  <b>Status: tahap rancangan.</b> Belum ada kode yang bisa dijalankan. Yang ada baru keputusan desain dan
-  <a href="preview-dashboard.html">preview tampilan</a> (buka file itu di browser).
+  <b>Status: fondasi berjalan.</b> Sudah ada binary <code>runova</code> dengan API JSON untuk login, pengguna, kuota, setelan server, dan log aktivitas.
+  Unggah dan jalankan aplikasi, domain, database, serta panel web belum ada. Lihat <a href="preview-dashboard.html">preview tampilan</a> (buka file itu di browser).
 </p>
 
 <p align="center">
@@ -116,6 +116,31 @@ Untuk DNS langsung dan proxy, sertifikat diterbitkan Caddy di server. Untuk Tunn
 | IP publik server | Diisi admin sekali. Kalau kosong, panduan domain hanya menawarkan Cloudflare Tunnel |
 
 Rancangan rinci ada di [`docs/spec.md`](docs/spec.md). Rencana implementasi per bagian ada di `docs/superpowers/plans/`.
+
+## Coba lokal
+
+Butuh Go 1.27. Tanpa cgo, jadi tidak perlu compiler C.
+
+```bash
+CGO_ENABLED=0 go build -o runova ./cmd/runova
+
+export RUNOVA_DATA=$(mktemp -d)
+export RUNOVA_SECRET_KEY=$RUNOVA_DATA/secret.key RUNOVA_LISTEN=127.0.0.1:7071
+
+./runova keygen                  # membuat kunci enkripsi (0600)
+./runova admin create admin      # mencetak Username dan Password acak sekali
+./runova serve &                 # API di http://127.0.0.1:7071
+
+curl -s -c jar -H 'Content-Type: application/json' \
+  -d '{"username":"admin","password":"<password dari langkah admin create>"}' \
+  127.0.0.1:7071/api/login
+curl -s -b jar 127.0.0.1:7071/api/me
+curl -s -b jar 127.0.0.1:7071/api/activity
+```
+
+Subperintah lain: `runova admin reset-password <username>` membuat password acak baru. `serve` menolak start bila file kunci tidak ada, jadi jalankan `keygen` dulu. Variabel lingkungan: `RUNOVA_LISTEN` (bawaan `127.0.0.1:7070`), `RUNOVA_DATA` (`/var/lib/runova`), `RUNOVA_SECRET_KEY` (`/etc/runova/secret.key`).
+
+Semua mutasi API memakai `Content-Type: application/json`. Jalankan `go test ./...` untuk menguji.
 
 ## Kredit
 
