@@ -1,0 +1,1179 @@
+<!doctype html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Runova · preview</title>
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNTYgMjU2IiB3aWR0aD0iMjU2IiBoZWlnaHQ9IjI1NiIgcm9sZT0iaW1nIiBhcmlhLWxhYmVsbGVkYnk9InQiPgogIDx0aXRsZSBpZD0idCI+UnVub3ZhPC90aXRsZT4KICA8IS0tIEFwcCBpY29uOiBpdm9yeSByb2NrZXQgb24gdGhlIGluayB0aWxlLCBjbGF5IGZsYW1lLiBNYXJrIHNjYWxlZCAwLjc0IGludG8gdGhlIG1hc2thYmxlIHNhZmUgem9uZS4gLS0+CiAgPHJlY3Qgd2lkdGg9IjI1NiIgaGVpZ2h0PSIyNTYiIGZpbGw9IiMxRDFDMUEiLz4KICA8ZyB0cmFuc2Zvcm09InRyYW5zbGF0ZSgzMy4yOCAzMy4yOCkgc2NhbGUoMC43NCkiPgogICAgPGcgdHJhbnNmb3JtPSJ0cmFuc2xhdGUoMTQwLjI1IDExMS43NSkgcm90YXRlKDQ1KSBzY2FsZSgxLjAyKSB0cmFuc2xhdGUoLTEyOCAtMTI0KSI+CiAgICAgIDxwYXRoIGZpbGw9IiNGQUY5RjUiIGZpbGwtcnVsZT0iZXZlbm9kZCIgZD0iTTEyOCAyMCBDMTUyIDM2IDE2MCA2MCAxNjAgOTIgVjE3NiBIOTYgVjkyIEM5NiA2MCAxMDQgMzYgMTI4IDIwIFoKICAgICAgICBNMTE1IDk2IEgxNDEgQTcgNyAwIDAgMSAxNDEgMTEwIEgxMTUgQTcgNyAwIDAgMSAxMTUgOTYgWgogICAgICAgIE0xMTUgMTI0IEgxNDEgQTcgNyAwIDAgMSAxNDEgMTM4IEgxMTUgQTcgNyAwIDAgMSAxMTUgMTI0IFoiLz4KICAgICAgPHBhdGggZmlsbD0iI0ZBRjlGNSIgZD0iTTk2IDEzNiBMNjQgMTY4IFYyMDAgTDk2IDE4NCBaIi8+CiAgICAgIDxwYXRoIGZpbGw9IiNGQUY5RjUiIGQ9Ik0xNjAgMTM2IEwxOTIgMTY4IFYyMDAgTDE2MCAxODQgWiIvPgogICAgICA8cGF0aCBmaWxsPSIjRDk3NzU3IiBkPSJNMTA4IDE4OCBIMTQ4IEwxMjggMjI4IFoiLz4KICAgIDwvZz4KICA8L2c+Cjwvc3ZnPgo=">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="https://unpkg.com/lucide@1.65.0/dist/umd/lucide.min.js"></script>
+<style>
+/* Runova preview v2. Layout after Dokploy (inset content sheet, grouped sidebar, pill tabs).
+   Palette after Claude: warm neutrals + one clay accent. No gradients. */
+.app{
+  --canvas:#F3F1EA; --panel:#FFFFFF; --raised:#FBFAF7; --hover:#F1EEE6; --line:#E7E3D9; --line-2:#D9D4C7;
+  --text:#1D1C1A; --muted:#6B6860; --faint:#9B978D;
+  --accent:#C96442; --accent-h:#B5583A; --on-accent:#fff; --accent-soft:#F7EAE3;
+  --ok:#2F7D4F; --ok-bg:#E6F2EA; --warn:#97600F; --warn-bg:#F7EDDB; --err:#B53A2E; --err-bg:#F8E4E0; --info:#3D5A80; --info-bg:#E6ECF4;
+  --sans:"IBM Plex Sans",system-ui,sans-serif; --mono:"IBM Plex Mono",ui-monospace,monospace;
+  --r:8px; --r-lg:12px;
+}
+.app[data-theme=dark]{
+  --canvas:#141413; --panel:#1C1B1A; --raised:#21201E; --hover:#262523; --line:#2E2D2A; --line-2:#3A3935;
+  --text:#EDEBE4; --muted:#A3A097; --faint:#6F6C65;
+  --accent:#D97757; --accent-h:#E38A6C; --on-accent:#141413; --accent-soft:#33241D;
+  --ok:#5DB07F; --ok-bg:#1A2B21; --warn:#D7A04E; --warn-bg:#30261A; --err:#E5806F; --err-bg:#33201C; --info:#8FAAD0; --info-bg:#1D2531;
+}
+*{box-sizing:border-box}
+body{margin:0}
+.app{display:grid;grid-template-columns:232px minmax(0,1fr);height:820px;background:var(--canvas);color:var(--text);
+  font:400 13px/1.45 var(--sans);-webkit-font-smoothing:antialiased;border-radius:12px;overflow:hidden;border:1px solid var(--line)}
+button,input,select,textarea{font:inherit;color:inherit}
+svg.lucide{width:15px;height:15px;stroke-width:1.75;flex:none}
+.mono{font-family:var(--mono);font-size:12px}
+.muted{color:var(--muted)}
+.faint{color:var(--faint)}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:6px}
+
+/* Sidebar */
+.side{display:flex;flex-direction:column;padding:10px;min-height:0}
+.ws{display:flex;align-items:center;gap:10px;padding:6px 8px;border-radius:var(--r);cursor:pointer}
+.ws:hover{background:var(--hover)}
+.logo{width:26px;height:26px;border-radius:7px;background:var(--text);display:grid;place-items:center;flex:none}
+.rmark{width:100%;height:100%;display:block}
+.rmark .rb{fill:var(--panel)}
+.rmark .rf{fill:var(--accent)}
+.logo{overflow:hidden}
+.ws b{display:block;font-weight:600;font-size:13.5px;line-height:1.15}
+.ws span{font-size:11.5px;color:var(--muted)}
+.ws > .lucide{margin-left:auto;color:var(--faint)}
+.grp{margin-top:16px}
+.grp h6{margin:0 0 4px 10px;font:500 11.5px var(--sans);color:var(--faint)}
+.nav{display:grid;gap:1px}
+.nav button{all:unset;display:flex;align-items:center;gap:10px;height:30px;padding:0 10px;border-radius:7px;color:var(--muted);cursor:pointer;font-weight:500}
+.nav button:hover{background:var(--hover);color:var(--text)}
+.nav button[aria-current=page]{background:var(--panel);color:var(--text);box-shadow:0 0 0 1px var(--line)}
+.nav .n{margin-left:auto;font:500 11px var(--mono);color:var(--faint)}
+.side-foot{margin-top:auto;display:grid;gap:8px}
+.usage{border:1px solid var(--line);border-radius:var(--r);background:var(--panel);padding:10px}
+.usage .row1{display:flex;justify-content:space-between;font-size:12px;margin-bottom:8px}
+.usage .row1 b{font-weight:600}
+.mini{display:grid;grid-template-columns:auto 1fr auto;gap:6px 8px;align-items:center;font-size:11.5px;color:var(--muted)}
+.mini .lucide{width:13px;height:13px}
+.acct{display:flex;align-items:center;gap:10px;padding:6px 8px;border-radius:var(--r);cursor:pointer}
+.acct:hover{background:var(--hover)}
+.av{width:28px;height:28px;border-radius:50%;background:var(--accent-soft);color:var(--accent);display:grid;place-items:center;font-weight:600;font-size:11.5px;flex:none}
+.acct b{display:block;font-weight:500;font-size:12.5px;line-height:1.2}
+.acct span{font-size:11.5px;color:var(--muted)}
+.acct > .lucide{margin-left:auto;color:var(--faint)}
+
+/* Main */
+.main{display:flex;flex-direction:column;min-width:0;min-height:0;padding:8px 8px 8px 0}
+.top{height:44px;display:flex;align-items:center;gap:8px;padding:0 6px 0 4px;flex:none}
+.ibtn{all:unset;display:grid;place-items:center;width:28px;height:28px;border-radius:7px;color:var(--muted);cursor:pointer}
+.ibtn:hover{background:var(--hover);color:var(--text)}
+.vsep{width:1px;height:18px;background:var(--line-2);margin:0 4px}
+.crumb{display:flex;align-items:center;gap:2px;min-width:0}
+.crumb button{all:unset;display:flex;align-items:center;gap:6px;height:28px;padding:0 8px;border-radius:7px;cursor:pointer;font-weight:500;white-space:nowrap}
+.crumb button:hover{background:var(--hover)}
+.crumb .lucide{color:var(--faint)}
+.crumb .sl{color:var(--line-2);margin:0 2px}
+.crumb img{width:16px;height:16px}
+.top .right{margin-left:auto;display:flex;align-items:center;gap:6px}
+.kbd{display:flex;align-items:center;gap:8px;height:28px;padding:0 8px 0 10px;border:1px solid var(--line);border-radius:7px;background:var(--panel);color:var(--faint);min-width:220px;cursor:text}
+.kbd kbd{margin-left:auto;font:500 10.5px var(--mono);color:var(--muted);border:1px solid var(--line);border-radius:4px;padding:1px 5px;background:var(--raised)}
+.sheet{flex:1;min-height:0;background:var(--panel);border:1px solid var(--line);border-radius:var(--r-lg);overflow:auto}
+.view{display:none}.view.on{display:block}
+
+/* Page head */
+.ph{display:flex;align-items:center;gap:14px;padding:18px 22px 16px;border-bottom:1px solid var(--line)}
+.ph h1{margin:0;font-size:17px;font-weight:600;letter-spacing:-.015em;line-height:1.25}
+.ph p{margin:2px 0 0;color:var(--muted);font-size:12.5px}
+.ph .acts{margin-left:auto;display:flex;gap:6px;align-items:center}
+.pb{padding:16px 22px 24px}
+
+/* Buttons */
+.btn{display:inline-flex;align-items:center;gap:6px;height:30px;padding:0 11px;border-radius:7px;border:1px solid var(--line-2);background:var(--panel);color:var(--text);cursor:pointer;font-weight:500;white-space:nowrap}
+.btn:hover{background:var(--hover)}
+.btn.pri{background:var(--accent);border-color:var(--accent);color:var(--on-accent)}
+.btn.pri:hover{background:var(--accent-h);border-color:var(--accent-h)}
+.btn.dark{background:var(--text);border-color:var(--text);color:var(--panel)}
+.btn.ghost{border-color:transparent;background:none;color:var(--muted)}
+.btn.ghost:hover{background:var(--hover);color:var(--text)}
+.btn.danger{color:var(--err)}
+.btn.sm{height:26px;padding:0 8px;font-size:12px;gap:5px}
+.btn.sm .lucide{width:13px;height:13px}
+.btn:disabled{opacity:.45;cursor:not-allowed}
+
+/* Chips & status */
+.chip{display:inline-flex;align-items:center;gap:5px;height:20px;padding:0 7px;border-radius:5px;font-size:11.5px;font-weight:500;border:1px solid var(--line);color:var(--muted);background:var(--raised);white-space:nowrap}
+.chip .lucide{width:12px;height:12px}
+.chip.ok{color:var(--ok);background:var(--ok-bg);border-color:transparent}
+.chip.warn{color:var(--warn);background:var(--warn-bg);border-color:transparent}
+.chip.err{color:var(--err);background:var(--err-bg);border-color:transparent}
+.chip.info{color:var(--info);background:var(--info-bg);border-color:transparent}
+.dot{width:7px;height:7px;border-radius:50%;flex:none;background:var(--faint)}
+.dot.ok{background:var(--ok);box-shadow:0 0 0 3px var(--ok-bg)}
+.dot.warn{background:var(--warn);box-shadow:0 0 0 3px var(--warn-bg)}
+.dot.err{background:var(--err);box-shadow:0 0 0 3px var(--err-bg)}
+.chip .dot{box-shadow:none;width:6px;height:6px}
+.bar{height:5px;border-radius:3px;background:var(--hover);overflow:hidden}
+.bar i{display:block;height:100%;background:var(--text);opacity:.6;border-radius:3px}
+.bar i.hi{background:var(--warn);opacity:1}
+
+/* Apps */
+.stats{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin-bottom:16px}
+.stat{border:1px solid var(--line);border-radius:var(--r);padding:11px 13px;background:var(--raised)}
+.stat .l{display:flex;align-items:center;gap:6px;color:var(--muted);font-size:12px}
+.stat .l .lucide{width:14px;height:14px}
+.stat .v{font:600 18px var(--sans);letter-spacing:-.01em;margin:4px 0 8px;font-variant-numeric:tabular-nums}
+.stat .v small{font:400 12px var(--sans);color:var(--muted)}
+.toolbar{display:flex;align-items:center;gap:8px;margin-bottom:12px}
+.filter{display:flex;align-items:center;gap:8px;height:30px;padding:0 10px;border:1px solid var(--line-2);border-radius:7px;width:260px;color:var(--faint);background:var(--panel)}
+.seg{display:flex;padding:2px;border-radius:8px;background:var(--hover);gap:2px}
+.seg button{all:unset;display:flex;align-items:center;gap:6px;height:24px;padding:0 9px;border-radius:6px;cursor:pointer;color:var(--muted);font-size:12px;font-weight:500}
+.seg button[aria-pressed=true]{background:var(--panel);color:var(--text);box-shadow:0 0 0 1px var(--line)}
+.toolbar .r{margin-left:auto;display:flex;gap:6px}
+.apps{display:grid;grid-template-columns:repeat(auto-fill,minmax(270px,1fr));gap:10px}
+.acard{border:1px solid var(--line);border-radius:var(--r);padding:12px 13px;background:var(--panel);cursor:pointer;display:grid;gap:10px}
+.acard:hover{border-color:var(--line-2);background:var(--raised)}
+.acard .h{display:flex;align-items:center;gap:10px}
+.lgbox{width:28px;height:28px;border-radius:7px;border:1px solid var(--line);display:grid;place-items:center;background:var(--raised);flex:none}
+.lgbox img{width:18px;height:18px}
+.acard b{font-weight:600;font-size:13.5px}
+.acard .sub{font-size:12px;color:var(--muted)}
+.acard .h .dot{margin-left:auto}
+.acard .ep{display:grid;gap:4px;font-size:12px}
+.acard .ep div{display:flex;align-items:center;gap:6px;color:var(--muted);min-width:0}
+.acard .ep span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.acard .ep .lucide{width:13px;height:13px;color:var(--faint)}
+.acard .ft{display:flex;align-items:center;gap:8px;padding-top:9px;border-top:1px solid var(--line);font-size:11.5px;color:var(--muted)}
+.acard .ft .bar{flex:1;height:4px}
+.app[data-theme=dark] img.inv{filter:invert(1)}
+
+/* App detail */
+.dhead{display:flex;align-items:center;gap:12px}
+.dhead .lgbox{width:34px;height:34px;border-radius:8px}
+.dhead .lgbox img{width:20px;height:20px}
+.links{display:flex;gap:6px;flex-wrap:wrap;padding:12px 22px 0}
+.link{display:inline-flex;align-items:center;gap:6px;height:26px;padding:0 9px;border:1px solid var(--line);border-radius:7px;font:400 12px var(--mono);color:var(--text);text-decoration:none;background:var(--raised)}
+.link .lucide{width:13px;height:13px;color:var(--faint)}
+.link.off{opacity:.45;text-decoration:line-through}
+.tabs{display:flex;gap:2px;padding:4px;border-radius:9px;background:var(--hover);width:max-content;max-width:calc(100% - 44px);overflow-x:auto;margin:14px 22px 0}
+.tabs button{all:unset;display:flex;align-items:center;gap:6px;height:27px;padding:0 11px;border-radius:7px;cursor:pointer;color:var(--muted);font-weight:500;white-space:nowrap}
+.tabs button:hover{color:var(--text)}
+.tabs button[aria-selected=true]{background:var(--panel);color:var(--text);box-shadow:0 0 0 1px var(--line)}
+.tab{display:none;padding:14px 22px 24px}.tab.on{display:block}
+.card{border:1px solid var(--line);border-radius:var(--r);background:var(--panel)}
+.card>header{display:flex;align-items:center;gap:8px;padding:11px 14px;border-bottom:1px solid var(--line)}
+.card>header h3{margin:0;font-size:13px;font-weight:600}
+.card>header p{margin:2px 0 0;color:var(--muted);font-size:12px}
+.card>header .r{margin-left:auto;display:flex;gap:6px;align-items:center}
+.card .bd{padding:12px 14px}
+.actions{display:flex;gap:6px;flex-wrap:wrap}
+.cols{display:grid;grid-template-columns:minmax(0,1.3fr) minmax(0,1fr);gap:12px;margin-top:12px}
+dl.kv{display:grid;grid-template-columns:130px minmax(0,1fr);gap:8px 12px;margin:0}
+dl.kv dt{color:var(--muted)}
+dl.kv dd{margin:0;min-width:0;overflow-wrap:anywhere}
+.sw{all:unset;width:30px;height:18px;border-radius:9px;background:var(--line-2);position:relative;cursor:pointer;flex:none}
+.sw::after{content:"";position:absolute;top:2px;left:2px;width:14px;height:14px;border-radius:50%;background:#fff;transition:left .15s;box-shadow:0 1px 2px rgba(0,0,0,.2)}
+.sw[aria-checked=true]{background:var(--ok)}
+.sw[aria-checked=true]::after{left:14px}
+.setting{display:flex;align-items:center;gap:12px;padding:10px 0}
+.setting+.setting{border-top:1px solid var(--line)}
+.setting b{font-weight:500;display:block}
+.setting .d{font-size:12px;color:var(--muted)}
+.setting .ctl{margin-left:auto}
+.meters{display:grid;gap:12px}
+.meters .t{display:flex;justify-content:space-between;font-size:12.5px;margin-bottom:5px;font-variant-numeric:tabular-nums}
+.meters .t span{color:var(--muted)}
+.meters .t b{font-weight:500;display:flex;align-items:center;gap:6px}
+.meters .lucide{color:var(--faint);width:14px;height:14px}
+pre.log{margin:0;padding:10px 14px;font:400 11.8px/1.7 var(--mono);color:var(--text);background:var(--raised);overflow:auto;white-space:pre;border-radius:0 0 var(--r) var(--r)}
+pre.log b{font-weight:400;color:var(--faint)}
+pre.log .w{color:var(--warn)}pre.log .e{color:var(--err)}pre.log .s{color:var(--info)}
+pre.log.tall{height:470px}
+table.t{width:100%;border-collapse:collapse}
+table.t th{font:500 12px var(--sans);color:var(--muted);text-align:left;padding:8px 14px;border-bottom:1px solid var(--line);background:var(--raised)}
+table.t td{padding:9px 14px;border-bottom:1px solid var(--line);vertical-align:middle}
+table.t tr:last-child td{border-bottom:0}
+.num{text-align:right;font-variant-numeric:tabular-nums}
+.banner{display:flex;align-items:center;gap:10px;padding:9px 12px;border-radius:var(--r);margin-bottom:12px;font-size:12.5px}
+.banner.warn{background:var(--warn-bg);color:var(--warn)}
+.banner.info{background:var(--info-bg);color:var(--info)}
+.banner span{color:var(--text)}
+.banner .r{margin-left:auto;display:flex;gap:6px}
+input.f,select.f{height:32px;padding:0 10px;border:1px solid var(--line-2);border-radius:7px;background:var(--panel);width:100%}
+input.f.mono{font-family:var(--mono);font-size:12px}
+input.f::placeholder{color:var(--faint)}
+.envrow{display:grid;grid-template-columns:220px minmax(0,1fr) auto;gap:8px;align-items:center;padding:7px 12px;border-bottom:1px solid var(--line)}
+.envrow:last-child{border-bottom:0}
+.envrow .k{font:500 12px var(--mono);display:flex;align-items:center;gap:6px;min-width:0}
+.envrow .req{color:var(--err)}
+.envrow input.f{height:30px}
+.envrow .acts{display:flex;gap:2px;justify-content:flex-end}
+.envhead{display:flex;align-items:center;gap:8px;padding:8px 12px;background:var(--raised);border-bottom:1px solid var(--line);font-size:12px;color:var(--muted);border-radius:var(--r) var(--r) 0 0}
+.envhead .r{margin-left:auto;display:flex;gap:6px}
+
+/* Deploy wizard */
+.wiz{display:grid;grid-template-columns:210px minmax(0,1fr) 280px;min-height:100%}
+.steps{border-right:1px solid var(--line);padding:18px 10px;display:grid;align-content:start;gap:2px}
+.steps h4{margin:0 0 8px 8px;font:600 13px var(--sans)}
+.steps button{all:unset;display:grid;grid-template-columns:24px 1fr;gap:1px 10px;align-items:center;padding:8px;border-radius:8px;cursor:pointer}
+.steps button:hover{background:var(--hover)}
+.steps .no{width:22px;height:22px;border-radius:50%;border:1.5px solid var(--line-2);display:grid;place-items:center;font:600 11px var(--sans);color:var(--muted);grid-row:span 2}
+.steps .no .lucide{width:12px;height:12px;stroke-width:2.75}
+.steps b{font-weight:500}
+.steps small{font-size:11.5px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.steps button[aria-current=step]{background:var(--hover)}
+.steps button[aria-current=step] .no{border-color:var(--text);background:var(--text);color:var(--panel)}
+.steps button.done .no{border-color:var(--ok);background:var(--ok);color:#fff}
+.wbody{padding:20px 26px 26px;min-width:0}
+.wbody h2{margin:0;font-size:16px;font-weight:600;letter-spacing:-.01em}
+.wbody .lead{margin:3px 0 18px;color:var(--muted)}
+.wstep{display:none}.wstep.on{display:block}
+.drop{border:1.5px dashed var(--line-2);border-radius:var(--r-lg);padding:24px;display:grid;justify-items:center;text-align:center;gap:6px;background:var(--raised);cursor:pointer}
+.drop:hover{border-color:var(--faint)}
+.drop .ic{width:40px;height:40px;border-radius:10px;background:var(--panel);border:1px solid var(--line);display:grid;place-items:center;margin-bottom:4px}
+.drop .ic .lucide{width:18px;height:18px;color:var(--muted)}
+.drop b{font-weight:500}
+.drop small{color:var(--muted)}
+.accept{display:flex;gap:6px;flex-wrap:wrap;justify-content:center;margin-top:6px}
+.fileok{display:flex;align-items:center;gap:12px;border:1px solid var(--line);border-radius:var(--r);padding:10px 12px;margin-top:12px}
+.fileok b{font-weight:500}
+.fileok .r{margin-left:auto}
+.checks{border:1px solid var(--line);border-radius:var(--r);margin-top:10px}
+.checks div{display:flex;align-items:center;gap:10px;font-size:12.5px;padding:8px 12px}
+.checks div+div{border-top:1px solid var(--line)}
+.checks .lucide{width:15px;height:15px;color:var(--ok)}
+.checks .w .lucide{color:var(--warn)}
+.opts{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:8px}
+.opt{all:unset;border:1px solid var(--line-2);border-radius:var(--r);padding:10px 11px;cursor:pointer;display:grid;gap:1px;background:var(--panel)}
+.opt:hover{border-color:var(--faint)}
+.opt b{font-weight:600;font-size:14px}
+.opt small{font-size:11.5px;color:var(--muted)}
+.opt[aria-pressed=true]{border-color:var(--text);box-shadow:0 0 0 1px var(--text)}
+.opt[aria-disabled=true]{opacity:.45;cursor:not-allowed;background:var(--raised)}
+.fld{display:grid;gap:6px;margin-bottom:16px}
+.fld>label{font-weight:500;font-size:12.5px}
+.fld .hint{font-size:12px;color:var(--muted)}
+.res3{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin-bottom:14px}
+.rescard{border:1px solid var(--line);border-radius:var(--r);padding:11px 12px}
+.rescard .l{display:flex;align-items:center;gap:6px;color:var(--muted);font-size:12px;margin-bottom:7px}
+.rescard .l .lucide{color:var(--faint);width:14px;height:14px}
+.rescard select{font-weight:600}
+.rescard .hint{font-size:11.5px;color:var(--muted);margin-top:6px}
+.wnav{display:flex;align-items:center;gap:8px;margin-top:22px;padding-top:14px;border-top:1px solid var(--line)}
+.wnav .r{margin-left:auto;display:flex;gap:6px}
+.summary{border-left:1px solid var(--line);padding:18px 16px;background:var(--raised);display:grid;align-content:start;gap:14px}
+.summary h3{margin:0;font-size:13px;font-weight:600}
+.srow{display:flex;justify-content:space-between;gap:10px;font-size:12.5px}
+.srow span{color:var(--muted)}
+.srow b{font-weight:500;text-align:right;min-width:0;overflow-wrap:anywhere}
+.summary .sep{height:1px;background:var(--line)}
+.todo{display:grid;gap:7px}
+.todo div{display:flex;gap:8px;align-items:center;font-size:12.5px}
+.todo .lucide{width:14px;height:14px}
+.todo .ok .lucide{color:var(--ok)}
+.todo .no{color:var(--muted)}
+.todo .no .lucide{color:var(--faint)}
+
+/* Users */
+.ucell{display:flex;align-items:center;gap:10px}
+.ucell b{font-weight:500;display:block}
+.ucell small{color:var(--muted);font:400 11.5px var(--mono)}
+.qcell{min-width:120px}
+.qcell .t{display:flex;justify-content:space-between;font-size:11.5px;color:var(--muted);margin-bottom:4px;font-variant-numeric:tabular-nums}
+.qcell .t b{color:var(--text);font-weight:500}
+
+/* Server */
+.g3{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
+.svc{display:flex;align-items:center;gap:10px}
+.svc .ic{width:32px;height:32px;border-radius:8px;border:1px solid var(--line);display:grid;place-items:center;background:var(--raised)}
+.svc .ic .lucide{width:16px;height:16px;color:var(--muted)}
+.svc b{font-weight:600}
+.svc .chip{margin-left:auto}
+.rt{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:8px}
+.rtitem{display:flex;align-items:center;gap:10px;border:1px solid var(--line);border-radius:var(--r);padding:9px 11px}
+.rtitem img{width:20px;height:20px}
+.rtitem b{font-weight:500;display:block;font-size:12.5px}
+.rtitem small{font:400 11px var(--mono);color:var(--muted)}
+.rtitem .sw{margin-left:auto}
+
+/* Preview frame only (not part of the product) */
+.previewbar{display:flex;gap:6px;justify-content:center;margin:0 0 12px;font:500 12.5px system-ui,sans-serif}
+.previewbar button{border:1px solid var(--border,#d9d4c7);background:var(--surface,#fff);color:var(--foreground,#1d1c1a);border-radius:999px;padding:5px 14px;cursor:pointer;font:inherit}
+.previewbar button[aria-pressed=true]{background:var(--foreground,#1d1c1a);color:var(--background,#fff);border-color:transparent}
+.device{container:rnv / inline-size;margin:0 auto}
+.device.phone{width:410px;max-width:100%;height:864px;border:10px solid #161615;border-radius:46px;overflow:hidden;box-shadow:0 0 0 1px #2c2b28}
+.device.phone .app{height:100%;border:0;border-radius:0}
+
+/* Mobile-only parts, hidden on desktop */
+.app{position:relative}
+.mlogo,.mback,.msearch,.bnav,.mbar,.mstep,.msheet{display:none}
+
+@container rnv (max-width: 760px){
+  .app{display:flex;flex-direction:column}
+  .side,.dsk,.kbd,#themeBtn{display:none}
+  .main{flex:1;padding:0}
+
+  /* Top bar: logo or back, page title, search, notifications */
+  .top{height:52px;padding:0 8px;gap:2px;border-bottom:1px solid var(--line);background:var(--panel)}
+  .ibtn{width:38px;height:38px;border-radius:9px}
+  .mlogo{display:grid;place-items:center;width:30px;height:30px;border-radius:8px;background:var(--text);margin:0 6px 0 4px;flex:none}
+  .mlogo{overflow:hidden}
+  .msearch{display:grid}
+  .app[data-view=app] .mlogo,.app[data-view=new] .mlogo{display:none}
+  .app[data-view=app] .mback,.app[data-view=new] .mback{display:grid}
+  .crumb > *:not(:last-child){display:none}
+  .crumb button{font-weight:600;font-size:15px;padding:0 4px}
+  .crumb svg.lucide{display:none}
+  .sheet{border:0;border-radius:0}
+
+  /* Bottom navigation */
+  .bnav{display:grid;grid-template-columns:repeat(5,1fr);flex:none;height:64px;background:var(--panel);border-top:1px solid var(--line);padding:0 4px env(safe-area-inset-bottom)}
+  .bnav button{all:unset;position:relative;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;color:var(--muted);font:500 11px var(--sans);cursor:pointer;-webkit-tap-highlight-color:transparent}
+  .bnav button svg.lucide{width:20px;height:20px}
+  .bnav button[aria-current=page]{color:var(--text)}
+  .bnav button[aria-current=page]::before{content:"";position:absolute;top:-1px;left:50%;width:24px;height:2px;margin-left:-12px;border-radius:0 0 2px 2px;background:var(--accent)}
+  .bnav .fab{color:var(--text)}
+  .bnav .fabic{display:grid;place-items:center;width:46px;height:30px;border-radius:10px;background:var(--text);color:var(--panel)}
+  .bnav .fabic svg.lucide{width:18px;height:18px;stroke-width:2.25}
+  .bnav .fab[aria-current=page]::before{display:none}
+  .bnav .fab[aria-current=page] .fabic{background:var(--accent);color:var(--on-accent)}
+
+  /* Deploy flow: bottom nav swaps for a step action bar */
+  .app[data-view=new] .bnav{display:none}
+  .app[data-view=new] .mbar{display:flex}
+  .mbar{flex:none;gap:8px;padding:10px 12px calc(10px + env(safe-area-inset-bottom));border-top:1px solid var(--line);background:var(--panel)}
+  .mbar .btn{flex:1;justify-content:center;height:44px;font-size:14px}
+  .mbar #mprev{flex:0 0 auto;padding:0 16px}
+  .mstep{display:block;margin:0 0 16px}
+  .mstep .t{display:flex;justify-content:space-between;font-size:12px;color:var(--muted);margin-bottom:7px}
+  .mstep .t b{color:var(--text);font-weight:600}
+  .mstep .bar{height:4px}
+  .mstep .bar i{background:var(--accent);opacity:1;transition:width .2s}
+  .wiz{display:block}
+  .steps,.wnav{display:none}
+  .wbody{padding:16px}
+  .wbody h2{font-size:17px}
+  .summary{border-left:0;border-top:1px solid var(--line);padding:16px}
+  .wiz:not([data-at="4"]) .summary{display:none}
+  .summary #deploy{display:none}
+  .drop{padding:20px 14px}
+
+  /* "Lainnya" bottom sheet */
+  .msheet:not([hidden]){display:block;position:absolute;inset:0;z-index:30}
+  .msheet .scrim{position:absolute;inset:0;background:rgba(20,20,19,.45)}
+  .mpanel{position:absolute;left:0;right:0;bottom:0;background:var(--panel);border-radius:16px 16px 0 0;padding:8px 14px calc(18px + env(safe-area-inset-bottom));display:grid;gap:12px;animation:rnv-up .22s ease-out}
+  .grab{width:36px;height:4px;border-radius:2px;background:var(--line-2);margin:2px auto 2px}
+  .mpanel .acct{cursor:default}
+  .mpanel .acct:hover{background:none}
+  .mlist{border:1px solid var(--line);border-radius:var(--r);overflow:hidden}
+  .mlist button{all:unset;box-sizing:border-box;display:flex;align-items:center;gap:12px;width:100%;height:48px;padding:0 14px;cursor:pointer;font-weight:500}
+  .mlist button+button{border-top:1px solid var(--line)}
+  .mlist button svg.lucide{width:17px;height:17px;color:var(--muted)}
+  .mlist button > svg.lucide-chevron-right{margin-left:auto;color:var(--faint)}
+  .mlist button.danger,.mlist button.danger svg.lucide{color:var(--err)}
+  .mlist .sw{display:inline-block;margin-left:auto}
+
+  /* Page content */
+  .ph{flex-wrap:wrap;padding:14px 16px 12px;gap:10px}
+  .ph h1{font-size:16.5px}
+  .app[data-view=apps] .ph .acts{display:none}
+  .pb{padding:14px 16px 20px}
+  .stats{grid-template-columns:1fr 1fr;gap:8px;margin-bottom:14px}
+  .stat{padding:10px 11px}
+  .stat .v{font-size:16px;margin:2px 0 7px}
+  .toolbar{flex-wrap:wrap}
+  .filter{width:100%;height:40px}
+  .toolbar .r{display:none}
+  .seg{max-width:100%;overflow-x:auto}
+  .seg button{height:30px}
+  .apps{grid-template-columns:1fr}
+  .links{padding:10px 16px 0}
+  .tabs{margin:12px 16px 0;max-width:calc(100% - 32px);scrollbar-width:none}
+  .tabs button{height:32px}
+  .tab{padding:12px 16px 20px}
+  .cols{grid-template-columns:minmax(0,1fr)}
+  .cols > .card{min-width:0}
+  .checks div{display:block;line-height:1.55;padding:9px 12px 9px 36px;position:relative}
+  .checks div svg.lucide{position:absolute;left:12px;top:11px}
+  .checks .mono{overflow-wrap:anywhere}
+  .dhead{min-width:0}
+  .ph .acts{margin-left:auto}
+  .actions{display:grid;grid-template-columns:1fr 1fr}
+  .actions .btn{justify-content:center;height:42px}
+  dl.kv{grid-template-columns:104px minmax(0,1fr)}
+  .setting{flex-wrap:wrap}
+  .setting .ctl.wide{width:100% !important;margin-left:0}
+  .res3{grid-template-columns:1fr}
+  .opts{grid-template-columns:repeat(3,minmax(0,1fr))}
+  .opt{padding:11px}
+  .banner{flex-wrap:wrap}
+  .banner .r{margin-left:0;width:100%}
+  .banner .r .btn{flex:1;justify-content:center}
+  .envrow{grid-template-columns:minmax(0,1fr) auto;row-gap:6px;padding:10px 12px}
+  .envrow .k{grid-column:1 / -1}
+  .envhead{flex-wrap:wrap}
+  .envhead .r{margin-left:0;flex-wrap:wrap}
+  .g3,.rt{grid-template-columns:1fr}
+  pre.log.tall{height:380px}
+  .btn{height:38px}
+  .btn.sm{height:32px}
+  input.f,select.f{height:42px;font-size:16px}
+  input.f.mono{font-size:16px}
+
+  /* Tables become stacked rows: label left, value right */
+  table.t:not(.act) thead{display:none}
+  table.t:not(.act),table.t:not(.act) tbody,table.t:not(.act) tr{display:block}
+  table.t:not(.act) tr{padding:11px 14px;border-bottom:1px solid var(--line)}
+  table.t:not(.act) tr:last-child{border-bottom:0}
+  table.t:not(.act) td{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:4px 0;border:0;text-align:right}
+  table.t:not(.act) td::before{content:attr(data-label);color:var(--muted);font-size:12px;text-align:left;flex:none}
+  table.t:not(.act) td:first-child{justify-content:flex-start;font-weight:500;padding:0 0 6px;text-align:left}
+  table.t:not(.act) td:first-child::before,table.t:not(.act) td[data-label=""]::before{display:none}
+  table.t:not(.act) td[data-label=""]{justify-content:flex-end;padding-top:8px}
+  table.t:not(.act) td:empty{display:none}
+  table.t .qcell{min-width:160px}
+  table.act tbody{display:block}
+  table.act tr{display:grid;grid-template-columns:12px 18px minmax(0,1fr);gap:3px 10px;align-items:center;padding:11px 14px;border-bottom:1px solid var(--line)}
+  table.act tr:last-child{border-bottom:0}
+  table.act td{padding:0;border:0;width:auto !important}
+  table.act td:nth-child(4){display:none}
+  table.act td:nth-child(5){grid-column:3;text-align:left;font-size:12px}
+}
+@keyframes rnv-up{from{transform:translateY(18px);opacity:.6}}
+@media (prefers-reduced-motion: reduce){.mpanel{animation:none}.mstep .bar i{transition:none}}
+
+/* DNS / Cloudflare guide */
+.guide{border:1px solid var(--line);border-radius:var(--r);background:var(--panel);margin-top:12px}
+.guide>header{display:flex;align-items:center;gap:10px;padding:11px 14px;border-bottom:1px solid var(--line);flex-wrap:wrap}
+.guide>header h3{margin:0;font-size:13px;font-weight:600;display:flex;align-items:center;gap:8px}
+.guide>header h3 .lucide{color:var(--faint)}
+.guide>header .seg{margin-left:auto}
+.gbody{padding:14px}
+.gmethod{display:none}.gmethod.on{display:block}
+.gintro{margin:0 0 12px;color:var(--muted);font-size:12.5px}
+.gintro b{color:var(--text);font-weight:500}
+.gsteps{list-style:none;margin:0;padding:0;display:grid;gap:12px;counter-reset:g}
+.gsteps>li{display:grid;grid-template-columns:22px minmax(0,1fr);gap:10px;counter-increment:g}
+.gsteps>li::before{content:counter(g);width:22px;height:22px;border-radius:50%;background:var(--hover);color:var(--muted);display:grid;place-items:center;font:600 11px var(--sans)}
+.gsteps b{font-weight:500}
+.gsteps .where{display:block;font-size:12px;color:var(--muted);margin-top:1px}
+.kvbox{margin-top:8px;border:1px solid var(--line);border-radius:7px;overflow:hidden}
+.kvbox div{display:grid;grid-template-columns:120px minmax(0,1fr) auto;align-items:center;gap:10px;padding:6px 6px 6px 10px;font-size:12.5px}
+.kvbox div+div{border-top:1px solid var(--line)}
+.kvbox span{color:var(--muted)}
+.kvbox code{font:500 12px var(--mono);overflow-wrap:anywhere}
+.kvbox .cp{all:unset;display:grid;place-items:center;width:26px;height:26px;border-radius:6px;color:var(--faint);cursor:pointer}
+.kvbox .cp:hover{background:var(--hover);color:var(--text)}
+.kvbox .cp svg.lucide{width:13px;height:13px}
+.cloud{display:inline-flex;align-items:center;gap:5px;font-weight:500}
+.cloud i{width:14px;height:9px;border-radius:5px;display:inline-block}
+.cloud.grey i{background:#9B978D}.cloud.orange i{background:#F38020}
+.gnote{display:flex;gap:8px;align-items:flex-start;margin-top:12px;padding:9px 11px;border-radius:7px;background:var(--raised);font-size:12px;color:var(--muted)}
+.gnote svg.lucide{width:14px;height:14px;flex:none;margin-top:2px}
+.gnote b{color:var(--text);font-weight:500}
+.gcheck{display:flex;align-items:center;gap:10px;margin-top:14px;padding-top:12px;border-top:1px solid var(--line);flex-wrap:wrap}
+.gcheck .chip{height:22px}
+@container rnv (max-width: 760px){
+  .guide>header .seg{margin-left:0;width:100%}
+  .guide>header .seg button{flex:1;justify-content:center;white-space:nowrap;padding:0 6px;font-size:11.5px}
+  .guide>header .seg .long{display:none}
+  .kvbox div{grid-template-columns:minmax(0,1fr) auto;row-gap:2px}
+  .kvbox div span{grid-column:1 / -1;font-size:11.5px}
+}
+</style>
+</head>
+<body>
+<div class="previewbar" role="group" aria-label="Ukuran preview"><button data-device="phone" aria-pressed="true">Mobile</button><button data-device="desktop" aria-pressed="false">Desktop</button></div>
+<div class="device phone" id="device">
+<div class="app" id="app" data-theme="light" data-view="apps">
+  <aside class="side">
+    <div class="ws"><span class="logo"><svg class="rmark" viewBox="0 0 256 256" aria-hidden="true"><g transform="translate(33.28 33.28) scale(0.74)"><g transform="translate(140.25 111.75) rotate(45) scale(1.02) translate(-128 -124)"><path class="rb" fill-rule="evenodd" d="M128 20 C152 36 160 60 160 92 V176 H96 V92 C96 60 104 36 128 20 Z M115 96 H141 A7 7 0 0 1 141 110 H115 A7 7 0 0 1 115 96 Z M115 124 H141 A7 7 0 0 1 141 138 H115 A7 7 0 0 1 115 124 Z"/><path class="rb" d="M96 136 L64 168 V200 L96 184 Z"/><path class="rb" d="M160 136 L192 168 V200 L160 184 Z"/><path class="rf" d="M108 188 H148 L128 228 Z"/></g></g></svg></span><div><b>Runova</b><span>prod-01 · 10.20.1.15</span></div><i data-lucide="chevrons-up-down"></i></div>
+
+    <div class="grp"><h6>Workspace</h6><nav class="nav">
+      <button data-go="apps" aria-current="page"><i data-lucide="boxes"></i>Aplikasi<span class="n">6</span></button>
+      <button data-go="new"><i data-lucide="cloud-upload"></i>Deploy baru</button>
+      <button data-go="activity"><i data-lucide="history"></i>Aktivitas</button>
+    </nav></div>
+
+    <div class="grp"><h6>Administrasi</h6><nav class="nav">
+      <button data-go="users"><i data-lucide="users"></i>Pengguna<span class="n">4</span></button>
+      <button data-go="server"><i data-lucide="server"></i>Server</button>
+    </nav></div>
+
+    <div class="side-foot">
+      <div class="usage">
+        <div class="row1"><b>Kuota kamu</b><span class="muted">budi</span></div>
+        <div class="mini">
+          <i data-lucide="memory-stick"></i><div class="bar"><i style="width:58%"></i></div><span>58%</span>
+          <i data-lucide="cpu"></i><div class="bar"><i style="width:75%"></i></div><span>75%</span>
+          <i data-lucide="hard-drive"></i><div class="bar"><i class="hi" style="width:86%"></i></div><span>86%</span>
+        </div>
+      </div>
+      <div class="acct"><span class="av">BS</span><div><b>Budi Santoso</b><span>budi@perusahaan.co.id</span></div><i data-lucide="chevrons-up-down"></i></div>
+    </div>
+  </aside>
+
+  <div class="main">
+    <header class="top">
+      <span class="mlogo" aria-hidden="true"><svg class="rmark" viewBox="0 0 256 256" aria-hidden="true"><g transform="translate(33.28 33.28) scale(0.74)"><g transform="translate(140.25 111.75) rotate(45) scale(1.02) translate(-128 -124)"><path class="rb" fill-rule="evenodd" d="M128 20 C152 36 160 60 160 92 V176 H96 V92 C96 60 104 36 128 20 Z M115 96 H141 A7 7 0 0 1 141 110 H115 A7 7 0 0 1 115 96 Z M115 124 H141 A7 7 0 0 1 141 138 H115 A7 7 0 0 1 115 124 Z"/><path class="rb" d="M96 136 L64 168 V200 L96 184 Z"/><path class="rb" d="M160 136 L192 168 V200 L160 184 Z"/><path class="rf" d="M108 188 H148 L128 228 Z"/></g></g></svg></span>
+      <button class="ibtn mback" data-go="apps" aria-label="Kembali ke aplikasi"><i data-lucide="arrow-left"></i></button>
+      <button class="ibtn dsk" aria-label="Ciutkan sidebar"><i data-lucide="panel-left"></i></button>
+      <span class="vsep dsk"></span>
+      <div class="crumb" id="crumb"></div>
+      <div class="right">
+        <div class="kbd"><i data-lucide="search"></i>Cari aplikasi atau domain<kbd>⌘K</kbd></div>
+        <button class="ibtn msearch" aria-label="Cari"><i data-lucide="search"></i></button>
+        <button class="ibtn" aria-label="Notifikasi"><i data-lucide="bell"></i></button>
+        <button class="ibtn" id="themeBtn" aria-label="Ganti tema"><i data-lucide="moon"></i></button>
+      </div>
+    </header>
+
+    <main class="sheet">
+      <!-- Apps -->
+      <section class="view on" id="v-apps">
+        <div class="ph">
+          <div><h1>Aplikasi</h1><p>Aplikasi milik budi. Pengguna lain tidak bisa melihat atau mengubahnya.</p></div>
+          <div class="acts"><button class="btn pri" data-go="new"><i data-lucide="plus"></i>Deploy aplikasi</button></div>
+        </div>
+        <div class="pb">
+          <div class="stats" id="stats"></div>
+          <div class="toolbar">
+            <div class="filter"><i data-lucide="search"></i>Filter aplikasi</div>
+            <div class="seg" role="group" aria-label="Status">
+              <button aria-pressed="true">Semua <span class="faint">6</span></button>
+              <button aria-pressed="false">Berjalan <span class="faint">3</span></button>
+              <button aria-pressed="false">Bermasalah <span class="faint">1</span></button>
+            </div>
+            <div class="r"><button class="btn sm"><i data-lucide="sliders-horizontal"></i>Deploy terbaru</button></div>
+          </div>
+          <div class="apps" id="apps"></div>
+        </div>
+      </section>
+
+      <!-- App detail -->
+      <section class="view" id="v-app">
+        <div class="ph">
+          <div class="dhead"><span class="lgbox"><img src="https://cdn.jsdelivr.net/gh/devicons/devicon@latest/icons/java/java-original.svg" alt=""></span>
+            <div><h1 style="display:flex;align-items:center;gap:8px">billing-api <span class="chip ok"><span class="dot ok"></span>Berjalan</span></h1>
+            <p class="mono">v42 · billing-api-2.4.1.jar · Java 21</p></div></div>
+          <div class="acts">
+            <button class="btn sm ghost" aria-label="Ubah nama"><i data-lucide="pencil"></i></button>
+            <button class="btn sm ghost danger" aria-label="Hapus aplikasi"><i data-lucide="trash-2"></i></button>
+          </div>
+        </div>
+        <div class="links">
+          <a class="link" href="#" onclick="return false"><i data-lucide="lock"></i>billing.perusahaan.co.id<i data-lucide="external-link"></i></a>
+          <a class="link" href="#" onclick="return false" id="iplink"><i data-lucide="network"></i>10.20.1.15:20101<i data-lucide="external-link"></i></a>
+        </div>
+        <div class="tabs" role="tablist">
+          <button role="tab" data-tab="gen" aria-selected="true">Umum</button>
+          <button role="tab" data-tab="env" aria-selected="false">Environment</button>
+          <button role="tab" data-tab="dom" aria-selected="false">Domain</button>
+          <button role="tab" data-tab="dep" aria-selected="false">Deployment</button>
+          <button role="tab" data-tab="log" aria-selected="false">Log</button>
+          <button role="tab" data-tab="mon" aria-selected="false">Monitoring</button>
+          <button role="tab" data-tab="adv" aria-selected="false">Lanjutan</button>
+        </div>
+
+        <div class="tab on" id="t-gen">
+          <section class="card"><header><h3>Kontrol</h3></header>
+            <div class="bd actions">
+              <button class="btn dark"><i data-lucide="cloud-upload"></i>Unggah versi baru</button>
+              <button class="btn"><i data-lucide="rotate-cw"></i>Restart</button>
+              <button class="btn danger"><i data-lucide="square"></i>Stop</button>
+              <button class="btn"><i data-lucide="square-terminal"></i>Terminal</button>
+            </div>
+          </section>
+          <div class="cols">
+            <section class="card"><header><h3>Deployment aktif</h3><span class="chip ok">v42</span><div class="r"><button class="btn sm ghost" data-tab-go="dep">Riwayat<i data-lucide="arrow-right"></i></button></div></header>
+              <div class="bd"><dl class="kv">
+                <dt>Artefak</dt><dd class="mono">billing-api-2.4.1.jar <span class="faint">42,6 MB</span></dd>
+                <dt>Jenis</dt><dd>JAR Spring Boot, bytecode Java 17</dd>
+                <dt>Runtime</dt><dd class="mono">eclipse-temurin:21-jre</dd>
+                <dt>Port aplikasi</dt><dd class="mono">8080</dd>
+                <dt>Port server</dt><dd class="mono">20101</dd>
+                <dt>Diunggah</dt><dd>budi, 12 menit lalu</dd>
+              </dl></div>
+            </section>
+            <section class="card"><header><h3>Akses</h3></header>
+              <div class="bd" style="padding-top:2px;padding-bottom:2px">
+                <div class="setting"><div><b>Akses lewat IP</b><div class="d" id="ipdesc">Terbuka di <span class="mono">10.20.1.15:20101</span> untuk pengujian</div></div><div class="ctl"><button class="sw" id="ipsw" role="switch" aria-checked="true" aria-label="Akses lewat IP"></button></div></div>
+                <div class="setting"><div><b>Domain</b><div class="d">1 aktif, 1 menunggu DNS</div></div><div class="ctl"><button class="btn sm" data-tab-go="dom">Kelola</button></div></div>
+                <div class="setting"><div><b>Restart otomatis</b><div class="d">Jalankan ulang bila aplikasi berhenti sendiri</div></div><div class="ctl"><button class="sw" role="switch" aria-checked="true" aria-label="Restart otomatis"></button></div></div>
+              </div>
+            </section>
+          </div>
+          <div class="cols">
+            <section class="card"><header><h3>Log terbaru</h3><div class="r"><button class="btn sm ghost" data-tab-go="log">Buka log<i data-lucide="arrow-right"></i></button></div></header>
+<pre class="log"><b>10:42:07</b>  Started BillingApplication in 6.84 seconds
+<b>10:42:07</b>  Tomcat started on port 8080 (http)
+<b>10:43:12</b>  POST /v1/invoices 201 48ms
+<span class="w"><b>10:44:02</b>  WARN HikariPool-1 slow connection acquire 812ms</span>
+<b>10:44:30</b>  POST /v1/payments/callback 200 33ms</pre></section>
+            <section class="card"><header><h3>Resource</h3><div class="r"><button class="btn sm ghost" data-tab-go="adv">Ubah</button></div></header>
+              <div class="bd meters">
+                <div><div class="t"><b><i data-lucide="memory-stick"></i>Memori</b><span>312 / 512 MB</span></div><div class="bar"><i style="width:61%"></i></div></div>
+                <div><div class="t"><b><i data-lucide="cpu"></i>CPU</b><span>0,18 / 0,5 core</span></div><div class="bar"><i style="width:36%"></i></div></div>
+                <div><div class="t"><b><i data-lucide="hard-drive"></i>Storage</b><span>148 MB / 1 GB</span></div><div class="bar"><i style="width:15%"></i></div></div>
+              </div></section>
+          </div>
+        </div>
+
+        <div class="tab" id="t-env">
+          <div class="banner warn"><i data-lucide="triangle-alert"></i><span>2 perubahan belum diterapkan.</span><div class="r"><button class="btn sm">Batalkan</button><button class="btn sm pri">Terapkan dan restart</button></div></div>
+          <section class="card">
+            <div class="envhead"><span>6 variabel</span><div class="r"><button class="btn sm ghost"><i data-lucide="eye"></i>Tampilkan nilai</button><button class="btn sm ghost"><i data-lucide="file-code-2"></i>Edit sebagai .env</button><button class="btn sm"><i data-lucide="plus"></i>Tambah</button></div></div>
+            <div id="envlist"></div>
+          </section>
+        </div>
+
+        <div class="tab" id="t-dom">
+          <section class="card"><table class="t">
+            <thead><tr><th>Domain</th><th>DNS</th><th>HTTPS</th><th class="num"></th></tr></thead>
+            <tbody>
+              <tr><td class="mono">billing.perusahaan.co.id</td><td><span class="chip ok"><i data-lucide="check"></i>Mengarah ke server</span></td><td><span class="chip ok"><i data-lucide="lock"></i>Aktif sampai 28 Jan 2027</span></td><td class="num"><button class="btn sm ghost" aria-label="Hapus"><i data-lucide="trash-2"></i></button></td></tr>
+              <tr><td class="mono">billing-staging.perusahaan.co.id</td><td><span class="chip warn"><i data-lucide="loader-circle"></i>Belum mengarah</span></td><td class="muted">Menunggu DNS</td><td class="num"><button class="btn sm"><i data-lucide="rotate-cw"></i>Cek ulang</button></td></tr>
+            </tbody>
+          </table></section>
+          <div style="display:flex;gap:8px;margin-top:12px;max-width:520px"><input class="f mono" placeholder="api.perusahaan.co.id" aria-label="Domain baru"><button class="btn pri"><i data-lucide="plus"></i>Tambah</button></div>
+<section class="guide" data-guide>
+  <header><h3><i data-lucide="route"></i>Panduan menghubungkan domain</h3>
+    <div class="seg" role="group" aria-label="Cara menghubungkan">
+      <button data-gm="dns" aria-pressed="true">DNS langsung</button>
+      <button data-gm="proxy" aria-pressed="false">Proxy<span class="long"> Cloudflare</span></button>
+      <button data-gm="tunnel" aria-pressed="false"><span class="long">Cloudflare </span>Tunnel</button>
+    </div></header>
+  <div class="gbody">
+    <div class="gmethod on" data-gmb="dns">
+      <p class="gintro"><b>Paling sederhana.</b> Server punya IP publik dan port 80 serta 443 bisa dibuka dari internet. Sertifikat HTTPS diterbitkan Caddy di server Runova.</p>
+      <ol class="gsteps">
+        <li><div><b>Buat DNS record</b><span class="where">Cloudflare → pilih domain → DNS → Records → Add record</span>
+          <div class="kvbox">
+            <div><span>Type</span><code>A</code><button class="cp" aria-label="Salin"><i data-lucide="copy"></i></button></div>
+            <div><span>Name</span><code class="gsub">billing</code><button class="cp" aria-label="Salin"><i data-lucide="copy"></i></button></div>
+            <div><span>IPv4 address</span><code>203.0.113.15</code><button class="cp" aria-label="Salin"><i data-lucide="copy"></i></button></div>
+            <div><span>Proxy status</span><code><span class="cloud grey"><i></i>DNS only</span></code><span></span></div>
+            <div><span>TTL</span><code>Auto</code><span></span></div>
+          </div></div></li>
+        <li><div><b>Simpan, lalu tekan Periksa di bawah</b><span class="where">Biasanya aktif dalam 1 sampai 5 menit. Begitu DNS benar, Caddy menerbitkan sertifikat sendiri.</span></div></li>
+      </ol>
+      <div class="gnote"><i data-lucide="info"></i><span><b>203.0.113.15</b> adalah IP publik server Runova, bukan IP jaringan kantor 10.20.1.15. Admin mengaturnya sekali di halaman Server.</span></div>
+    </div>
+
+    <div class="gmethod" data-gmb="proxy">
+      <p class="gintro"><b>Lewat proxy Cloudflare</b> (awan oranye). IP server tersembunyi dan dapat perlindungan DDoS. Port 80 dan 443 tetap harus terbuka untuk Cloudflare.</p>
+      <ol class="gsteps">
+        <li><div><b>Buat DNS record, mula-mula tanpa proxy</b><span class="where">Cloudflare → DNS → Records → Add record</span>
+          <div class="kvbox">
+            <div><span>Type</span><code>A</code><button class="cp" aria-label="Salin"><i data-lucide="copy"></i></button></div>
+            <div><span>Name</span><code class="gsub">billing</code><button class="cp" aria-label="Salin"><i data-lucide="copy"></i></button></div>
+            <div><span>IPv4 address</span><code>203.0.113.15</code><button class="cp" aria-label="Salin"><i data-lucide="copy"></i></button></div>
+            <div><span>Proxy status</span><code><span class="cloud grey"><i></i>DNS only</span> dulu</code><span></span></div>
+          </div></div></li>
+        <li><div><b>Tunggu sampai Runova menampilkan "HTTPS aktif"</b><span class="where">Caddy perlu menerbitkan sertifikat pertama selagi server bisa diakses langsung.</span></div></li>
+        <li><div><b>Nyalakan proxy</b><span class="where">Edit record yang sama → Proxy status → <span class="cloud orange"><i></i>Proxied</span></span></div></li>
+        <li><div><b>Atur mode SSL</b><span class="where">Cloudflare → SSL/TLS → Overview → Configure</span>
+          <div class="kvbox"><div><span>Encryption mode</span><code>Full (strict)</code><span></span></div></div></div></li>
+      </ol>
+      <div class="gnote"><i data-lucide="triangle-alert"></i><span>Jangan pakai mode <b>Flexible</b>, karena akan terjadi redirect berulang. Untuk perpanjangan sertifikat, Caddy butuh jalur <b class="mono">/.well-known/acme-challenge/</b> tetap bisa diakses lewat HTTP. Kalau domain ini pakai aturan redirect ke HTTPS di Cloudflare, kecualikan jalur itu.</span></div>
+    </div>
+
+    <div class="gmethod" data-gmb="tunnel">
+      <p class="gintro"><b>Untuk server tanpa IP publik</b> atau tanpa port terbuka. Server membuka koneksi keluar ke Cloudflare, dan HTTPS diurus Cloudflare. Runova melayani domain ini lewat HTTP biasa.</p>
+      <ol class="gsteps">
+        <li><div><b>Buat tunnel sekali untuk server ini</b><span class="where">Cloudflare → Networking → Tunnels → Create a tunnel. Jalankan perintah instalasinya di server Runova. Tunggu status Healthy.</span></div></li>
+        <li><div><b>Tambah route untuk aplikasi ini</b><span class="where">Pilih tunnel → tab Routes → Add route → Published application</span>
+          <div class="kvbox">
+            <div><span>Subdomain</span><code class="gsub">billing</code><button class="cp" aria-label="Salin"><i data-lucide="copy"></i></button></div>
+            <div><span>Domain</span><code class="gdom">perusahaan.co.id</code><button class="cp" aria-label="Salin"><i data-lucide="copy"></i></button></div>
+            <div><span>Path</span><code class="faint">kosongkan</code><span></span></div>
+            <div><span>Service URL</span><code>http://localhost:80</code><button class="cp" aria-label="Salin"><i data-lucide="copy"></i></button></div>
+          </div></div></li>
+        <li><div><b>Simpan, lalu tekan Periksa di bawah</b><span class="where">Cloudflare membuat DNS record-nya otomatis.</span></div></li>
+      </ol>
+      <div class="gnote"><i data-lucide="info"></i><span>Isi <b>Path</b> hanya kalau aplikasi memang melayani prefix itu sendiri, misalnya <b class="mono">/api</b>. Cloudflare meneruskan path apa adanya, tidak dipotong. <b>localhost:80</b> adalah Caddy di server Runova, yang lalu meneruskan ke aplikasi berdasarkan nama domain.</span></div>
+    </div>
+
+    <div class="gcheck"><button class="btn sm"><i data-lucide="rotate-cw"></i>Periksa koneksi</button><span class="chip warn"><i data-lucide="loader-circle"></i><span class="gstatus">billing.perusahaan.co.id belum mengarah ke server</span></span></div>
+  </div>
+</section>
+        </div>
+
+        <div class="tab" id="t-dep">
+          <section class="card"><table class="t">
+            <thead><tr><th>Versi</th><th>Artefak</th><th>Runtime</th><th>Oleh</th><th class="num">Waktu</th><th class="num"></th></tr></thead>
+            <tbody>
+              <tr><td><span class="chip ok">v42 aktif</span></td><td class="mono">billing-api-2.4.1.jar</td><td>Java 21</td><td>budi</td><td class="num muted">12 menit lalu</td><td class="num"><button class="btn sm ghost"><i data-lucide="scroll-text"></i>Log</button></td></tr>
+              <tr><td>v41</td><td class="mono">billing-api-2.4.0.jar</td><td>Java 21</td><td>budi</td><td class="num muted">kemarin 16:20</td><td class="num"><button class="btn sm"><i data-lucide="history"></i>Kembalikan</button></td></tr>
+              <tr><td>v40</td><td class="mono">billing-api-2.3.9.jar</td><td>Java 17</td><td>sari</td><td class="num muted">27 Okt 09:05</td><td class="num"><button class="btn sm"><i data-lucide="history"></i>Kembalikan</button></td></tr>
+              <tr><td><span class="chip err">v39 gagal</span></td><td class="mono">billing-api-2.3.9.jar</td><td>Java 11</td><td>sari</td><td class="num muted">27 Okt 09:01</td><td class="num"><span class="muted" style="font-size:12px">Butuh Java 17</span></td></tr>
+            </tbody>
+          </table></section>
+        </div>
+
+        <div class="tab" id="t-log">
+          <section class="card"><header><div style="display:flex;gap:8px;align-items:center;flex:1"><input class="f" style="max-width:280px;height:28px" placeholder="Cari di log"><div class="seg"><button aria-pressed="true">Semua</button><button aria-pressed="false">Warning</button><button aria-pressed="false">Error</button></div></div>
+            <div class="r"><span class="chip ok"><span class="dot ok"></span>Live</span><button class="btn sm ghost" aria-label="Salin"><i data-lucide="copy"></i></button></div></header>
+            <pre class="log tall" id="biglog"></pre></section>
+        </div>
+
+        <div class="tab" id="t-mon"><div class="banner info"><i data-lucide="activity"></i><span>Grafik CPU, memori, dan jaringan per 5 menit. Disederhanakan di preview ini.</span></div></div>
+        <div class="tab" id="t-adv"><div class="banner info"><i data-lucide="sliders-horizontal"></i><span>Batas memori dan CPU, health check, perintah start khusus, dan volume. Disederhanakan di preview ini.</span></div></div>
+      </section>
+
+      <!-- Deploy wizard -->
+      <section class="view" id="v-new">
+        <div class="wiz">
+          <nav class="steps" aria-label="Langkah deploy" id="steps">
+            <h4>Deploy aplikasi</h4>
+            <button data-step="1"><span class="no">1</span><b>Unggah</b><small>billing-api-2.4.1.jar</small></button>
+            <button data-step="2"><span class="no">2</span><b>Runtime</b><small>Versi Java</small></button>
+            <button data-step="3"><span class="no">3</span><b>Environment</b><small>4 variabel terdeteksi</small></button>
+            <button data-step="4"><span class="no">4</span><b>Resource & akses</b><small>Memori, CPU, IP</small></button>
+          </nav>
+
+          <div class="wbody">
+            <div class="mstep"><div class="t"><span id="mstepTxt">Langkah 1 dari 4</span><b id="mstepName">Unggah</b></div><div class="bar"><i id="mstepBar" style="width:25%"></i></div></div>
+            <div class="wstep" data-w="1">
+              <h2>Unggah hasil build</h2><p class="lead">Runova membaca isi file untuk menentukan runtime, port, dan environment.</p>
+              <div class="drop"><span class="ic"><i data-lucide="upload"></i></span><b>Tarik file ke sini atau klik untuk memilih</b><small>Maksimal 200 MB. Server: Ubuntu 26.04, linux/amd64.</small>
+                <div class="accept"><span class="chip"><i data-lucide="coffee"></i>.jar</span><span class="chip"><i data-lucide="binary"></i>Binary Linux</span><span class="chip"><i data-lucide="file-archive"></i>.tar.gz berisi binary</span></div></div>
+              <div class="fileok"><span class="lgbox" style="width:34px;height:34px"><img src="https://cdn.jsdelivr.net/gh/devicons/devicon@latest/icons/java/java-original.svg" alt="" style="width:20px;height:20px"></span><div><b class="mono">billing-api-2.4.1.jar</b><div class="muted" style="font-size:12px">42,6 MB · selesai diunggah</div></div><div class="r"><button class="btn sm ghost"><i data-lucide="x"></i>Ganti file</button></div></div>
+              <div class="checks">
+                <div><i data-lucide="circle-check"></i>JAR Spring Boot, main class <span class="mono">com.perusahaan.billing.BillingApplication</span></div>
+                <div><i data-lucide="circle-check"></i>Bytecode versi 61, butuh Java 17 atau lebih baru</div>
+                <div><i data-lucide="circle-check"></i>Port <span class="mono">8080</span> dari <span class="mono">server.port</span></div>
+                <div class="w"><i data-lucide="circle-alert"></i>4 environment dirujuk di <span class="mono">application.properties</span>, 1 belum punya nilai</div>
+              </div>
+            </div>
+
+            <div class="wstep" data-w="2">
+              <h2>Runtime</h2><p class="lead">Terdeteksi sebagai <b>JAR</b>. Pilih versi Java yang menjalankan aplikasi ini.</p>
+              <div class="fld"><label>Versi Java</label>
+                <div class="opts" id="javaopts">
+                  <button class="opt" aria-disabled="true" title="Bytecode butuh Java 17"><b>8</b><small>Tidak cocok</small></button>
+                  <button class="opt" aria-disabled="true" title="Bytecode butuh Java 17"><b>11</b><small>Tidak cocok</small></button>
+                  <button class="opt" aria-pressed="false"><b>17</b><small>LTS, minimum</small></button>
+                  <button class="opt" aria-pressed="true"><b>21</b><small>LTS, disarankan</small></button>
+                  <button class="opt" aria-pressed="false"><b>25</b><small>LTS terbaru</small></button>
+                </div>
+                <div class="hint">Image: <span class="mono" id="img">eclipse-temurin:21-jre</span></div></div>
+              <div class="fld"><label for="jopts">Opsi JVM <span class="faint" style="font-weight:400">opsional</span></label><input class="f mono" id="jopts" value="-XX:MaxRAMPercentage=75"><div class="hint">Heap mengikuti batas memori container.</div></div>
+              <div class="fld"><label for="pt">Port aplikasi</label><input class="f mono" id="pt" value="8080" style="max-width:140px"><div class="hint">Port yang didengarkan aplikasi di dalam container. Runova memetakannya ke port server.</div></div>
+            </div>
+
+            <div class="wstep" data-w="3">
+              <h2>Environment</h2><p class="lead">Variabel yang dirujuk aplikasi. Nilai rahasia disimpan terenkripsi.</p>
+              <section class="card">
+                <div class="envhead"><span>Terdeteksi dari application.properties</span><div class="r"><button class="btn sm ghost"><i data-lucide="file-code-2"></i>Tempel .env</button></div></div>
+                <div class="envrow"><span class="k">DB_URL</span><input class="f mono" value="jdbc:postgresql://10.20.1.30:5432/billing" aria-label="DB_URL"><span></span></div>
+                <div class="envrow"><span class="k">DB_USER</span><input class="f mono" value="billing_app" aria-label="DB_USER"><span></span></div>
+                <div class="envrow"><span class="k">DB_PASSWORD <i data-lucide="key-round" style="width:12px;height:12px;color:var(--faint)"></i></span><input class="f mono" type="password" value="rahasia-sekali" aria-label="DB_PASSWORD"><button class="ibtn" aria-label="Lihat"><i data-lucide="eye"></i></button></div>
+                <div class="envrow"><span class="k">JWT_SECRET <span class="req">*</span></span><input class="f mono" placeholder="Wajib diisi" aria-label="JWT_SECRET" id="jwt"><button class="ibtn" aria-label="Buat nilai acak" title="Buat nilai acak" id="genjwt"><i data-lucide="rotate-cw"></i></button></div>
+              </section>
+              <button class="btn sm" style="margin-top:10px"><i data-lucide="plus"></i>Tambah variabel</button>
+            </div>
+
+            <div class="wstep" data-w="4">
+              <h2>Resource & akses</h2><p class="lead">Diambil dari kuota akunmu. Bisa diubah kapan saja setelah deploy.</p>
+              <div class="res3">
+                <div class="rescard"><div class="l"><i data-lucide="memory-stick"></i>Memori</div><select class="f"><option>256 MB</option><option selected>512 MB</option><option>1 GB</option></select><div class="hint">Sisa 1,25 GB dari 3 GB</div></div>
+                <div class="rescard"><div class="l"><i data-lucide="cpu"></i>CPU</div><select class="f"><option>0,25 core</option><option selected>0,5 core</option><option>0,75 core</option></select><div class="hint">Sisa 0,75 core dari 3</div></div>
+                <div class="rescard"><div class="l"><i data-lucide="hard-drive"></i>Storage</div><select class="f"><option>512 MB</option><option selected>1 GB</option></select><div class="hint">Sisa 1,4 GB dari 10 GB</div></div>
+              </div>
+              <section class="card"><div class="bd" style="padding-top:2px;padding-bottom:2px">
+                <div class="setting"><div><b>Akses lewat IP</b><div class="d">Buka di <span class="mono">10.20.1.15:&lt;port&gt;</span> untuk pengujian sebelum domain siap</div></div><div class="ctl"><button class="sw" role="switch" aria-checked="true" aria-label="Akses lewat IP"></button></div></div>
+                <div class="setting"><div><b>Domain</b><div class="d">Opsional, bisa ditambah nanti</div></div><div class="ctl wide" style="width:240px"><input class="f mono" id="wdomain" placeholder="billing.perusahaan.co.id" aria-label="Domain"></div></div>
+                <div class="setting"><div><b>Restart otomatis</b><div class="d">Jalankan ulang bila aplikasi berhenti sendiri</div></div><div class="ctl"><button class="sw" role="switch" aria-checked="true" aria-label="Restart otomatis"></button></div></div>
+              </div></section>
+              <div id="wguide" hidden><section class="guide" data-guide>
+  <header><h3><i data-lucide="route"></i>Panduan menghubungkan domain</h3>
+    <div class="seg" role="group" aria-label="Cara menghubungkan">
+      <button data-gm="dns" aria-pressed="true">DNS langsung</button>
+      <button data-gm="proxy" aria-pressed="false">Proxy<span class="long"> Cloudflare</span></button>
+      <button data-gm="tunnel" aria-pressed="false"><span class="long">Cloudflare </span>Tunnel</button>
+    </div></header>
+  <div class="gbody">
+    <div class="gmethod on" data-gmb="dns">
+      <p class="gintro"><b>Paling sederhana.</b> Server punya IP publik dan port 80 serta 443 bisa dibuka dari internet. Sertifikat HTTPS diterbitkan Caddy di server Runova.</p>
+      <ol class="gsteps">
+        <li><div><b>Buat DNS record</b><span class="where">Cloudflare → pilih domain → DNS → Records → Add record</span>
+          <div class="kvbox">
+            <div><span>Type</span><code>A</code><button class="cp" aria-label="Salin"><i data-lucide="copy"></i></button></div>
+            <div><span>Name</span><code class="gsub">billing</code><button class="cp" aria-label="Salin"><i data-lucide="copy"></i></button></div>
+            <div><span>IPv4 address</span><code>203.0.113.15</code><button class="cp" aria-label="Salin"><i data-lucide="copy"></i></button></div>
+            <div><span>Proxy status</span><code><span class="cloud grey"><i></i>DNS only</span></code><span></span></div>
+            <div><span>TTL</span><code>Auto</code><span></span></div>
+          </div></div></li>
+        <li><div><b>Simpan, lalu tekan Periksa di bawah</b><span class="where">Biasanya aktif dalam 1 sampai 5 menit. Begitu DNS benar, Caddy menerbitkan sertifikat sendiri.</span></div></li>
+      </ol>
+      <div class="gnote"><i data-lucide="info"></i><span><b>203.0.113.15</b> adalah IP publik server Runova, bukan IP jaringan kantor 10.20.1.15. Admin mengaturnya sekali di halaman Server.</span></div>
+    </div>
+
+    <div class="gmethod" data-gmb="proxy">
+      <p class="gintro"><b>Lewat proxy Cloudflare</b> (awan oranye). IP server tersembunyi dan dapat perlindungan DDoS. Port 80 dan 443 tetap harus terbuka untuk Cloudflare.</p>
+      <ol class="gsteps">
+        <li><div><b>Buat DNS record, mula-mula tanpa proxy</b><span class="where">Cloudflare → DNS → Records → Add record</span>
+          <div class="kvbox">
+            <div><span>Type</span><code>A</code><button class="cp" aria-label="Salin"><i data-lucide="copy"></i></button></div>
+            <div><span>Name</span><code class="gsub">billing</code><button class="cp" aria-label="Salin"><i data-lucide="copy"></i></button></div>
+            <div><span>IPv4 address</span><code>203.0.113.15</code><button class="cp" aria-label="Salin"><i data-lucide="copy"></i></button></div>
+            <div><span>Proxy status</span><code><span class="cloud grey"><i></i>DNS only</span> dulu</code><span></span></div>
+          </div></div></li>
+        <li><div><b>Tunggu sampai Runova menampilkan "HTTPS aktif"</b><span class="where">Caddy perlu menerbitkan sertifikat pertama selagi server bisa diakses langsung.</span></div></li>
+        <li><div><b>Nyalakan proxy</b><span class="where">Edit record yang sama → Proxy status → <span class="cloud orange"><i></i>Proxied</span></span></div></li>
+        <li><div><b>Atur mode SSL</b><span class="where">Cloudflare → SSL/TLS → Overview → Configure</span>
+          <div class="kvbox"><div><span>Encryption mode</span><code>Full (strict)</code><span></span></div></div></div></li>
+      </ol>
+      <div class="gnote"><i data-lucide="triangle-alert"></i><span>Jangan pakai mode <b>Flexible</b>, karena akan terjadi redirect berulang. Untuk perpanjangan sertifikat, Caddy butuh jalur <b class="mono">/.well-known/acme-challenge/</b> tetap bisa diakses lewat HTTP. Kalau domain ini pakai aturan redirect ke HTTPS di Cloudflare, kecualikan jalur itu.</span></div>
+    </div>
+
+    <div class="gmethod" data-gmb="tunnel">
+      <p class="gintro"><b>Untuk server tanpa IP publik</b> atau tanpa port terbuka. Server membuka koneksi keluar ke Cloudflare, dan HTTPS diurus Cloudflare. Runova melayani domain ini lewat HTTP biasa.</p>
+      <ol class="gsteps">
+        <li><div><b>Buat tunnel sekali untuk server ini</b><span class="where">Cloudflare → Networking → Tunnels → Create a tunnel. Jalankan perintah instalasinya di server Runova. Tunggu status Healthy.</span></div></li>
+        <li><div><b>Tambah route untuk aplikasi ini</b><span class="where">Pilih tunnel → tab Routes → Add route → Published application</span>
+          <div class="kvbox">
+            <div><span>Subdomain</span><code class="gsub">billing</code><button class="cp" aria-label="Salin"><i data-lucide="copy"></i></button></div>
+            <div><span>Domain</span><code class="gdom">perusahaan.co.id</code><button class="cp" aria-label="Salin"><i data-lucide="copy"></i></button></div>
+            <div><span>Path</span><code class="faint">kosongkan</code><span></span></div>
+            <div><span>Service URL</span><code>http://localhost:80</code><button class="cp" aria-label="Salin"><i data-lucide="copy"></i></button></div>
+          </div></div></li>
+        <li><div><b>Simpan, lalu tekan Periksa di bawah</b><span class="where">Cloudflare membuat DNS record-nya otomatis.</span></div></li>
+      </ol>
+      <div class="gnote"><i data-lucide="info"></i><span>Isi <b>Path</b> hanya kalau aplikasi memang melayani prefix itu sendiri, misalnya <b class="mono">/api</b>. Cloudflare meneruskan path apa adanya, tidak dipotong. <b>localhost:80</b> adalah Caddy di server Runova, yang lalu meneruskan ke aplikasi berdasarkan nama domain.</span></div>
+    </div>
+
+    <div class="gcheck"><button class="btn sm"><i data-lucide="rotate-cw"></i>Periksa koneksi</button><span class="chip warn"><i data-lucide="loader-circle"></i><span class="gstatus">billing.perusahaan.co.id belum mengarah ke server</span></span></div>
+  </div>
+</section></div>
+            </div>
+
+            <div class="wnav"><button class="btn ghost" id="prev"><i data-lucide="arrow-left"></i>Kembali</button><div class="r"><button class="btn" data-go="apps">Batal</button><button class="btn dark" id="next">Lanjut<i data-lucide="arrow-right"></i></button></div></div>
+          </div>
+
+          <aside class="summary">
+            <h3>Ringkasan</h3>
+            <div class="fld" style="margin:0"><label for="nm">Nama aplikasi</label><input class="f mono" id="nm" value="billing-api"><div class="hint">Huruf kecil, angka, dan tanda hubung.</div></div>
+            <div class="sep"></div>
+            <div class="srow"><span>Artefak</span><b class="mono">billing-api-2.4.1.jar</b></div>
+            <div class="srow"><span>Runtime</span><b id="sumrt">Java 21</b></div>
+            <div class="srow"><span>Port</span><b class="mono">8080 → otomatis</b></div>
+            <div class="srow"><span>Resource</span><b>512 MB · 0,5 core · 1 GB</b></div>
+            <div class="sep"></div>
+            <div class="todo">
+              <div class="ok"><i data-lucide="circle-check"></i>File valid untuk server ini</div>
+              <div class="ok"><i data-lucide="circle-check"></i>Runtime dipilih</div>
+              <div class="no" id="todojwt"><i data-lucide="circle"></i>Isi JWT_SECRET</div>
+              <div class="ok"><i data-lucide="circle-check"></i>Muat dalam kuota</div>
+            </div>
+            <button class="btn pri" id="deploy" style="justify-content:center;height:34px" disabled><i data-lucide="rocket"></i>Deploy</button>
+          </aside>
+        </div>
+      </section>
+
+      <!-- Activity -->
+      <section class="view" id="v-activity">
+        <div class="ph"><div><h1>Aktivitas</h1><p>Deploy, restart, dan perubahan pengaturan di aplikasimu.</p></div></div>
+        <div class="pb"><section class="card"><table class="t act"><tbody id="actrows"></tbody></table></section></div>
+      </section>
+
+      <!-- Users -->
+      <section class="view" id="v-users">
+        <div class="ph"><div><h1>Pengguna</h1><p>Admin mendaftarkan pengguna dan menentukan kuota. Pengguna membagi kuota ke aplikasinya sendiri.</p></div>
+          <div class="acts"><button class="btn pri"><i data-lucide="user-plus"></i>Tambah pengguna</button></div></div>
+        <div class="pb"><section class="card"><table class="t">
+          <thead><tr><th>Pengguna</th><th>Peran</th><th>Aplikasi</th><th>Memori</th><th>CPU</th><th>Storage</th><th class="num"></th></tr></thead>
+          <tbody id="userrows"></tbody></table></section></div>
+      </section>
+
+      <!-- Server -->
+      <section class="view" id="v-server">
+        <div class="ph"><div><h1>Server</h1><p>prod-01 · Ubuntu Server 26.04 LTS · linux/amd64</p></div></div>
+        <div class="pb">
+          <div class="stats">
+            <div class="stat"><div class="l"><i data-lucide="cpu"></i>CPU</div><div class="v">1,9 <small>dari 8 core</small></div><div class="bar"><i style="width:24%"></i></div></div>
+            <div class="stat"><div class="l"><i data-lucide="memory-stick"></i>Memori dialokasikan</div><div class="v">6,5 GB <small>dari 16 GB</small></div><div class="bar"><i style="width:41%"></i></div></div>
+            <div class="stat"><div class="l"><i data-lucide="hard-drive"></i>Disk</div><div class="v">38 GB <small>dari 200 GB</small></div><div class="bar"><i style="width:19%"></i></div></div>
+            <div class="stat"><div class="l"><i data-lucide="boxes"></i>Aplikasi</div><div class="v">11 <small>berjalan, 2 berhenti</small></div><div class="bar"><i style="width:85%"></i></div></div>
+          </div>
+          <div class="g3">
+            <section class="card"><div class="bd svc"><span class="ic"><i data-lucide="container"></i></span><div><b>Docker</b><div class="muted mono">28.4.0</div></div><span class="chip ok">Aktif</span></div></section>
+            <section class="card"><div class="bd svc"><span class="ic"><i data-lucide="lock"></i></span><div><b>Caddy</b><div class="muted mono">2.10.2 · 9 domain</div></div><span class="chip ok">Aktif</span></div></section>
+            <section class="card"><div class="bd svc"><span class="ic"><i data-lucide="network"></i></span><div><b>Port aplikasi</b><div class="muted mono">20000 sampai 20999</div></div><span class="chip">13 terpakai</span></div></section>
+          </div>
+          <section class="card" style="margin-top:12px"><header><div><h3>Yang boleh dijalankan</h3><p>Matikan untuk melarang deploy baru dengan runtime itu.</p></div></header>
+            <div class="bd"><div class="rt" id="rtlist"></div></div></section>
+        </div>
+      </section>
+    </main>
+    <nav class="bnav" aria-label="Navigasi bawah">
+      <button data-go="apps"><i data-lucide="boxes"></i><span>Aplikasi</span></button>
+      <button data-go="activity"><i data-lucide="history"></i><span>Aktivitas</span></button>
+      <button data-go="new" class="fab"><span class="fabic"><i data-lucide="plus"></i></span><span>Deploy</span></button>
+      <button data-go="users"><i data-lucide="users"></i><span>Pengguna</span></button>
+      <button data-more><i data-lucide="ellipsis"></i><span>Lainnya</span></button>
+    </nav>
+    <div class="mbar">
+      <button class="btn" id="mprev"><i data-lucide="arrow-left"></i><span id="mprevTxt">Batal</span></button>
+      <button class="btn dark" id="mnext">Lanjut<i data-lucide="arrow-right"></i></button>
+      <button class="btn pri" id="mdeploy" disabled><i data-lucide="rocket"></i>Deploy</button>
+    </div>
+  </div>
+
+  <div class="msheet" id="msheet" hidden>
+    <div class="scrim" data-close></div>
+    <div class="mpanel" role="dialog" aria-label="Menu lainnya">
+      <div class="grab"></div>
+      <div class="acct"><span class="av">BS</span><div><b>Budi Santoso</b><span>budi@perusahaan.co.id · admin</span></div></div>
+      <div class="usage">
+        <div class="row1"><b>Kuota kamu</b><span class="muted">6 dari 8 aplikasi</span></div>
+        <div class="mini">
+          <i data-lucide="memory-stick"></i><div class="bar"><i style="width:58%"></i></div><span>58%</span>
+          <i data-lucide="cpu"></i><div class="bar"><i style="width:75%"></i></div><span>75%</span>
+          <i data-lucide="hard-drive"></i><div class="bar"><i class="hi" style="width:86%"></i></div><span>86%</span>
+        </div>
+      </div>
+      <div class="mlist">
+        <button data-go="server"><i data-lucide="server"></i>Server<i data-lucide="chevron-right"></i></button>
+        <button id="themeBtn2"><i data-lucide="moon"></i>Mode gelap<span class="sw" id="themeSw" aria-hidden="true"></span></button>
+        <button><i data-lucide="settings"></i>Pengaturan akun<i data-lucide="chevron-right"></i></button>
+        <button class="danger"><i data-lucide="log-out"></i>Keluar</button>
+      </div>
+    </div>
+  </div>
+</div>
+</div>
+
+<script>
+const DV = "https://cdn.jsdelivr.net/gh/devicons/devicon@latest/icons/";
+const LOGO = { java: DV + "java/java-original.svg", go: DV + "go/go-original.svg", rust: DV + "rust/rust-original.svg", csharp: DV + "csharp/csharp-original.svg", zig: DV + "zig/zig-original.svg", cpp: DV + "cplusplus/cplusplus-original.svg" };
+const $ = (s) => document.querySelector(s);
+const icons = () => lucide.createIcons();
+
+$("#stats").innerHTML = [
+  ["boxes", "Aplikasi", "6", "dari 8", 75], ["memory-stick", "Memori", "1,75 GB", "dari 3 GB", 58],
+  ["cpu", "CPU", "2,25", "dari 3 core", 75], ["hard-drive", "Storage", "8,6 GB", "dari 10 GB", 86],
+].map(([ic, l, v, of, p]) => `<div class="stat"><div class="l"><i data-lucide="${ic}"></i>${l}<span style="margin-left:auto">${p}%</span></div><div class="v">${v} <small>${of}</small></div><div class="bar"><i class="${p >= 85 ? "hi" : ""}" style="width:${p}%"></i></div></div>`).join("");
+
+const apps = [
+  { id: "billing-api", lang: "java", rt: "Java 21", st: "ok", dom: "billing.perusahaan.co.id", ip: "10.20.1.15:20101", mem: [312, 512], dep: "12 menit lalu" },
+  { id: "auth-gateway", lang: "go", rt: "Go · statis", st: "ok", dom: "sso.perusahaan.co.id", ip: null, mem: [38, 128], dep: "2 jam lalu" },
+  { id: "report-worker", lang: "rust", rt: "Rust · statis", st: "ok", dom: null, ip: "10.20.1.15:20103", mem: [61, 256], dep: "kemarin" },
+  { id: "invoice-pdf", lang: "csharp", rt: ".NET 8 · glibc", st: "warn", stl: "Sedang deploy", dom: "pdf.perusahaan.co.id", ip: "10.20.1.15:20104", mem: [0, 512], dep: "baru saja" },
+  { id: "legacy-hr", lang: "java", rt: "Java 8", st: "err", stl: "Kehabisan memori", dom: "hr-lama.perusahaan.co.id", ip: null, mem: [256, 256], dep: "3 hari lalu" },
+  { id: "notif-relay", lang: "zig", rt: "Zig · statis", st: "", stl: "Berhenti", dom: null, ip: null, mem: [0, 128], dep: "12 Okt" },
+];
+$("#apps").innerHTML = apps.map((a) => {
+  const p = Math.round((a.mem[0] / a.mem[1]) * 100);
+  const foot = a.stl
+    ? `<span class="chip ${a.st}">${a.stl}</span>`
+    : `<span>${a.mem[0]} / ${a.mem[1]} MB</span><div class="bar"><i class="${p >= 90 ? "hi" : ""}" style="width:${p}%"></i></div>`;
+  return `<article class="acard" data-open="${a.id}">
+    <div class="h"><span class="lgbox"><img class="${a.lang === "rust" ? "inv" : ""}" src="${LOGO[a.lang]}" alt=""></span><div><b>${a.id}</b><div class="sub">${a.rt}</div></div><span class="dot ${a.st}" title="${a.stl || "Berjalan"}"></span></div>
+    <div class="ep">
+      ${a.dom ? `<div><i data-lucide="lock"></i><span class="mono">${a.dom}</span></div>` : `<div><i data-lucide="globe"></i><span>Belum ada domain</span></div>`}
+      ${a.ip ? `<div><i data-lucide="network"></i><span class="mono">${a.ip}</span></div>` : `<div><i data-lucide="network"></i><span>Akses IP ditutup</span></div>`}
+    </div>
+    <div class="ft">${foot}<span style="margin-left:auto">${a.dep}</span></div>
+  </article>`;
+}).join("");
+
+$("#envlist").innerHTML = [
+  ["DB_URL", "jdbc:postgresql://10.20.1.30:5432/billing", false, false],
+  ["DB_USER", "billing_app", false, false],
+  ["DB_PASSWORD", "••••••••••••", true, false],
+  ["JWT_SECRET", "••••••••••••", true, true],
+  ["SPRING_PROFILES_ACTIVE", "prod", false, true],
+  ["JAVA_OPTS", "-XX:MaxRAMPercentage=75", false, false],
+].map(([k, v, s, c]) => `<div class="envrow"><span class="k">${k}${s ? ' <i data-lucide="key-round" style="width:12px;height:12px;color:var(--faint)"></i>' : ""}${c ? ' <span class="chip warn">diubah</span>' : ""}</span><span class="mono ${s ? "faint" : ""}" style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${v}</span><span class="acts"><button class="ibtn" aria-label="Ubah ${k}"><i data-lucide="pencil"></i></button><button class="ibtn" aria-label="Hapus ${k}"><i data-lucide="trash-2"></i></button></span></div>`).join("");
+
+$("#biglog").innerHTML = [
+  ["10:41:58", "s", "runova  menjalankan v42 · eclipse-temurin:21-jre · 512 MB · 0,5 core"],
+  ["10:42:00", "", "Starting BillingApplication v2.4.1 using Java 21.0.8"],
+  ["10:42:03", "", "HikariPool-1 - Start completed."],
+  ["10:42:07", "", "Tomcat started on port 8080 (http) with context path '/'"],
+  ["10:42:07", "", "Started BillingApplication in 6.84 seconds"],
+  ["10:42:08", "s", "runova  health check http://127.0.0.1:20101/ → 200"],
+  ["10:43:12", "", "POST /v1/invoices 201 48ms"],
+  ["10:43:15", "", "GET  /v1/invoices?page=2 200 21ms"],
+  ["10:44:02", "w", "WARN  HikariPool-1 - slow connection acquire 812ms"],
+  ["10:44:30", "", "POST /v1/payments/callback 200 33ms"],
+  ["10:45:01", "e", "ERROR InvoiceMailer - SMTP 10.20.1.40:25 timed out, retry 1/3"],
+  ["10:45:06", "", "InvoiceMailer - sent INV-2026-10-0412"],
+  ["10:46:20", "", "GET  /v1/invoices/INV-2026-10-0412 200 12ms"],
+].map(([t, c, m]) => (c ? `<span class="${c}"><b>${t}</b>  ${m}</span>` : `<b>${t}</b>  ${m}`)).join("\n");
+
+$("#actrows").innerHTML = [
+  ["rocket", "ok", "billing-api", "Deploy v42 berhasil", "budi", "12 menit lalu"],
+  ["key-round", "", "billing-api", "2 environment diubah", "budi", "15 menit lalu"],
+  ["rotate-cw", "err", "legacy-hr", "Restart otomatis setelah kehabisan memori", "sistem", "3 jam lalu"],
+  ["lock", "ok", "auth-gateway", "Sertifikat sso.perusahaan.co.id diperbarui", "Caddy", "kemarin"],
+  ["network", "", "auth-gateway", "Akses IP ditutup", "budi", "kemarin"],
+  ["square", "", "notif-relay", "Dihentikan", "budi", "12 Okt"],
+].map(([ic, c, app, msg, by, t]) => `<tr><td style="width:30px"><span class="dot ${c}"></span></td><td style="width:30px;color:var(--muted)"><i data-lucide="${ic}"></i></td><td><b style="font-weight:500">${app}</b> <span class="muted">· ${msg}</span></td><td class="muted">${by}</td><td class="num muted">${t}</td></tr>`).join("");
+
+const q = ([u, m], unit) => { const p = Math.round((u / m) * 100); return `<div class="qcell"><div class="t"><b>${String(u).replace(".", ",")}</b><span>${String(m).replace(".", ",")} ${unit}</span></div><div class="bar"><i class="${p >= 85 ? "hi" : ""}" style="width:${p}%"></i></div></div>`; };
+$("#userrows").innerHTML = [
+  ["Budi Santoso", "budi", "Admin", [6, 8], [1.75, 3], [2.25, 3], [8.6, 10]],
+  ["Sari Wulandari", "sari", "Pengguna", [3, 5], [1.5, 2], [1, 2], [2.1, 5]],
+  ["Tim Data", "data", "Pengguna", [2, 4], [3.5, 4], [2, 2], [18.4, 20]],
+  ["Rina Kusuma", "rina", "Pengguna", [0, 3], [0, 1], [0, 1], [0, 2]],
+].map(([n, u, r, a, m, c, s]) => `<tr>
+  <td><div class="ucell"><span class="av">${n.split(" ").map((x) => x[0]).join("").slice(0, 2)}</span><div><b>${n}</b><small>${u}</small></div></div></td>
+  <td>${r === "Admin" ? '<span class="chip info">Admin</span>' : '<span class="chip">Pengguna</span>'}</td>
+  <td>${q(a, "")}</td><td>${q(m, "GB")}</td><td>${q(c, "core")}</td><td>${q(s, "GB")}</td>
+  <td class="num" style="white-space:nowrap"><button class="btn sm"><i data-lucide="sliders-horizontal"></i>Kuota</button> <button class="ibtn" aria-label="Lainnya" style="display:inline-grid;vertical-align:middle"><i data-lucide="ellipsis"></i></button></td></tr>`).join("");
+
+$("#rtlist").innerHTML = [
+  ["java", "Java 8", "eclipse-temurin:8-jre", false], ["java", "Java 11", "eclipse-temurin:11-jre", true], ["java", "Java 17", "eclipse-temurin:17-jre", true],
+  ["java", "Java 21", "eclipse-temurin:21-jre", true], ["java", "Java 25", "eclipse-temurin:25-jre", true],
+  ["go", "Binary statis", "distroless/static-debian12", true], ["cpp", "Binary glibc", "ubuntu:26.04", true],
+].map(([l, n, img, on]) => `<div class="rtitem"><img src="${LOGO[l]}" alt=""><div><b>${n}</b><small>${img}</small></div><button class="sw" role="switch" aria-checked="${on}" aria-label="${n}"></button></div>`).join("");
+
+/* Navigation */
+const CRUMBS = {
+  apps: [["boxes", "Aplikasi"]],
+  app: [["boxes", "Aplikasi"], ["img:" + LOGO.java, "billing-api", true]],
+  new: [["boxes", "Aplikasi"], ["cloud-upload", "Deploy baru"]],
+  activity: [["history", "Aktivitas"]], users: [["users", "Pengguna"]], server: [["server", "Server"]],
+};
+const NAVKEY = { apps: "apps", app: "apps", new: "new", activity: "activity", users: "users", server: "server" };
+function go(v) {
+  document.querySelectorAll(".view").forEach((x) => x.classList.toggle("on", x.id === "v-" + v));
+  $("#app").dataset.view = v;
+  $("#msheet").hidden = true;
+  const bcur = v === "server" ? "more" : NAVKEY[v];
+  document.querySelectorAll(".bnav button").forEach((b) => ((b.dataset.go || "more") === bcur ? b.setAttribute("aria-current", "page") : b.removeAttribute("aria-current")));
+  document.querySelectorAll(".nav button").forEach((b) => (b.dataset.go === NAVKEY[v] ? b.setAttribute("aria-current", "page") : b.removeAttribute("aria-current")));
+  $("#crumb").innerHTML = CRUMBS[v].map(([ic, t, dd], i) => `${i ? '<span class="sl">/</span>' : ""}<button>${ic.startsWith("img:") ? `<img src="${ic.slice(4)}" alt="">` : `<i data-lucide="${ic}"></i>`}${t}${dd ? '<i data-lucide="chevron-down"></i>' : ""}</button>`).join("");
+  icons();
+  $(".sheet").scrollTop = 0;
+}
+function tab(t) {
+  document.querySelectorAll(".tabs button").forEach((b) => b.setAttribute("aria-selected", b.dataset.tab === t));
+  document.querySelectorAll(".tab").forEach((x) => x.classList.toggle("on", x.id === "t-" + t));
+}
+let step = 1;
+function setStep(n) {
+  step = Math.max(1, Math.min(4, n));
+  $(".wiz").dataset.at = step;
+  $("#mstepTxt").textContent = `Langkah ${step} dari 4`;
+  $("#mstepName").textContent = ["Unggah", "Runtime", "Environment", "Resource & akses"][step - 1];
+  $("#mstepBar").style.width = step * 25 + "%";
+  $("#mprevTxt").textContent = step === 1 ? "Batal" : "Kembali";
+  $("#mnext").style.display = step === 4 ? "none" : "";
+  $("#mdeploy").style.display = step === 4 ? "" : "none";
+  document.querySelectorAll(".wstep").forEach((w) => w.classList.toggle("on", +w.dataset.w === step));
+  document.querySelectorAll("#steps button").forEach((b) => {
+    const s = +b.dataset.step;
+    const done = s < step;
+    b.classList.toggle("done", done);
+    s === step ? b.setAttribute("aria-current", "step") : b.removeAttribute("aria-current");
+    b.querySelector(".no").innerHTML = done ? '<i data-lucide="check"></i>' : s;
+  });
+  $("#prev").style.visibility = step === 1 ? "hidden" : "visible";
+  $("#next").style.display = step === 4 ? "none" : "";
+  icons();
+}
+function checkJwt() {
+  const ok = $("#jwt").value.trim().length > 0;
+  $("#deploy").disabled = !ok;
+  $("#mdeploy").disabled = !ok;
+  $("#todojwt").className = ok ? "ok" : "no";
+  $("#todojwt").innerHTML = `<i data-lucide="${ok ? "circle-check" : "circle"}"></i>Isi JWT_SECRET`;
+  icons();
+}
+document.addEventListener("click", (e) => {
+  const t = e.target;
+  const dv = t.closest("[data-device]"); if (dv) { setDevice(dv.dataset.device); return; }
+  if (t.closest("[data-more]")) { $("#msheet").hidden = false; return; }
+  if (t.closest("[data-close]")) { $("#msheet").hidden = true; return; }
+  if (t.closest("#mnext")) { setStep(step + 1); return; }
+  if (t.closest("#mprev")) { step === 1 ? go("apps") : setStep(step - 1); return; }
+  const g = t.closest("[data-go]"); if (g) { go(g.dataset.go); if (g.dataset.go === "new") setStep(1); return; }
+  const o = t.closest("[data-open]"); if (o) { go("app"); tab("gen"); return; }
+  const tb = t.closest("[data-tab]"); if (tb) { tab(tb.dataset.tab); return; }
+  const tg = t.closest("[data-tab-go]"); if (tg) { tab(tg.dataset.tabGo); return; }
+  const st = t.closest("#steps [data-step]"); if (st) { setStep(+st.dataset.step); return; }
+  if (t.closest("#next")) { setStep(step + 1); return; }
+  if (t.closest("#prev")) { setStep(step - 1); return; }
+  if (t.closest("#genjwt")) { $("#jwt").value = [...crypto.getRandomValues(new Uint8Array(24))].map((b) => b.toString(16).padStart(2, "0")).join(""); checkJwt(); return; }
+  if (t.closest("#themeBtn") || t.closest("#themeBtn2")) { toggleTheme(); return; }
+  const sw = t.closest(".sw"); if (sw) {
+    const on = sw.getAttribute("aria-checked") !== "true"; sw.setAttribute("aria-checked", on);
+    if (sw.id === "ipsw") { $("#ipdesc").innerHTML = on ? 'Terbuka di <span class="mono">10.20.1.15:20101</span> untuk pengujian' : "Ditutup. Hanya bisa diakses lewat domain"; $("#iplink").classList.toggle("off", !on); }
+    return;
+  }
+  const op = t.closest("#javaopts .opt"); if (op && op.getAttribute("aria-disabled") !== "true") {
+    document.querySelectorAll("#javaopts .opt:not([aria-disabled=true])").forEach((b) => b.setAttribute("aria-pressed", b === op));
+    const v = op.querySelector("b").textContent; $("#img").textContent = `eclipse-temurin:${v}-jre`; $("#sumrt").textContent = `Java ${v}`;
+    return;
+  }
+  const gm = t.closest("[data-gm]"); if (gm) {
+    const g = gm.closest("[data-guide]");
+    g.querySelectorAll("[data-gm]").forEach((b) => b.setAttribute("aria-pressed", b === gm));
+    g.querySelectorAll("[data-gmb]").forEach((m) => m.classList.toggle("on", m.dataset.gmb === gm.dataset.gm));
+    return;
+  }
+  const cp = t.closest(".cp"); if (cp) {
+    const v = cp.previousElementSibling.textContent.trim();
+    navigator.clipboard?.writeText(v).catch(() => {});
+    cp.innerHTML = '<i data-lucide="check"></i>'; icons();
+    setTimeout(() => { cp.innerHTML = '<i data-lucide="copy"></i>'; icons(); }, 1200);
+    return;
+  }
+  const sg = t.closest(".seg button"); if (sg) sg.parentElement.querySelectorAll("button").forEach((b) => b.setAttribute("aria-pressed", b === sg));
+});
+// Second-level public suffixes common in Indonesia and elsewhere (preview only; the real
+// implementation uses the Public Suffix List).
+const SLD = new Set(["co.id","ac.id","go.id","or.id","web.id","my.id","biz.id","sch.id","net.id","co.uk","org.uk","com.au","co.jp","com.sg","com.my"]);
+function fillGuide(g, host) {
+  const parts = host.split(".");
+  const n = SLD.has(parts.slice(-2).join(".")) ? 3 : 2;
+  const sub = parts.length > n ? parts.slice(0, -n).join(".") : "@";
+  const dom = parts.slice(-n).join(".");
+  g.querySelectorAll(".gsub").forEach((e) => (e.textContent = sub));
+  g.querySelectorAll(".gdom").forEach((e) => (e.textContent = dom));
+  g.querySelector(".gstatus").textContent = `${host} belum mengarah ke server`;
+}
+document.addEventListener("input", (e) => {
+  if (e.target.id === "jwt") checkJwt();
+  if (e.target.id === "wdomain") {
+    const host = e.target.value.trim().toLowerCase();
+    const ok = /^[a-z0-9-]+(\.[a-z0-9-]+)+$/.test(host);
+    $("#wguide").hidden = !ok;
+    if (ok) fillGuide($("#wguide [data-guide]"), host);
+  }
+});
+function toggleTheme() {
+  const a = $("#app");
+  a.dataset.theme = a.dataset.theme === "dark" ? "light" : "dark";
+  const dark = a.dataset.theme === "dark";
+  $("#themeBtn").innerHTML = `<i data-lucide="${dark ? "sun" : "moon"}"></i>`;
+  $("#themeSw").setAttribute("aria-checked", dark);
+  icons();
+}
+function setDevice(mode) {
+  $("#device").classList.toggle("phone", mode === "phone");
+  document.querySelectorAll("[data-device]").forEach((b) => b.setAttribute("aria-pressed", b.dataset.device === mode));
+}
+// Mobile tables stack each cell under its column name.
+document.querySelectorAll("table.t").forEach((tb) => {
+  const heads = [...tb.querySelectorAll("thead th")].map((th) => th.textContent.trim());
+  if (!heads.length) return;
+  tb.querySelectorAll("tbody tr").forEach((tr) => [...tr.children].forEach((td, i) => (td.dataset.label = heads[i] || "")));
+});
+if (matchMedia("(prefers-color-scheme: dark)").matches) toggleTheme();
+fillGuide($("#t-dom [data-guide]"), "billing-staging.perusahaan.co.id");
+go("apps");
+setStep(1);
+</script>
+</body>
+</html>
