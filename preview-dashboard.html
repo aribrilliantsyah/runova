@@ -125,6 +125,7 @@ svg.lucide{width:15px;height:15px;stroke-width:1.75;flex:none}
 
 /* Apps */
 .stats{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin-bottom:16px}
+#stats{grid-template-columns:repeat(3,minmax(0,1fr))}
 .stat{border:1px solid var(--line);border-radius:var(--r);padding:11px 13px;background:var(--raised)}
 .stat .l{display:flex;align-items:center;gap:6px;color:var(--muted);font-size:12px}
 .stat .l .lucide{width:14px;height:14px}
@@ -259,7 +260,7 @@ input.f::placeholder{color:var(--faint)}
 .fld{display:grid;gap:6px;margin-bottom:16px}
 .fld>label{font-weight:500;font-size:12.5px}
 .fld .hint{font-size:12px;color:var(--muted)}
-.res3{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin-bottom:14px}
+.res3{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin-bottom:14px}
 .rescard{border:1px solid var(--line);border-radius:var(--r);padding:11px 12px}
 .rescard .l{display:flex;align-items:center;gap:6px;color:var(--muted);font-size:12px;margin-bottom:7px}
 .rescard .l .lucide{color:var(--faint);width:14px;height:14px}
@@ -385,6 +386,9 @@ input.f::placeholder{color:var(--faint)}
   .app[data-view=apps] .ph .acts{display:none}
   .pb{padding:14px 16px 20px}
   .stats{grid-template-columns:1fr 1fr;gap:8px;margin-bottom:14px}
+  #stats{grid-template-columns:repeat(3,minmax(0,1fr))}
+  #stats .stat .l span{display:none}
+  #stats .stat .v small{display:block}
   .stat{padding:10px 11px}
   .stat .v{font-size:16px;margin:2px 0 7px}
   .toolbar{flex-wrap:wrap}
@@ -512,7 +516,6 @@ input.f::placeholder{color:var(--faint)}
         <div class="mini">
           <i data-lucide="memory-stick"></i><div class="bar"><i style="width:58%"></i></div><span>58%</span>
           <i data-lucide="cpu"></i><div class="bar"><i style="width:75%"></i></div><span>75%</span>
-          <i data-lucide="hard-drive"></i><div class="bar"><i class="hi" style="width:86%"></i></div><span>86%</span>
         </div>
       </div>
       <div class="acct"><span class="av">BS</span><div><b>Budi Santoso</b><span>budi@perusahaan.co.id</span></div><i data-lucide="chevrons-up-down"></i></div>
@@ -620,7 +623,6 @@ input.f::placeholder{color:var(--faint)}
               <div class="bd meters">
                 <div><div class="t"><b><i data-lucide="memory-stick"></i>Memori</b><span>312 / 512 MB</span></div><div class="bar"><i style="width:61%"></i></div></div>
                 <div><div class="t"><b><i data-lucide="cpu"></i>CPU</b><span>0,18 / 0,5 core</span></div><div class="bar"><i style="width:36%"></i></div></div>
-                <div><div class="t"><b><i data-lucide="hard-drive"></i>Storage</b><span>148 MB / 1 GB</span></div><div class="bar"><i style="width:15%"></i></div></div>
               </div></section>
           </div>
         </div>
@@ -785,7 +787,6 @@ input.f::placeholder{color:var(--faint)}
               <div class="res3">
                 <div class="rescard"><div class="l"><i data-lucide="memory-stick"></i>Memori</div><select class="f"><option>256 MB</option><option selected>512 MB</option><option>1 GB</option></select><div class="hint">Sisa 1,25 GB dari 3 GB</div></div>
                 <div class="rescard"><div class="l"><i data-lucide="cpu"></i>CPU</div><select class="f"><option>0,25 core</option><option selected>0,5 core</option><option>0,75 core</option></select><div class="hint">Sisa 0,75 core dari 3</div></div>
-                <div class="rescard"><div class="l"><i data-lucide="hard-drive"></i>Storage</div><select class="f"><option>512 MB</option><option selected>1 GB</option></select><div class="hint">Sisa 1,4 GB dari 10 GB</div></div>
               </div>
               <section class="card"><div class="bd" style="padding-top:2px;padding-bottom:2px">
                 <div class="setting"><div><b>Akses lewat IP</b><div class="d">Buka di <span class="mono">10.20.1.15:&lt;port&gt;</span> untuk pengujian sebelum domain siap</div></div><div class="ctl"><button class="sw" role="switch" aria-checked="true" aria-label="Akses lewat IP"></button></div></div>
@@ -865,7 +866,7 @@ input.f::placeholder{color:var(--faint)}
             <div class="srow"><span>Artefak</span><b class="mono">billing-api-2.4.1.jar</b></div>
             <div class="srow"><span>Runtime</span><b id="sumrt">Java 21</b></div>
             <div class="srow"><span>Port</span><b class="mono">8080 → otomatis</b></div>
-            <div class="srow"><span>Resource</span><b>512 MB · 0,5 core · 1 GB</b></div>
+            <div class="srow"><span>Resource</span><b>512 MB · 0,5 core</b></div>
             <div class="sep"></div>
             <div class="todo">
               <div class="ok"><i data-lucide="circle-check"></i>File valid untuk server ini</div>
@@ -889,7 +890,7 @@ input.f::placeholder{color:var(--faint)}
         <div class="ph"><div><h1>Pengguna</h1><p>Admin mendaftarkan pengguna dan menentukan kuota. Pengguna membagi kuota ke aplikasinya sendiri.</p></div>
           <div class="acts"><button class="btn pri"><i data-lucide="user-plus"></i>Tambah pengguna</button></div></div>
         <div class="pb"><section class="card"><table class="t">
-          <thead><tr><th>Pengguna</th><th>Peran</th><th>Aplikasi</th><th>Memori</th><th>CPU</th><th>Storage</th><th class="num"></th></tr></thead>
+          <thead><tr><th>Pengguna</th><th>Peran</th><th>Aplikasi</th><th>Memori</th><th>CPU</th><th class="num"></th></tr></thead>
           <tbody id="userrows"></tbody></table></section></div>
       </section>
 
@@ -937,7 +938,6 @@ input.f::placeholder{color:var(--faint)}
         <div class="mini">
           <i data-lucide="memory-stick"></i><div class="bar"><i style="width:58%"></i></div><span>58%</span>
           <i data-lucide="cpu"></i><div class="bar"><i style="width:75%"></i></div><span>75%</span>
-          <i data-lucide="hard-drive"></i><div class="bar"><i class="hi" style="width:86%"></i></div><span>86%</span>
         </div>
       </div>
       <div class="mlist">
@@ -959,7 +959,7 @@ const icons = () => lucide.createIcons();
 
 $("#stats").innerHTML = [
   ["boxes", "Aplikasi", "6", "dari 8", 75], ["memory-stick", "Memori", "1,75 GB", "dari 3 GB", 58],
-  ["cpu", "CPU", "2,25", "dari 3 core", 75], ["hard-drive", "Storage", "8,6 GB", "dari 10 GB", 86],
+  ["cpu", "CPU", "2,25", "dari 3 core", 75],
 ].map(([ic, l, v, of, p]) => `<div class="stat"><div class="l"><i data-lucide="${ic}"></i>${l}<span style="margin-left:auto">${p}%</span></div><div class="v">${v} <small>${of}</small></div><div class="bar"><i class="${p >= 85 ? "hi" : ""}" style="width:${p}%"></i></div></div>`).join("");
 
 const apps = [
@@ -1021,14 +1021,14 @@ $("#actrows").innerHTML = [
 
 const q = ([u, m], unit) => { const p = Math.round((u / m) * 100); return `<div class="qcell"><div class="t"><b>${String(u).replace(".", ",")}</b><span>${String(m).replace(".", ",")} ${unit}</span></div><div class="bar"><i class="${p >= 85 ? "hi" : ""}" style="width:${p}%"></i></div></div>`; };
 $("#userrows").innerHTML = [
-  ["Budi Santoso", "budi", "Admin", [6, 8], [1.75, 3], [2.25, 3], [8.6, 10]],
-  ["Sari Wulandari", "sari", "Pengguna", [3, 5], [1.5, 2], [1, 2], [2.1, 5]],
-  ["Tim Data", "data", "Pengguna", [2, 4], [3.5, 4], [2, 2], [18.4, 20]],
-  ["Rina Kusuma", "rina", "Pengguna", [0, 3], [0, 1], [0, 1], [0, 2]],
-].map(([n, u, r, a, m, c, s]) => `<tr>
+  ["Budi Santoso", "budi", "Admin", [6, 8], [1.75, 3], [2.25, 3]],
+  ["Sari Wulandari", "sari", "Pengguna", [3, 5], [1.5, 2], [1, 2]],
+  ["Tim Data", "data", "Pengguna", [2, 4], [3.5, 4], [2, 2]],
+  ["Rina Kusuma", "rina", "Pengguna", [0, 3], [0, 1], [0, 1]],
+].map(([n, u, r, a, m, c]) => `<tr>
   <td><div class="ucell"><span class="av">${n.split(" ").map((x) => x[0]).join("").slice(0, 2)}</span><div><b>${n}</b><small>${u}</small></div></div></td>
   <td>${r === "Admin" ? '<span class="chip info">Admin</span>' : '<span class="chip">Pengguna</span>'}</td>
-  <td>${q(a, "")}</td><td>${q(m, "GB")}</td><td>${q(c, "core")}</td><td>${q(s, "GB")}</td>
+  <td>${q(a, "")}</td><td>${q(m, "GB")}</td><td>${q(c, "core")}</td>
   <td class="num" style="white-space:nowrap"><button class="btn sm"><i data-lucide="sliders-horizontal"></i>Kuota</button> <button class="ibtn" aria-label="Lainnya" style="display:inline-grid;vertical-align:middle"><i data-lucide="ellipsis"></i></button></td></tr>`).join("");
 
 $("#rtlist").innerHTML = [

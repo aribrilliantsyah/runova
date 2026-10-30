@@ -23,7 +23,7 @@
 Platform seperti Vercel atau Railway membangun aplikasi dari source code dan berjalan di cloud mereka. Banyak tim internal justru sudah punya artefak jadi dari pipeline sendiri (file `.jar` dari Maven, binary Go atau Rust dari CI) dan cukup butuh satu tempat di server kantor untuk menjalankannya dengan rapi:
 
 - **Unggah, bukan build.** Runova tidak menyentuh source code. Ia membaca file yang diunggah: jenisnya, versi Java minimal, port, dan environment yang dirujuk.
-- **Terpisah per pengguna.** Setiap aplikasi berjalan di container Docker sendiri dengan batas memori, CPU, dan storage. Pengguna tidak bisa melihat atau menyentuh aplikasi milik pengguna lain.
+- **Terpisah per pengguna.** Setiap aplikasi berjalan di container Docker sendiri dengan batas memori dan CPU. Pengguna tidak bisa melihat atau menyentuh aplikasi milik pengguna lain.
 - **Uji dulu lewat IP, lalu pasang domain.** Aplikasi bisa dibuka di `IP-server:port` untuk pengujian. Setelah admin jaringan mengarahkan DNS, Caddy menerbitkan sertifikat HTTPS sendiri dan akses IP bisa ditutup.
 
 ## Yang boleh dijalankan
@@ -53,7 +53,7 @@ Deploy dibagi empat langkah:
 1. **Unggah.** Tarik file ke halaman. Hasil pembacaan tampil sebagai checklist.
 2. **Runtime.** Pilih versi Java (untuk `.jar`), opsi JVM, dan port yang didengarkan aplikasi.
 3. **Environment.** Variabel yang dirujuk aplikasi muncul sebagai form. Nilai rahasia disimpan terenkripsi.
-4. **Resource & akses.** Bagi memori, CPU, dan storage dari sisa kuota akun. Nyalakan akses IP untuk pengujian, dan isi domain kalau sudah siap.
+4. **Resource & akses.** Bagi memori dan CPU dari sisa kuota akun. Nyalakan akses IP untuk pengujian, dan isi domain kalau sudah siap.
 
 Tombol **Deploy** baru aktif setelah semua yang wajib terpenuhi. Panel ringkasan menunjukkan apa yang masih kurang.
 
@@ -63,7 +63,8 @@ Setelah jalan, halaman aplikasi berisi kontrol (unggah versi baru, restart, stop
 
 - **Admin** mendaftarkan pengguna. Tidak ada pendaftaran mandiri.
 - Setiap pengguna hanya melihat dan mengelola aplikasinya sendiri.
-- Admin menentukan kuota per pengguna: **jumlah aplikasi, memori, CPU, ukuran unggahan, dan total storage**. Pengguna membagi kuota itu ke aplikasinya.
+- Admin menentukan kuota per pengguna: **jumlah aplikasi, memori, dan CPU**. Pengguna membagi kuota itu ke aplikasinya.
+- Storage tidak dikuota, supaya Runova jalan di Ubuntu Server apa adanya tanpa menyiapkan disk khusus. Admin tetap bisa memantau pemakaian disk server di halaman Server.
 - Aplikasi yang memakai memori melebihi batasnya dihentikan dan dijalankan ulang oleh Docker tanpa mengganggu aplikasi lain.
 
 ## Menghubungkan domain
@@ -97,7 +98,7 @@ Untuk DNS langsung dan proxy, sertifikat diterbitkan Caddy di server. Untuk Tunn
 |---|---|
 | Server target | Ubuntu Server 26.04 LTS, `linux/amd64` |
 | Runova | Satu binary Go, frontend tertanam |
-| Isolasi aplikasi | Docker, satu container per aplikasi, batas memori/CPU/storage |
+| Isolasi aplikasi | Docker, satu container per aplikasi, batas memori dan CPU |
 | Domain & HTTPS | Caddy, sertifikat otomatis |
 | Akses IP | Nyala: port terbuka di `0.0.0.0`. Mati: hanya `127.0.0.1`, cuma Caddy yang bisa mengakses |
 | Port aplikasi | Dialokasikan otomatis dari rentang yang diatur admin |
