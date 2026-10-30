@@ -123,6 +123,10 @@ func (s *Service) handleEvent(ctx context.Context, ev docker.Event) {
 		return
 	}
 	if app.Status != store.AppRunning || app.CurrentDeploymentID == nil {
+		// The die that a stop or a deploy caused arrives while the app is
+		// stopped or deploying. Use the stop note up here, or it would swallow
+		// the first real crash after the app runs again.
+		s.consumeStop(app.ID)
 		return
 	}
 	d, err := s.Store.Deployment(ctx, *app.CurrentDeploymentID)

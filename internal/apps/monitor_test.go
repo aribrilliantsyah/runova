@@ -349,3 +349,31 @@ func TestCleanExitMarksStopped(t *testing.T) {
 		t.Fatalf("notifications = %+v, want one info notice", list)
 	}
 }
+
+// The die that echoes a user's stop arrives while the app is stopped. It must
+// use up the stop note, or the first real crash after Start would go uncounted.
+func TestStopEchoDoesNotSwallowLaterCrash(t *testing.T) {
+	ctx := context.Background()
+	e := newTestEnv(t)
+	u := e.addUser("budi", store.RoleUser, roomyQuota)
+	app, _ := deployFirst(t, e, u, "billing")
+	cid := activeContainer(t, e, app)
+	startMonitor(t, e)
+
+	if err := e.svc.Stop(ctx, u, app.ID); err != nil {
+		t.Fatal(err)
+	}
+	die(t, e, app, cid)
+	settle(t, e)
+	if err := e.svc.Start(ctx, u, app.ID); err != nil {
+		t.Fatal(err)
+	}
+	for range 6 {
+		die(t, e, app, cid)
+		e.clock.Advance(time.Second)
+	}
+	waitFor(t, "app failed after 6 real crashes", func() bool {
+		got, _ := e.store.App(ctx, app.ID)
+		return got.Status == store.AppFailed
+	})
+}
