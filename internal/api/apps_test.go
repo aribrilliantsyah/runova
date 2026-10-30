@@ -582,3 +582,25 @@ func TestWebSocketsEndWithSession(t *testing.T) {
 		c = e.login("budi", "budi-password-1")
 	}
 }
+
+// Spec §5: a terminal opens only in the user's own container, admin included.
+func TestTerminalOnlyInOwnContainer(t *testing.T) {
+	e := newAppEnv(t, 0)
+	e.addUser("budi", "budi-password-1", store.RoleUser)
+	b := e.login("budi", "budi-password-1")
+	admin := e.login("admin", adminPassword)
+	id := b.createJarApp("javaapp")
+	b.waitStatus(id, "running")
+
+	if _, resp, err := admin.dialWS(appPath(id, "/terminal")); err == nil || resp == nil || resp.StatusCode != 404 {
+		t.Fatalf("admin terminal in another user's app: err=%v resp=%v, want a 404 handshake rejection", err, resp)
+	}
+	if got := e.engine.CallsWithPrefix("exec "); len(got) != 0 {
+		t.Errorf("exec calls = %v, want none", got)
+	}
+	conn, _, err := b.dialWS(appPath(id, "/terminal"))
+	if err != nil {
+		t.Fatalf("owner terminal: %v", err)
+	}
+	conn.CloseNow()
+}

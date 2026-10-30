@@ -38,11 +38,23 @@ func (s *server) terminal(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	// Everything that can be refused is refused before the upgrade.
+	// Spec §5: the terminal is only for the user's own containers. Admins
+	// may read logs of any app, but a shell runs with the owner's UID inside
+	// the owner's container and is not part of that access.
+	app, _, err := s.apps.Get(r.Context(), u, id)
+	if err != nil {
+		appError(w, r, err)
+		return
+	}
+	if app.UserID != u.ID {
+		writeError(w, http.StatusNotFound, appNotFound)
+		return
+	}
 	if err := s.apps.CheckTerminal(r.Context(), u, id); err != nil {
 		appError(w, r, err)
 		return
 	}
-	sess, app, err := s.apps.Terminal(r.Context(), u, id)
+	sess, _, err := s.apps.Terminal(r.Context(), u, id)
 	if err != nil {
 		appError(w, r, err)
 		return
