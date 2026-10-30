@@ -40,22 +40,24 @@ func (c *clock) advance(d time.Duration) {
 }
 
 type env struct {
-	t     *testing.T
-	srv   *httptest.Server
-	store *store.Store
-	clock *clock
+	t       *testing.T
+	srv     *httptest.Server
+	store   *store.Store
+	clock   *clock
+	dataDir string
 }
 
 func newEnv(t *testing.T) *env {
 	t.Helper()
-	s, err := store.Open(filepath.Join(t.TempDir(), "runova.db"))
+	dataDir := t.TempDir()
+	s, err := store.Open(filepath.Join(dataDir, "runova.db"))
 	if err != nil {
 		t.Fatal(err)
 	}
 	clk := &clock{t: time.Date(2026, 10, 30, 9, 0, 0, 0, time.UTC)}
-	srv := httptest.NewServer(api.New(api.Config{Store: s, Now: clk.Now}))
+	srv := httptest.NewServer(api.New(api.Config{Store: s, Now: clk.Now, DataDir: dataDir}))
 	t.Cleanup(func() { srv.Close(); s.Close() })
-	e := &env{t: t, srv: srv, store: s, clock: clk}
+	e := &env{t: t, srv: srv, store: s, clock: clk, dataDir: dataDir}
 	e.addUser("admin", adminPassword, store.RoleAdmin)
 	return e
 }

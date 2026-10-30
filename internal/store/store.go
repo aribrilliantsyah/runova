@@ -61,6 +61,15 @@ CREATE TABLE IF NOT EXISTS activity(
 	ip TEXT NOT NULL DEFAULT ''
 );
 CREATE INDEX IF NOT EXISTS activity_at ON activity(at);
+CREATE TABLE IF NOT EXISTS uploads(
+	id TEXT PRIMARY KEY,
+	user_id INTEGER NOT NULL REFERENCES users ON DELETE CASCADE,
+	dir TEXT NOT NULL,
+	artifact_path TEXT NOT NULL,
+	report TEXT NOT NULL,
+	created_at INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS uploads_created ON uploads(created_at);
 `
 
 type Store struct{ db *sql.DB }

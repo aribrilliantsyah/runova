@@ -77,7 +77,7 @@ func serve(cfg config.Config, stderr io.Writer) int {
 
 	srv := &http.Server{
 		Addr:              cfg.Listen,
-		Handler:           api.New(api.Config{Store: st, Now: time.Now}),
+		Handler:           api.New(api.Config{Store: st, Now: time.Now, DataDir: cfg.DataDir}),
 		ReadHeaderTimeout: 10 * time.Second,
 	}
 	errc := make(chan error, 1)
@@ -101,7 +101,7 @@ func serve(cfg config.Config, stderr io.Writer) int {
 	return 0
 }
 
-// cleanupLoop drops expired sessions and old login failures at start and then hourly.
+// cleanupLoop drops expired sessions, old login failures and expired uploads at start and then hourly.
 func cleanupLoop(ctx context.Context, st *store.Store) {
 	clean := func() {
 		now := time.Now()
@@ -110,6 +110,9 @@ func cleanupLoop(ctx context.Context, st *store.Store) {
 		}
 		if err := st.PruneLoginFailures(ctx, now.Add(-24*time.Hour).UnixMilli()); err != nil && ctx.Err() == nil {
 			slog.Error("prune login failures", "err", err)
+		}
+		if err := api.CleanupUploads(ctx, st, now); err != nil && ctx.Err() == nil {
+			slog.Error("cleanup uploads", "err", err)
 		}
 	}
 	clean()
