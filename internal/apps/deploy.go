@@ -269,77 +269,80 @@ func (s *Service) cloneDeployment(ctx context.Context, actor store.User, src sto
 	})
 }
 
-// Rollback deploys an earlier deployment again: a new deployment copies its
-// artifact, environment snapshot, Java version, JVM options and port.
-func (s *Service) Rollback(ctx context.Context, user store.User, appID, deploymentID int64) error {
-	app, owner, err := s.load(ctx, user, appID)
+// PrepareRollback validates a rollback and creates the pending deployment
+// that copies the old one's artifact, environment snapshot, Java version, JVM
+// options and port. Run it with Deploy.
+func (s *Service) PrepareRollback(ctx context.Context, user store.User, appID, deploymentID int64) (store.Deployment, error) {
+	app, _, err := s.load(ctx, user, appID)
 	if err != nil {
-		return err
+		return store.Deployment{}, err
 	}
-	unlock, err := s.lockOrBusy(appID)
-	if err != nil {
-		return err
-	}
-	defer unlock()
-
 	old, err := s.Store.Deployment(ctx, deploymentID)
 	if errors.Is(err, store.ErrNotFound) || (err == nil && old.AppID != app.ID) {
-		return invalid("Deployment tidak ditemukan")
+		return store.Deployment{}, invalid("Deployment tidak ditemukan")
 	}
 	if err != nil {
-		return err
+		return store.Deployment{}, err
 	}
 	if old.Status != store.DeploySuperseded && old.Status != store.DeployActive {
-		return invalid("Hanya deployment yang pernah berjalan yang bisa dikembalikan")
+		return store.Deployment{}, invalid("Hanya deployment yang pernah berjalan yang bisa dikembalikan")
 	}
 	if _, err := os.Stat(old.ArtifactPath); err != nil {
-		return invalid("File artefak deployment ini sudah tidak ada")
+		return store.Deployment{}, invalid("File artefak deployment ini sudah tidak ada")
 	}
 	nd, err := s.cloneDeployment(ctx, user, old, old.EnvSnapshot, old.JavaVersion, old.JVMOpts, old.InternalPort)
 	if err != nil {
-		return err
+		return store.Deployment{}, err
 	}
 	s.logActivity(ctx, user, store.ActRollback, app.Name, fmt.Sprintf("#%d → #%d", old.Number, nd.Number))
-	return s.deployLocked(ctx, user, owner, app, nd.ID)
+	return nd, nil
 }
 
-// DeployLatest deploys the newest deployment when it is still pending;
-// otherwise it clones the newest one with the app's current settings and
-// environment, so a changed setting or variable takes effect.
-func (s *Service) DeployLatest(ctx context.Context, user store.User, appID int64) error {
-	app, owner, err := s.load(ctx, user, appID)
+// Rollback prepares and runs a rollback.
+func (s *Service) Rollback(ctx context.Context, user store.User, appID, deploymentID int64) error {
+	nd, err := s.PrepareRollback(ctx, user, appID, deploymentID)
 	if err != nil {
 		return err
 	}
-	unlock, err := s.lockOrBusy(appID)
-	if err != nil {
-		return err
-	}
-	defer unlock()
+	return s.Deploy(ctx, user, appID, nd.ID)
+}
 
+// PrepareRedeploy returns the deployment to run for "deploy again": the
+// newest one when it is still pending; otherwise a new deployment cloned from
+// it with the app's current settings and environment, so changes take effect.
+func (s *Service) PrepareRedeploy(ctx context.Context, user store.User, appID int64) (store.Deployment, error) {
+	app, _, err := s.load(ctx, user, appID)
+	if err != nil {
+		return store.Deployment{}, err
+	}
 	ds, err := s.Store.Deployments(ctx, appID)
 	if err != nil {
-		return err
+		return store.Deployment{}, err
 	}
 	if len(ds) == 0 {
-		return invalid("Aplikasi belum punya artefak")
+		return store.Deployment{}, invalid("Aplikasi belum punya artefak")
 	}
 	latest := ds[0]
 	if latest.Status == store.DeployPending {
-		return s.deployLocked(ctx, user, owner, app, latest.ID)
+		return latest, nil
 	}
 	if _, err := os.Stat(latest.ArtifactPath); err != nil {
-		return invalid("File artefak sudah tidak ada; unggah versi baru")
+		return store.Deployment{}, invalid("File artefak sudah tidak ada; unggah versi baru")
 	}
 	snapshot, err := s.snapshotEnv(ctx, appID)
 	if err != nil {
-		return err
+		return store.Deployment{}, err
 	}
-	nd, err := s.cloneDeployment(ctx, user, latest, snapshot, app.JavaVersion, app.JVMOpts, app.InternalPort)
+	return s.cloneDeployment(ctx, user, latest, snapshot, app.JavaVersion, app.JVMOpts, app.InternalPort)
+}
+
+// DeployLatest prepares and runs a redeploy.
+func (s *Service) DeployLatest(ctx context.Context, user store.User, appID int64) error {
+	nd, err := s.PrepareRedeploy(ctx, user, appID)
 	if err != nil {
 		return err
 	}
-	return s.deployLocked(ctx, user, owner, app, nd.ID)
+	return s.Deploy(ctx, user, appID, nd.ID)
 }
 
 // activeContainer returns the container of the app's active deployment.
