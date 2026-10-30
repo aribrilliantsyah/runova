@@ -157,6 +157,7 @@ node web/test/smoke-deploy.mjs    # login, wizard, deploy
 node web/test/smoke-app.mjs       # tab detail aplikasi, log, terminal
 node web/test/smoke-admin.mjs     # pengguna, database, aktivitas, server
 node web/test/smoke-layout.mjs    # 5 lebar layar, terang dan gelap, aksesibilitas
+node web/test/smoke-lifecycle.mjs # terminal, dialog, dan soket tidak melewati umur halaman/sesi
 ```
 
 Ikon dibuat dari `web/icons.txt` dengan `go run ./cmd/genicons` (hasilnya di-commit).

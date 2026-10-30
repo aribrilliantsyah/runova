@@ -26,13 +26,27 @@ import (
 )
 
 // productionData is the data directory of a real installation; fake backends never run on it.
-const productionData = "/var/lib/runova"
+// A variable only so a test can point it at a temporary directory.
+var productionData = "/var/lib/runova"
 
 // errFakeOnProduction is returned when RUNOVA_FAKE_BACKENDS=1 meets the production data directory.
 var errFakeOnProduction = errors.New("RUNOVA_FAKE_BACKENDS=1 ditolak untuk RUNOVA_DATA=" + productionData)
 
+// checkFakeBackends refuses fake backends on the production data directory. It compares the
+// directories themselves (os.SameFile), so a relative path, a symlink or a bind of the
+// production directory is caught as well as the plain spelling.
 func checkFakeBackends(cfg config.Config) error {
-	if cfg.FakeBackends && filepath.Clean(cfg.DataDir) == productionData {
+	if !cfg.FakeBackends {
+		return nil
+	}
+	if filepath.Clean(cfg.DataDir) == filepath.Clean(productionData) {
+		return errFakeOnProduction
+	}
+	prod, err := os.Stat(productionData)
+	if err != nil {
+		return nil // no production directory on this machine, nothing to protect
+	}
+	if dir, err := os.Stat(cfg.DataDir); err == nil && os.SameFile(prod, dir) {
 		return errFakeOnProduction
 	}
 	return nil

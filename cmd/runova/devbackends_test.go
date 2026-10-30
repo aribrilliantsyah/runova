@@ -2,6 +2,8 @@ package main
 
 import (
 	"errors"
+	"os"
+	"path/filepath"
 	"testing"
 
 	"runova/internal/config"
@@ -38,5 +40,26 @@ func TestFakeBackendsFlagFromEnv(t *testing.T) {
 		if config.Load(get(v)).FakeBackends {
 			t.Errorf("RUNOVA_FAKE_BACKENDS=%q must not enable fakes", v)
 		}
+	}
+}
+
+func TestFakeBackendsRefusedForAliasesOfProductionData(t *testing.T) {
+	real := t.TempDir()
+	old := productionData
+	productionData = real
+	t.Cleanup(func() { productionData = old })
+
+	link := filepath.Join(t.TempDir(), "alias")
+	if err := os.Symlink(real, link); err != nil {
+		t.Fatal(err)
+	}
+	t.Chdir(real)
+	for name, dir := range map[string]string{"symlink": link, "relative dot": ".", "relative parent": "../" + filepath.Base(real)} {
+		if err := checkFakeBackends(config.Config{DataDir: dir, FakeBackends: true}); !errors.Is(err, errFakeOnProduction) {
+			t.Errorf("%s (%q): err = %v, want errFakeOnProduction", name, dir, err)
+		}
+	}
+	if err := checkFakeBackends(config.Config{DataDir: t.TempDir(), FakeBackends: true}); err != nil {
+		t.Errorf("an unrelated directory must be allowed: %v", err)
 	}
 }

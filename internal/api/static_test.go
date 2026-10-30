@@ -163,3 +163,31 @@ func TestStaticRejectsDanglingAssetReference(t *testing.T) {
 	}()
 	api.New(api.Config{Store: s, Now: time.Now, DataDir: t.TempDir(), Static: fsys})
 }
+
+func TestStaticOnlyServesGetAndHead(t *testing.T) {
+	srv := staticServer(t, staticFS(`x`))
+	_, index := get(t, srv.URL+"/")
+	asset := mainRE.FindString(index)
+	for _, path := range []string{"/", asset} {
+		for _, method := range []string{http.MethodPost, http.MethodPut, http.MethodDelete} {
+			req, _ := http.NewRequest(method, srv.URL+path, nil)
+			res, err := http.DefaultClient.Do(req)
+			if err != nil {
+				t.Fatal(err)
+			}
+			res.Body.Close()
+			if res.StatusCode != http.StatusMethodNotAllowed {
+				t.Errorf("%s %s: status %d, want 405", method, path, res.StatusCode)
+			}
+		}
+		req, _ := http.NewRequest(http.MethodHead, srv.URL+path, nil)
+		res, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		res.Body.Close()
+		if res.StatusCode != http.StatusOK {
+			t.Errorf("HEAD %s: status %d, want 200", path, res.StatusCode)
+		}
+	}
+}

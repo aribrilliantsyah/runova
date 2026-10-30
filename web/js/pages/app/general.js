@@ -3,7 +3,7 @@ import { h, icon, fmtClock, fmtBytes, fmtMB, fmtNum, fmtTime, pct, bar, setBar, 
 import { act } from "/assets/js/components/act.js";
 import { dialog, confirm } from "/assets/js/components/dialog.js";
 import { uploader } from "/assets/js/components/uploader.js";
-import { openTerminal } from "/assets/js/components/terminal.js";
+import { openTerminal, closeTerminal } from "/assets/js/components/terminal.js";
 import { runtimeImage } from "/assets/js/kinds.js";
 import { toast } from "/assets/js/toast.js";
 import { markRedeploy } from "/assets/js/pages/app/redeploy.js";
@@ -137,27 +137,51 @@ export function renderGeneral(page) {
     pre.replaceChildren(...(logCache.length ? logCache.map((l) => h("span", { class: `ln ${l.level}` }, h("b", {}, fmtClock(l.time)), "  ", l.text)) : [h("span", { class: "empty-log" }, "Belum ada log")]));
   }
 
-  // The last few lines for the card: a plain GET-less tail over a short-lived WebSocket.
+  // The last few lines for the card, from a short-lived log stream. Starts are numbered so a start
+  // that finishes after cleanup or after the deployment changed is dropped instead of leaking a socket.
   let tailFor = null;
-  async function loadTail() {
+  let tailGen = 0;
+  let disposed = false;
+  async function startTail() {
+    const gen = ++tailGen;
+    stopLog?.();
+    stopLog = null;
+    logCache = [];
     tailFor = page.state.deployment?.id ?? null;
-    if (tailFor === null) return () => {};
+    if (tailFor === null) return;
     const { logStream } = await import("/assets/js/components/logstream.js");
+    if (disposed || gen !== tailGen) return;
     const lines = [];
     let timer = null;
+    let queued = false;
     const flush = () => {
+      queued = false;
       logCache = lines.slice(-5);
       const pre = node.querySelector("pre.log");
       if (pre) paintLog(pre);
     };
-    const s = logStream({ id: page.id, tail: 5, onLine: (l) => { lines.push(l); clearTimeout(timer); timer = setTimeout(flush, 80); }, onState: () => {} });
-    return () => { clearTimeout(timer); s.close(); };
+    const s = logStream({
+      id: page.id,
+      tail: 5,
+      onLine: (l) => {
+        lines.push(l);
+        if (lines.length > 5) lines.shift();
+        if (!queued) {
+          queued = true;
+          timer = setTimeout(flush, 80);
+        }
+      },
+      onState: () => {},
+    });
+    stopLog = () => {
+      clearTimeout(timer);
+      s.close();
+    };
   }
 
   const domainsPoll = () => api.get(`/api/apps/${page.id}/domains`).then((r) => { page.domains = r.domains; page.setDomains?.(r.domains); }).catch(() => {});
   render();
   domainsPoll().then(render);
-  const startTail = () => loadTail().then((stop) => { stopLog = stop; });
   startTail();
 
   return {
@@ -165,14 +189,13 @@ export function renderGeneral(page) {
     update() {
       domainsPoll();
       render();
-      if ((page.state.deployment?.id ?? null) !== tailFor) {
-        stopLog?.();
-        logCache = [];
-        startTail();
-      }
+      if ((page.state.deployment?.id ?? null) !== tailFor) startTail();
     },
     cleanup() {
+      disposed = true;
+      tailGen++;
       stopLog?.();
+      closeTerminal();
     },
   };
 }

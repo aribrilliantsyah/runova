@@ -1,6 +1,13 @@
 import { h, icon } from "/assets/js/dom.js";
 import { ApiError } from "/assets/js/api.js";
 
+const openDialogs = new Set();
+
+/** closeAllDialogs() dismisses every open dialog (their promises resolve to undefined). Used when the session ends. */
+export function closeAllDialogs() {
+  for (const close of [...openDialogs]) close(undefined);
+}
+
 /**
  * dialog({title, body, submit, cancel, danger, confirmWord, onSubmit, wide}) opens a modal.
  * body is a Node or an array of Nodes. onSubmit may be async; if it throws, the message is
@@ -33,6 +40,7 @@ export function dialog({ title, body = [], submit = "Simpan", cancel = "Batal", 
     );
     const scrim = h("div", { class: "dlg-scrim" }, form);
     const close = (value) => {
+      openDialogs.delete(close);
       scrim.remove();
       removeEventListener("keydown", onKey, true);
       opener?.focus?.();
@@ -77,6 +85,7 @@ export function dialog({ title, body = [], submit = "Simpan", cancel = "Batal", 
       }
     });
     addEventListener("keydown", onKey, true);
+    openDialogs.add(close);
     document.body.append(scrim);
     (form.querySelector("input,select,textarea") || submitBtn).focus();
   });

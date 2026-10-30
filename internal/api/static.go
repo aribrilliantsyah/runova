@@ -138,6 +138,11 @@ func (p *panel) serveIndex(w http.ResponseWriter, r *http.Request) {
 
 func (p *panel) serveAsset(w http.ResponseWriter, r *http.Request) {
 	securityHeaders(w)
+	if r.Method != http.MethodGet && r.Method != http.MethodHead {
+		w.Header().Set("Allow", "GET, HEAD")
+		writeError(w, http.StatusMethodNotAllowed, "Metode tidak diizinkan")
+		return
+	}
 	a, ok := p.assets[strings.TrimPrefix(r.URL.Path, assetPrefix)]
 	if !ok {
 		http.NotFound(w, r)

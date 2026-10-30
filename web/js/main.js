@@ -5,6 +5,8 @@ import * as session from "/assets/js/session.js";
 import { renderLogin } from "/assets/js/pages/login.js";
 import { buildShell } from "/assets/js/shell.js";
 import { ctx } from "/assets/js/ctx.js";
+import { closeAllDialogs } from "/assets/js/components/dialog.js";
+import { closeTerminal } from "/assets/js/components/terminal.js";
 import { renderApps } from "/assets/js/pages/apps.js";
 import { renderDeploy } from "/assets/js/pages/deploy.js";
 import { renderApp } from "/assets/js/pages/app.js";
@@ -31,6 +33,8 @@ let shell = null;
 let stopRouter = null;
 
 function teardown() {
+  closeAllDialogs();
+  closeTerminal();
   stopRouter?.();
   shell?.destroy();
   stopRouter = shell = ctx.shell = null;

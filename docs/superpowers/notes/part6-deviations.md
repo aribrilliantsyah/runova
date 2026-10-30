@@ -37,3 +37,11 @@ Nama, signature, dan konstanta di blok Interfaces rencana tidak diubah (`web.FS`
 - `web/test/unit.mjs` menjalankan `dom.test.html` (16) dan `api.test.html` (7) di Chromium. Playwright dicari di `~/.npm/_npx` atau `PLAYWRIGHT_DIR`; Chromium penuh dari `~/.cache/ms-playwright` (headless shell tidak terpasang di mesin ini).
 - Temuan uji asap yang diperbaiki: `Element.append(null)` menulis teks "null" (diganti `fill()`); aturan `.tab{display:none}` dari preview menyembunyikan isi tab; unggahan yang sudah dipakai dihapus lagi (404) saat meninggalkan halaman; deploy fake gagal "role belum dibuat" untuk admin hasil installer sampai `ReconcileRoles` dijalankan di jalur fake.
 - Pemeriksaan tombol-ikon tanpa nama dan fokus terlihat di `smoke-layout.mjs` membaca DOM, bukan pembaca layar sungguhan.
+
+## Review akhir
+
+Self-review (satu reviewer segar, tanpa menjalankan kode). Temuan Important diperbaiki dalam satu putaran:
+
+- **Penjaga `RUNOVA_FAKE_BACKENDS` membandingkan direktori sebenarnya** (`os.SameFile`), bukan hanya ejaan path: `RUNOVA_DATA=.` dari `/var/lib/runova` atau symlink ke sana kini ditolak (`TestFakeBackendsRefusedForAliasesOfProductionData`, gagal dulu, lulus sesudahnya).
+- **Terminal, dialog, dan soket log tidak melewati halaman/sesi**: meninggalkan halaman aplikasi menutup laci terminal; logout/sesi berakhir menutup semua dialog dan terminal. Mulai-ulang log di tab Umum diberi nomor generasi sehingga mulai yang selesai sesudah cleanup dibuang. Buffer log tab Umum dibatasi 5 baris. `web/test/smoke-lifecycle.mjs` (gagal dulu pada laci terminal, lulus sesudahnya).
+- **Aset statis hanya melayani GET/HEAD** (`TestStaticOnlyServesGetAndHead`); nama file panjang di unggahan dibungkus (tidak ada scroll horizontal di 360 px).
