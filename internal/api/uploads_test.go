@@ -239,6 +239,41 @@ func TestUploadTooLarge(t *testing.T) {
 	}
 }
 
+func TestUploadPendingLimitPerUser(t *testing.T) {
+	e := newEnv(t)
+	e.setSettings(func(s *store.Settings) { s.MaxPendingUploads = 2 })
+	e.addUser("budi", "budi-password-1", store.RoleUser)
+	c := e.login("admin", adminPassword)
+	var first uploadResult
+	for i := range 2 {
+		r := c.upload("a.bin", []byte("x"))
+		if r.status != 201 {
+			t.Fatalf("upload %d: %d %s", i, r.status, r.body)
+		}
+		if i == 0 {
+			r.into(t, &first)
+		}
+	}
+	before := e.tmpEntries()
+	r := c.upload("a.bin", []byte("x"))
+	if r.status != 409 || r.errMsg(t) != "Hapus unggahan lama dulu (maksimal 2)" {
+		t.Fatalf("third upload: %d %s", r.status, r.body)
+	}
+	if got := e.tmpEntries(); len(got) != len(before) {
+		t.Errorf("rejected upload left files: %v -> %v", before, got)
+	}
+
+	if r := e.login("budi", "budi-password-1").upload("a.bin", []byte("x")); r.status != 201 {
+		t.Errorf("another user is limited by someone else's uploads: %d %s", r.status, r.body)
+	}
+	if r := c.do("DELETE", "/api/uploads/"+first.ID, nil); r.status != 200 {
+		t.Fatalf("delete: %d", r.status)
+	}
+	if r := c.upload("a.bin", []byte("x")); r.status != 201 {
+		t.Errorf("after deleting one: %d %s", r.status, r.body)
+	}
+}
+
 func TestUploadBodyOverLimitWithoutLengthIsRejected(t *testing.T) {
 	e := newEnv(t)
 	e.setSettings(func(s *store.Settings) { s.UploadLimitMB = 1 })

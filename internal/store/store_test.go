@@ -237,7 +237,7 @@ func TestSettingsValidate(t *testing.T) {
 		}
 		return store.Settings{
 			DefaultQuota:  store.Quota{Apps: 3, MemoryMB: 1024, CPUMilli: 1000, Databases: 3, PGConnections: 20},
-			UploadLimitMB: 500, PortMin: 20000, PortMax: 20999, Runtimes: rt,
+			UploadLimitMB: 500, MaxPendingUploads: 5, PortMin: 20000, PortMax: 20999, Runtimes: rt,
 		}
 	}
 	cases := []struct {
@@ -251,6 +251,10 @@ func TestSettingsValidate(t *testing.T) {
 		{"max>65535", func(s *store.Settings) { s.PortMax = 65536 }, false},
 		{"min==max", func(s *store.Settings) { s.PortMin, s.PortMax = 20000, 20000 }, true},
 		{"upload 0", func(s *store.Settings) { s.UploadLimitMB = 0 }, false},
+		{"pending 0", func(s *store.Settings) { s.MaxPendingUploads = 0 }, false},
+		{"pending 51", func(s *store.Settings) { s.MaxPendingUploads = 51 }, false},
+		{"pending 1", func(s *store.Settings) { s.MaxPendingUploads = 1 }, true},
+		{"pending 50", func(s *store.Settings) { s.MaxPendingUploads = 50 }, true},
 		{"unknown runtime", func(s *store.Settings) { s.Runtimes["java7"] = true }, false},
 		{"all runtimes off", func(s *store.Settings) { s.Runtimes = map[string]bool{} }, true},
 		{"ip abc", func(s *store.Settings) { s.PublicIP = "abc" }, false},

@@ -53,6 +53,15 @@ func (s *server) upload(w http.ResponseWriter, r *http.Request) {
 	tooLarge := func() {
 		writeError(w, http.StatusRequestEntityTooLarge, fmt.Sprintf("File melebihi batas %d MB", settings.UploadLimitMB))
 	}
+	pending, err := s.store.CountUploads(r.Context(), user.ID)
+	if err != nil {
+		serverError(w, r, err)
+		return
+	}
+	if pending >= settings.MaxPendingUploads {
+		writeError(w, http.StatusConflict, fmt.Sprintf("Hapus unggahan lama dulu (maksimal %d)", settings.MaxPendingUploads))
+		return
+	}
 
 	if ct, _, _ := mime.ParseMediaType(r.Header.Get("Content-Type")); ct != "multipart/form-data" {
 		writeError(w, http.StatusUnsupportedMediaType, "Unggahan harus berupa multipart/form-data")

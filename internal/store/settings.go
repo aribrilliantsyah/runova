@@ -20,12 +20,14 @@ var RuntimeIDs = []string{"java8", "java11", "java17", "java21", "java25", "stat
 const MaxPGAllowedNets = 20
 
 type Settings struct {
-	DefaultQuota  Quota           `json:"default_quota"`
-	UploadLimitMB int             `json:"upload_limit_mb"`
-	PortMin       int             `json:"port_min"`
-	PortMax       int             `json:"port_max"`
-	Runtimes      map[string]bool `json:"runtimes"`
-	PublicIP      string          `json:"public_ip"`
+	DefaultQuota  Quota `json:"default_quota"`
+	UploadLimitMB int   `json:"upload_limit_mb"`
+	// MaxPendingUploads caps the uploads a user may have waiting to be deployed.
+	MaxPendingUploads int             `json:"max_pending_uploads"`
+	PortMin           int             `json:"port_min"`
+	PortMax           int             `json:"port_max"`
+	Runtimes          map[string]bool `json:"runtimes"`
+	PublicIP          string          `json:"public_ip"`
 	// PanelDomain and PanelPort make the panel reachable through Caddy; both
 	// empty means only at RUNOVA_LISTEN. A port serves it over HTTPS on that IP port.
 	PanelDomain string `json:"panel_domain"`
@@ -40,12 +42,13 @@ func defaultSettings() Settings {
 		rt[id] = true
 	}
 	return Settings{
-		DefaultQuota:  Quota{Apps: 3, MemoryMB: 1024, CPUMilli: 1000, Databases: 3, PGConnections: 20},
-		UploadLimitMB: 500,
-		PortMin:       20000,
-		PortMax:       20999,
-		Runtimes:      rt,
-		PGAllowedNets: []string{},
+		DefaultQuota:      Quota{Apps: 3, MemoryMB: 1024, CPUMilli: 1000, Databases: 3, PGConnections: 20},
+		UploadLimitMB:     500,
+		MaxPendingUploads: 5,
+		PortMin:           20000,
+		PortMax:           20999,
+		Runtimes:          rt,
+		PGAllowedNets:     []string{},
 	}
 }
 
@@ -55,6 +58,9 @@ func (s Settings) Validate() error {
 	}
 	if s.UploadLimitMB < 1 || s.UploadLimitMB > 100000 {
 		return errors.New("Batas unggahan harus antara 1 dan 100000 MB")
+	}
+	if s.MaxPendingUploads < 1 || s.MaxPendingUploads > 50 {
+		return errors.New("Batas unggahan tertunda harus antara 1 dan 50")
 	}
 	if s.PortMin < 1024 || s.PortMax > 65535 || s.PortMin > s.PortMax {
 		return errors.New("Rentang port harus di dalam 1024–65535 dan awal tidak boleh melebihi akhir")
