@@ -32,3 +32,19 @@ func TestLoadOverrides(t *testing.T) {
 		t.Errorf("DBPath = %q", got)
 	}
 }
+
+func TestCaddyAdmin(t *testing.T) {
+	c := config.Load(func(string) string { return "" })
+	if c.CaddyAdmin != "http://127.0.0.1:2019" || c.CaddyAdminListen() != "127.0.0.1:2019" {
+		t.Errorf("defaults: %q, %q", c.CaddyAdmin, c.CaddyAdminListen())
+	}
+	c = config.Load(func(k string) string {
+		if k == "RUNOVA_CADDY_ADMIN" {
+			return "http://127.0.0.1:2999/"
+		}
+		return ""
+	})
+	if c.CaddyAdmin != "http://127.0.0.1:2999/" || c.CaddyAdminListen() != "127.0.0.1:2999" {
+		t.Errorf("override: %q, %q", c.CaddyAdmin, c.CaddyAdminListen())
+	}
+}

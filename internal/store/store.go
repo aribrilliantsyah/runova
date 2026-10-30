@@ -128,6 +128,16 @@ CREATE TABLE IF NOT EXISTS notifications(
 	read INTEGER NOT NULL DEFAULT 0
 );
 CREATE INDEX IF NOT EXISTS notifications_user ON notifications(user_id, at);
+CREATE TABLE IF NOT EXISTS domains(
+	id INTEGER PRIMARY KEY,
+	app_id INTEGER NOT NULL REFERENCES apps ON DELETE CASCADE,
+	host TEXT NOT NULL UNIQUE,
+	status TEXT NOT NULL,
+	detail TEXT NOT NULL DEFAULT '',
+	checked_at INTEGER NOT NULL DEFAULT 0,
+	created_at INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS domains_app ON domains(app_id);
 `
 
 type Store struct{ db *sql.DB }

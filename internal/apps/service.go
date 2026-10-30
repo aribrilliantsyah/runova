@@ -54,6 +54,14 @@ type Service struct {
 	HealthInterval time.Duration // 0 means 500 ms
 	// ReconnectDelay is the pause before Monitor resubscribes to Docker events; 0 means 2 s.
 	ReconnectDelay time.Duration
+	// DrainDelay is how long a zero-downtime deploy keeps the old container after Caddy switched; 0 means 5 s.
+	DrainDelay time.Duration
+	// Caddy is told to reload after anything that changes what is served; nil means no Caddy.
+	Caddy interface {
+		Apply(ctx context.Context) error
+	}
+	// Probe checks a domain's HTTPS certificate; nil means caddy.ProbeTLS.
+	Probe func(ctx context.Context, host string) (ok bool, detail string)
 
 	locks     sync.Map   // app ID → *sync.Mutex held while the app is being changed
 	createMu  sync.Mutex // serializes quota checks with the inserts they guard
@@ -274,7 +282,7 @@ func (s *Service) Create(ctx context.Context, user store.User, in CreateInput) (
 	app := store.App{
 		UserID: user.ID, Name: in.Name, Kind: rep.Kind, JVMOpts: in.JVMOpts,
 		InternalPort: in.InternalPort, IPAccess: in.IPAccess, MemoryMB: in.MemoryMB, CPUMilli: in.CPUMilli,
-		Status: store.AppStopped, DeployMode: store.DeployModeStopStart, CreatedAt: s.now().UnixMilli(),
+		Status: store.AppStopped, DeployMode: store.DeployModeZero, CreatedAt: s.now().UnixMilli(),
 	}
 	if app.InternalPort == 0 {
 		app.InternalPort = rep.Port
@@ -439,7 +447,7 @@ type SettingsInput struct {
 }
 
 // deployModes lists the modes this build can run.
-var deployModes = []string{store.DeployModeStopStart}
+var deployModes = []string{store.DeployModeStopStart, store.DeployModeZero}
 
 // UpdateSettings validates and stores the change. redeploy reports that a
 // running app only picks the change up with a new deployment. Raising memory
@@ -522,8 +530,17 @@ func (s *Service) UpdateSettings(ctx context.Context, user store.User, appID int
 		patch.MemoryMB, patch.CPUMilli = &mem, &cpu
 		redeploy = redeploy || mem != app.MemoryMB || cpu != app.CPUMilli
 	}
-	app, err = s.Store.UpdateApp(ctx, appID, patch)
-	return app, redeploy, err
+	updated, err := s.Store.UpdateApp(ctx, appID, patch)
+	if err != nil {
+		return store.App{}, false, err
+	}
+	if in.IPAccess != nil && *in.IPAccess != app.IPAccess {
+		if err := s.ApplyCaddy(ctx); err != nil {
+			s.revertApp(ctx, app)
+			return store.App{}, false, err
+		}
+	}
+	return updated, redeploy, nil
 }
 
 // minJava is the minimum Java version of the app's newest artifact.

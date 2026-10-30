@@ -28,7 +28,14 @@ func (s *server) putSettings(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	if err := s.store.SetSettings(r.Context(), v); err != nil {
+	panelChanged := false
+	if s.apps != nil {
+		var err error
+		if panelChanged, err = s.apps.SaveSettings(r.Context(), v); err != nil {
+			appError(w, r, err)
+			return
+		}
+	} else if err := s.store.SetSettings(r.Context(), v); err != nil {
 		serverError(w, r, err)
 		return
 	}
@@ -37,6 +44,24 @@ func (s *server) putSettings(w http.ResponseWriter, r *http.Request) {
 		serverError(w, r, err)
 		return
 	}
-	s.record(r, auth.FromContext(r.Context()), store.ActSettingsUpdate, "", "")
+	actor := auth.FromContext(r.Context())
+	s.record(r, actor, store.ActSettingsUpdate, "", "")
+	if panelChanged {
+		s.record(r, actor, store.ActPanelAddress, "", panelAddress(saved))
+	}
 	writeJSON(w, http.StatusOK, saved)
+}
+
+// panelAddress describes where the panel is reachable, for the activity log.
+func panelAddress(v store.Settings) string {
+	switch {
+	case v.PanelDomain != "" && v.PanelPort != 0:
+		return v.PanelDomain + " + :" + itoa(v.PanelPort)
+	case v.PanelDomain != "":
+		return v.PanelDomain
+	case v.PanelPort != 0:
+		return ":" + itoa(v.PanelPort)
+	default:
+		return "-"
+	}
 }
