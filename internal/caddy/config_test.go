@@ -77,7 +77,7 @@ func TestBuildSitesAndIP(t *testing.T) {
 	srv := servers(t, cfg)
 
 	https := srv["runova-https"].(obj)
-	if got := strs(t, https["listen"]); !slices.Equal(got, []string{":80", ":443"}) {
+	if got := strs(t, https["listen"]); !slices.Equal(got, []string{":443"}) {
 		t.Errorf("runova-https listen = %v", got)
 	}
 	if _, set := https["automatic_https"]; set {

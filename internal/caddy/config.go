@@ -129,8 +129,11 @@ func Build(s State) ([]byte, error) {
 	for i, r := range hostRoutes {
 		httpsRoutes[i] = proxyRoute(r.id, r.upstream, r.host)
 	}
+	// Listening on :443 only is deliberate: Caddy adds the :80 server that
+	// redirects HTTP to HTTPS (and answers ACME challenges) by itself. With
+	// :80 listed here the server serves plain HTTP and no redirect happens.
 	servers := obj{
-		HTTPSServer: obj{"listen": []string{":80", ":443"}, "routes": httpsRoutes},
+		HTTPSServer: obj{"listen": []string{":443"}, "routes": httpsRoutes},
 	}
 
 	listeners := slices.Clone(s.IPListeners)
