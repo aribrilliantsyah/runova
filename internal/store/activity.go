@@ -16,6 +16,17 @@ const (
 	ActPasswordChange = "password.change"
 	ActSettingsUpdate = "settings.update"
 	ActUpload         = "upload"
+	ActAppCreate      = "app.create"
+	ActAppUpdate      = "app.update"
+	ActAppDelete      = "app.delete"
+	ActDeploy         = "deploy"
+	ActRollback       = "rollback"
+	ActRestart        = "restart"
+	ActStop           = "stop"
+	ActStart          = "start"
+	ActTerminal       = "terminal.open"
+	ActEnvUpdate      = "env.update"
+	ActEnvReveal      = "env.reveal"
 )
 
 type Activity struct {

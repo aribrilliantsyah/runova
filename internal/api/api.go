@@ -14,6 +14,7 @@ import (
 	"sync"
 	"time"
 
+	"runova/internal/apps"
 	"runova/internal/auth"
 	"runova/internal/store"
 )
@@ -22,12 +23,21 @@ type Config struct {
 	Store   *store.Store
 	Now     func() time.Time
 	DataDir string
+	// Apps serves the application endpoints; without it they are not registered.
+	Apps *apps.Service
+	// Context bounds background work started by requests (deploys); nil means context.Background().
+	Context context.Context
+	// TerminalIdle closes a terminal WebSocket after this long without traffic; 0 means 30 minutes.
+	TerminalIdle time.Duration
 }
 
 type server struct {
 	store    *store.Store
 	now      func() time.Time
 	dataDir  string
+	apps     *apps.Service
+	ctx      context.Context
+	idle     time.Duration
 	sessions *auth.Sessions
 	throttle *auth.Throttle
 	loginMu  sync.Mutex // serializes the login throttle's check-and-count
@@ -40,8 +50,17 @@ func New(cfg Config) http.Handler {
 		store:    cfg.Store,
 		now:      cfg.Now,
 		dataDir:  cfg.DataDir,
+		apps:     cfg.Apps,
+		ctx:      cfg.Context,
+		idle:     cfg.TerminalIdle,
 		sessions: &auth.Sessions{Store: cfg.Store, Now: cfg.Now},
 		throttle: &auth.Throttle{Store: cfg.Store, Now: cfg.Now},
+	}
+	if s.ctx == nil {
+		s.ctx = context.Background()
+	}
+	if s.idle <= 0 {
+		s.idle = defaultTerminalIdle
 	}
 	user := func(h http.HandlerFunc) http.HandlerFunc { return s.sessions.Require(false, writeError, h) }
 	admin := func(h http.HandlerFunc) http.HandlerFunc { return s.sessions.Require(true, writeError, h) }
@@ -65,6 +84,12 @@ func New(cfg Config) http.Handler {
 
 	mux.HandleFunc("POST /api/uploads", user(s.upload))
 	mux.HandleFunc("DELETE /api/uploads/{id}", user(s.deleteUpload))
+
+	mux.HandleFunc("GET /api/notifications", user(s.notifications))
+	mux.HandleFunc("POST /api/notifications/read", user(s.readNotifications))
+	if s.apps != nil {
+		s.appRoutes(mux, user)
+	}
 
 	mux.HandleFunc("/api/", func(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusNotFound, "Tidak ditemukan")
