@@ -2,6 +2,7 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"log/slog"
@@ -32,6 +33,7 @@ type server struct {
 
 // New builds the API handler; every route lives under /api.
 func New(cfg Config) http.Handler {
+	dummyHash() // pay the one-time bcrypt cost now, not on the first unknown-user login
 	s := &server{
 		store:    cfg.Store,
 		now:      cfg.Now,
@@ -146,7 +148,8 @@ func (s *server) record(r *http.Request, actor store.User, action, target, detai
 	if actor.ID != 0 {
 		a.ActorID = &actor.ID
 	}
-	if err := s.store.Log(r.Context(), a); err != nil {
+	// The action already happened; log it even if the client has hung up.
+	if err := s.store.Log(context.WithoutCancel(r.Context()), a); err != nil {
 		slog.Error("record activity", "action", action, "err", err)
 	}
 }
