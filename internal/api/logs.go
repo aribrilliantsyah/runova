@@ -27,6 +27,31 @@ func acceptWebSocket(w http.ResponseWriter, r *http.Request) (*websocket.Conn, e
 	return websocket.Accept(w, r, &websocket.AcceptOptions{OriginPatterns: []string{r.Host}})
 }
 
+// sessionRecheck is how often an open WebSocket re-validates the session that
+// opened it.
+var sessionRecheck = 30 * time.Second
+
+// watchSession calls gone once the request's session no longer belongs to the
+// user who opened the stream: logout, password change and user deletion all
+// delete the session (spec §3), and a stream opened before must not outlive it.
+// It returns when ctx ends.
+func (s *server) watchSession(ctx context.Context, r *http.Request, owner int64, gone func()) {
+	t := time.NewTicker(sessionRecheck)
+	defer t.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-t.C:
+			u, ok, err := s.sessions.User(r)
+			if err == nil && (!ok || u.ID != owner) {
+				gone()
+				return
+			}
+		}
+	}
+}
+
 // logs streams the app's container log as JSON docker.LogLine messages, then
 // follows it until the client leaves.
 func (s *server) logs(w http.ResponseWriter, r *http.Request) {
@@ -63,6 +88,10 @@ func (s *server) logs(w http.ResponseWriter, r *http.Request) {
 
 	// Reading is what lets the library notice the client closing.
 	closed := conn.CloseRead(ctx)
+	go s.watchSession(ctx, r, u.ID, func() {
+		conn.Close(websocket.StatusPolicyViolation, "Sesi berakhir")
+		cancel()
+	})
 	go func() {
 		<-closed.Done()
 		cancel()

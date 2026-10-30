@@ -59,6 +59,7 @@ func (s *server) terminal(w http.ResponseWriter, r *http.Request) {
 
 	ctx, cancel := context.WithCancel(r.Context())
 	defer cancel()
+	go s.watchSession(ctx, r, u.ID, func() { conn.Close(websocket.StatusPolicyViolation, "Sesi berakhir") })
 	var last atomic.Int64
 	last.Store(time.Now().UnixNano())
 	touch := func() { last.Store(time.Now().UnixNano()) }

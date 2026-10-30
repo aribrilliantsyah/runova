@@ -549,3 +549,36 @@ func TestAppEndpointsNeedLogin(t *testing.T) {
 		t.Errorf("anonymous websocket: err=%v resp=%v, want 401 before upgrade", err, resp)
 	}
 }
+
+// Logging out (or losing the account) kills the user's sessions; a log or
+// terminal stream opened earlier must end with them.
+func TestWebSocketsEndWithSession(t *testing.T) {
+	defer api.SetSessionRecheck(20 * time.Millisecond)()
+	e := newAppEnv(t, 0)
+	e.addUser("budi", "budi-password-1", store.RoleUser)
+	c := e.login("budi", "budi-password-1")
+	id := c.createJarApp("javaapp")
+	c.waitStatus(id, "running")
+
+	for _, path := range []string{"/logs", "/terminal"} {
+		conn, _, err := c.dialWS(appPath(id, path))
+		if err != nil {
+			t.Fatalf("%s: %v", path, err)
+		}
+		defer conn.CloseNow()
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		if r := c.do("POST", "/api/logout", nil); r.status != 200 {
+			t.Fatalf("logout: %d", r.status)
+		}
+		for {
+			if _, _, err := conn.Read(ctx); err != nil {
+				if got := websocket.CloseStatus(err); got != websocket.StatusPolicyViolation {
+					t.Errorf("%s: closed with %v (%v), want policy violation after logout", path, got, err)
+				}
+				break
+			}
+		}
+		c = e.login("budi", "budi-password-1")
+	}
+}
