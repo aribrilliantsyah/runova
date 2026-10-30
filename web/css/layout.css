@@ -1,0 +1,83 @@
+#root{height:100%}
+.app{position:relative;display:grid;grid-template-columns:232px minmax(0,1fr);height:100%;background:var(--canvas);color:var(--text)}
+.app.collapsed{grid-template-columns:0 minmax(0,1fr)}
+.app.collapsed .side{display:none}
+
+/* Sidebar */
+.side{display:flex;flex-direction:column;padding:10px;min-height:0;overflow-y:auto}
+.ws{display:flex;align-items:center;gap:10px;padding:6px 8px;border-radius:var(--r)}
+.logo{width:26px;height:26px;border-radius:7px;background:var(--text);display:grid;place-items:center;flex:none;overflow:hidden}
+.rmark{width:100%;height:100%;display:block}
+.rmark .rb{fill:var(--panel)}
+.rmark .rf{fill:var(--accent)}
+.ws b{display:block;font-weight:600;font-size:13.5px;line-height:1.15}
+.ws span.sub{font-size:11.5px;color:var(--muted)}
+.grp{margin-top:16px}
+.grp h6{margin:0 0 4px 10px;font:500 11.5px var(--sans);color:var(--faint)}
+.nav{display:grid;gap:1px}
+.nav a{display:flex;align-items:center;gap:10px;height:30px;padding:0 10px;border-radius:7px;color:var(--muted);text-decoration:none;font-weight:500}
+.nav a:hover{background:var(--hover);color:var(--text)}
+.nav a[aria-current=page]{background:var(--panel);color:var(--text);box-shadow:0 0 0 1px var(--line)}
+.nav .n{margin-left:auto;font:500 11px var(--mono);color:var(--faint)}
+.side-foot{margin-top:auto;display:grid;gap:8px;padding-top:16px}
+.usage{border:1px solid var(--line);border-radius:var(--r);background:var(--panel);padding:10px}
+.usage .row1{display:flex;justify-content:space-between;gap:8px;font-size:12px;margin-bottom:8px}
+.usage .row1 b{font-weight:600}
+.mini{display:grid;grid-template-columns:auto 1fr auto;gap:6px 8px;align-items:center;font-size:11.5px;color:var(--muted)}
+.mini .lucide{width:13px;height:13px}
+.acct{all:unset;box-sizing:border-box;display:flex;align-items:center;gap:10px;padding:6px 8px;border-radius:var(--r);cursor:pointer;width:100%}
+.acct:hover{background:var(--hover)}
+.acct:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.acct > div{min-width:0}
+.acct b{display:block;font-weight:500;font-size:12.5px;line-height:1.2;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.acct span.sub{display:block;font-size:11.5px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.acct > .lucide{margin-left:auto;color:var(--faint)}
+.av{width:28px;height:28px;border-radius:50%;background:var(--accent-soft);color:var(--accent);display:grid;place-items:center;font-weight:600;font-size:11.5px;flex:none;text-transform:uppercase}
+
+/* Main */
+.main{display:flex;flex-direction:column;min-width:0;min-height:0;padding:8px 8px 8px 0}
+.top{height:44px;display:flex;align-items:center;gap:8px;padding:0 6px 0 4px;flex:none}
+.ibtn{all:unset;box-sizing:border-box;display:grid;place-items:center;width:28px;height:28px;border-radius:7px;color:var(--muted);cursor:pointer;position:relative;flex:none}
+.ibtn:hover{background:var(--hover);color:var(--text)}
+.ibtn:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.ibtn:disabled{opacity:.45;cursor:not-allowed}
+.ibtn .badge{position:absolute;top:1px;right:0;min-width:15px;height:15px;padding:0 4px;border-radius:8px;background:var(--accent);color:var(--on-accent);font:600 10px/15px var(--sans);text-align:center}
+.vsep{width:1px;height:18px;background:var(--line-2);margin:0 4px}
+.crumb{display:flex;align-items:center;gap:2px;min-width:0}
+.crumb a{display:flex;align-items:center;gap:6px;height:28px;padding:0 8px;border-radius:7px;font-weight:500;white-space:nowrap;text-decoration:none;overflow:hidden;text-overflow:ellipsis}
+.crumb a:hover{background:var(--hover)}
+.crumb .lucide{color:var(--faint)}
+.crumb .sl{color:var(--line-2);margin:0 2px}
+.crumb img{width:16px;height:16px}
+.top .right{margin-left:auto;display:flex;align-items:center;gap:6px}
+.sheet{flex:1;min-height:0;background:var(--panel);border:1px solid var(--line);border-radius:var(--r-lg);overflow:auto}
+.sheet:focus{outline:none}
+/* A page fills the sheet (the wizard's summary column runs to the bottom) and scrolls when it is taller. */
+.sheet{display:flex;flex-direction:column}
+.sheet > *{flex:1 0 auto;min-width:0}
+
+/* Page head */
+.ph{display:flex;align-items:center;gap:14px;padding:18px 22px 16px;border-bottom:1px solid var(--line)}
+.ph h1{margin:0;font-size:17px;font-weight:600;letter-spacing:-.015em;line-height:1.25}
+.ph p{margin:2px 0 0;color:var(--muted);font-size:12.5px}
+.ph .acts{margin-left:auto;display:flex;gap:6px;align-items:center}
+.pb{padding:16px 22px 24px}
+.empty{display:grid;justify-items:center;text-align:center;gap:8px;padding:56px 20px;color:var(--muted)}
+.empty .ic{width:44px;height:44px;border-radius:11px;background:var(--raised);border:1px solid var(--line);display:grid;place-items:center}
+.empty .ic .lucide{width:20px;height:20px}
+.empty b{color:var(--text);font-weight:600;font-size:14px}
+.loading{padding:40px;text-align:center;color:var(--faint)}
+
+/* Mobile-only parts */
+.mlogo,.mback,.msearch,.bnav,.mbar,.mstep,.msheet{display:none}
+
+/* Login */
+.login{min-height:100%;display:grid;place-items:center;padding:24px;background:var(--canvas)}
+.login .card{width:100%;max-width:360px;padding:26px 24px 22px}
+.login .brand{display:flex;flex-direction:column;align-items:center;gap:10px;margin-bottom:20px}
+.login .brand .logo{width:48px;height:48px;border-radius:12px}
+.login h1{margin:0;font-size:18px;font-weight:600;letter-spacing:-.015em}
+.login p.lead{margin:0;color:var(--muted)}
+.login .fld{margin-bottom:12px}
+.login .btn{width:100%;justify-content:center;height:36px}
+.login .err{margin:0 0 12px}

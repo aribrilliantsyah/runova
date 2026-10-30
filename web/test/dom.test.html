@@ -1,0 +1,123 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>dom.js</title>
+<body>
+<script type="module">
+import { test, assert, eq, run } from "/test/harness.js";
+import { h, icon, fmtBytes, fmtMB, fmtCPU, fmtTime, pct } from "/assets/js/dom.js";
+import { parseDotenv, suggestName, appNameError, envError, uploadError, memoryChoices } from "/assets/js/validate.js";
+import { splitHost } from "/assets/js/components/guide.js";
+
+test("h escapes text", () => {
+  const el = h("div", {}, "<img src=x onerror=alert(1)>");
+  assert(el.querySelector("img") === null, "an <img> element was created from text");
+  eq(el.textContent, "<img src=x onerror=alert(1)>");
+});
+
+test("h escapes text in nested arrays and numbers", () => {
+  const el = h("ul", {}, [["<b>x</b>", 3]]);
+  assert(el.querySelector("b") === null);
+  eq(el.textContent, "<b>x</b>3");
+});
+
+test("h sets attributes not handlers", () => {
+  const el = h("a", { href: "#x", onclick: "alert(1)" });
+  assert(el.onclick === null, "string handler became a property");
+  assert(!el.hasAttribute("onclick"), "inline handler attribute was set");
+  eq(el.getAttribute("href"), "#x");
+});
+
+test("h attaches function handlers", () => {
+  let n = 0;
+  const el = h("button", { onclick: () => n++ });
+  el.click();
+  eq(n, 1);
+});
+
+test("h refuses script URLs", () => {
+  assert(!h("a", { href: "javascript:alert(1)" }).hasAttribute("href"));
+  assert(!h("a", { href: " JaVaScRiPt:alert(1)" }).hasAttribute("href"));
+  assert(h("a", { href: "#/apps" }).hasAttribute("href"));
+});
+
+test("h never writes a style attribute from a string", () => {
+  const el = h("div", { style: "background:url(//evil)" });
+  assert(!el.hasAttribute("style"));
+  const ok = h("div", { style: { "max-width": "10px" } });
+  eq(ok.style.maxWidth, "10px");
+});
+
+test("h boolean and null attributes", () => {
+  const el = h("input", { disabled: true, hidden: false, title: null });
+  assert(el.disabled);
+  assert(!el.hidden && !el.hasAttribute("title"));
+});
+
+test("h select value applies after options", () => {
+  const el = h("select", { value: "b" }, h("option", { value: "a" }, "A"), h("option", { value: "b" }, "B"));
+  eq(el.value, "b");
+});
+
+test("icon points at the sprite", () => {
+  const svg = icon("boxes");
+  eq(svg.querySelector("use").getAttribute("href"), "/assets/vendor/icons.svg#boxes");
+  eq(svg.getAttribute("aria-hidden"), "true");
+});
+
+test("format helpers use Indonesian decimal comma", () => {
+  eq(fmtBytes(44668928), "42,6 MB");
+  eq(fmtMB(512), "512 MB");
+  eq(fmtMB(1536), "1,5 GB");
+  eq(fmtCPU(500), "0,5 core");
+  eq(pct(1, 4), 25);
+  eq(pct(5, 0), 0);
+});
+
+test("fmtTime is relative then absolute", () => {
+  const now = Date.UTC(2026, 9, 30, 12, 0, 0);
+  eq(fmtTime(now - 5000, now), "baru saja");
+  assert(/12 menit lalu/.test(fmtTime(now - 12 * 60000, now)), fmtTime(now - 12 * 60000, now));
+  assert(/jam lalu/.test(fmtTime(now - 3 * 3600000, now)));
+  assert(/kemarin/.test(fmtTime(now - 30 * 3600000, now)), fmtTime(now - 30 * 3600000, now));
+});
+
+test("parseDotenv", () => {
+  const got = parseDotenv('# c\nDB_USER=budi\nexport JWT_SECRET="a b#c"\nPORT=8080 # port\n\nbad line\nAPI_KEY=\'x\'');
+  eq(got.map((e) => e.name), ["DB_USER", "JWT_SECRET", "PORT", "API_KEY"]);
+  eq(got[1].value, "a b#c");
+  eq(got[2].value, "8080");
+  eq(got.map((e) => e.secret), [false, true, false, true]);
+});
+
+test("validation mirrors the server", () => {
+  assert(appNameError("billing-api") === "");
+  assert(appNameError("Bad_Name") !== "");
+  assert(appNameError("ab") !== "");
+  assert(appNameError("x-") !== "");
+  eq(envError([{ name: "JWT_SECRET", value: "x" }, { name: "JWT_SECRET", value: "y" }]), "Variabel JWT_SECRET muncul lebih dari sekali");
+  assert(envError([{ name: "lower", value: "x" }]).includes("tidak valid"));
+  eq(uploadError({ size: 201 * 1024 * 1024 }, 200), "File melebihi batas 200 MB");
+  eq(uploadError({ size: 1 }, 200), "");
+});
+
+test("suggestName", () => {
+  eq(suggestName("billing-api-2.4.1.jar"), "billing-api");
+  eq(suggestName("hello.tar.gz"), "hello");
+  eq(suggestName("x.jar"), "");
+});
+
+test("memoryChoices stay within what is left", () => {
+  const c = memoryChoices(640);
+  assert(c.every((v) => v <= 640 && v % 64 === 0), JSON.stringify(c));
+  assert(c.includes(640));
+  eq(memoryChoices(100), []);
+});
+
+test("splitHost handles second-level suffixes", () => {
+  eq(splitHost("billing.perusahaan.co.id"), { sub: "billing", dom: "perusahaan.co.id" });
+  eq(splitHost("a.b.example.com"), { sub: "a.b", dom: "example.com" });
+  eq(splitHost("example.com"), { sub: "@", dom: "example.com" });
+});
+
+run();
+</script>

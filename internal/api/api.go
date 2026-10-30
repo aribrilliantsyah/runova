@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"io/fs"
 	"log/slog"
 	"mime"
 	"net/http"
@@ -35,6 +36,10 @@ type Config struct {
 	// Deploys, when set, tracks the background deploys the API starts so the
 	// caller can wait for them at shutdown.
 	Deploys *sync.WaitGroup
+	// Static is the web panel (index.html, css/, js/, ...); without it only the API is served.
+	Static fs.FS
+	// Health probes Docker, Caddy and PostgreSQL for the Server page; a nil probe reports "not configured".
+	Health Health
 }
 
 type server struct {
@@ -50,6 +55,7 @@ type server struct {
 	dbs      *dbs.Service
 	deploys  *sync.WaitGroup
 	stats    statsCache
+	health   Health
 }
 
 // New builds the API handler; every route lives under /api.
@@ -64,6 +70,7 @@ func New(cfg Config) http.Handler {
 		deploys:  cfg.Deploys,
 		ctx:      cfg.Context,
 		idle:     cfg.TerminalIdle,
+		health:   cfg.Health,
 		sessions: &auth.Sessions{Store: cfg.Store, Now: cfg.Now},
 		throttle: &auth.Throttle{Store: cfg.Store, Now: cfg.Now},
 	}
@@ -93,6 +100,9 @@ func New(cfg Config) http.Handler {
 
 	mux.HandleFunc("GET /api/settings", admin(s.getSettings))
 	mux.HandleFunc("PUT /api/settings", admin(s.putSettings))
+	mux.HandleFunc("GET /api/server", admin(s.serverStatus))
+	mux.HandleFunc("GET /api/info", user(s.info))
+	mux.HandleFunc("GET /api/usage", admin(s.usage))
 
 	mux.HandleFunc("GET /api/activity", user(s.activity))
 
@@ -111,6 +121,9 @@ func New(cfg Config) http.Handler {
 	mux.HandleFunc("/api/", func(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusNotFound, "Tidak ditemukan")
 	})
+	if cfg.Static != nil {
+		newPanel(cfg.Static).routes(mux)
+	}
 	return sameOrigin(mux)
 }
 

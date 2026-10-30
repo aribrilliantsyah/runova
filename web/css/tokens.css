@@ -1,0 +1,19 @@
+/* Runova design tokens. Warm neutrals and one clay accent; no gradients. */
+:root{
+  --canvas:#F3F1EA; --panel:#FFFFFF; --raised:#FBFAF7; --hover:#F1EEE6; --line:#E7E3D9; --line-2:#D9D4C7;
+  --text:#1D1C1A; --muted:#6B6860; --faint:#8E8A80;
+  --accent:#C96442; --accent-h:#B5583A; --on-accent:#fff; --accent-soft:#F7EAE3;
+  --ok:#2F7D4F; --ok-bg:#E6F2EA; --warn:#97600F; --warn-bg:#F7EDDB; --err:#B53A2E; --err-bg:#F8E4E0; --info:#3D5A80; --info-bg:#E6ECF4;
+  --sans:"IBM Plex Sans",system-ui,sans-serif; --mono:"IBM Plex Mono",ui-monospace,monospace;
+  --r:8px; --r-lg:12px;
+  --scrim:rgba(20,20,19,.45);
+  color-scheme:light;
+}
+:root[data-theme=dark]{
+  --canvas:#141413; --panel:#1C1B1A; --raised:#21201E; --hover:#262523; --line:#2E2D2A; --line-2:#3A3935;
+  --text:#EDEBE4; --muted:#A3A097; --faint:#8A8780;
+  --accent:#D97757; --accent-h:#E38A6C; --on-accent:#141413; --accent-soft:#33241D;
+  --ok:#5DB07F; --ok-bg:#1A2B21; --warn:#D7A04E; --warn-bg:#30261A; --err:#E5806F; --err-bg:#33201C; --info:#8FAAD0; --info-bg:#1D2531;
+  --scrim:rgba(0,0,0,.6);
+  color-scheme:dark;
+}

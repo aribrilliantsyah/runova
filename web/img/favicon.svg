@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256"><title>Runova</title><g transform="translate(-49.28 -43.74) scale(1.385)">
+  <title id="t">Runova</title>
+  <!-- Rocket launching at 45deg; the window is two server-rack slots. Body/fins in ink, flame in clay accent. -->
+  <g transform="translate(140.25 111.75) rotate(45) scale(1.02) translate(-128 -124)">
+    <path fill="#1D1C1A" fill-rule="evenodd" d="M128 20 C152 36 160 60 160 92 V176 H96 V92 C96 60 104 36 128 20 Z
+      M115 96 H141 A7 7 0 0 1 141 110 H115 A7 7 0 0 1 115 96 Z
+      M115 124 H141 A7 7 0 0 1 141 138 H115 A7 7 0 0 1 115 124 Z"/>
+    <path fill="#1D1C1A" d="M96 136 L64 168 V200 L96 184 Z"/>
+    <path fill="#1D1C1A" d="M160 136 L192 168 V200 L160 184 Z"/>
+    <path fill="#C96442" d="M108 188 H148 L128 228 Z"/>
+  </g>
+</g></svg>

@@ -18,9 +18,10 @@ import (
 	"runova/internal/apps"
 	"runova/internal/caddy"
 	"runova/internal/config"
-	"runova/internal/docker"
+	"runova/internal/dbs"
 	"runova/internal/secret"
 	"runova/internal/store"
+	"runova/web"
 )
 
 const usage = `Penggunaan: runova <perintah>
@@ -67,6 +68,10 @@ func serve(cfg config.Config, stderr io.Writer) int {
 	log := slog.New(slog.NewTextHandler(stderr, nil))
 	slog.SetDefault(log)
 
+	if err := checkFakeBackends(cfg); err != nil {
+		fmt.Fprintln(stderr, err)
+		return 1
+	}
 	box, err := secret.LoadKey(cfg.SecretKeyPath)
 	if err != nil {
 		fmt.Fprintf(stderr, "Tidak bisa memuat kunci rahasia: %v\nBuat dengan `runova keygen`.\n", err)
@@ -82,7 +87,8 @@ func serve(cfg config.Config, stderr io.Writer) int {
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
-	engine := docker.New(cfg.DockerHost)
+	engine, dockerCheck := newEngine(cfg)
+	caddyClient, caddyCheck := newCaddyLoader(cfg)
 	if err := engine.Ping(ctx); err != nil {
 		fmt.Fprintf(stderr, "Docker tidak bisa diakses: %v\n", err)
 		return 1
@@ -93,7 +99,7 @@ func serve(cfg config.Config, stderr io.Writer) int {
 		return 1
 	}
 	syncer := &caddy.Syncer{
-		Client: caddy.NewClient(cfg.CaddyAdmin),
+		Client: caddyClient,
 		State: func(ctx context.Context) (caddy.State, error) {
 			state, err := apps.CaddyState(ctx, st, panelUpstream)
 			state.AdminListen = cfg.CaddyAdminListen()
@@ -103,7 +109,16 @@ func serve(cfg config.Config, stderr io.Writer) int {
 	}
 	svc := &apps.Service{Store: st, Engine: engine, Box: box, DataDir: cfg.DataDir, Caddy: syncer}
 
-	dbSvc, closePG, err := openDatabases(ctx, cfg, st, box)
+	var (
+		dbSvc   *dbs.Service
+		closePG func()
+	)
+	if cfg.FakeBackends {
+		fakeApps(svc)
+		dbSvc, closePG, err = fakeDatabases(ctx, cfg, st, box)
+	} else {
+		dbSvc, closePG, err = openDatabases(ctx, cfg, st, box)
+	}
 	if err != nil {
 		fmt.Fprintf(stderr, "Konfigurasi PostgreSQL tidak valid: %v\n", err)
 		return 1
@@ -123,8 +138,12 @@ func serve(cfg config.Config, stderr io.Writer) int {
 
 	var deploys sync.WaitGroup
 	srv := &http.Server{
-		Addr:              cfg.Listen,
-		Handler:           api.New(api.Config{Store: st, Now: time.Now, DataDir: cfg.DataDir, Apps: svc, DBs: dbSvc, Context: ctx, Deploys: &deploys}),
+		Addr: cfg.Listen,
+		Handler: api.New(api.Config{
+			Store: st, Now: time.Now, DataDir: cfg.DataDir, Apps: svc, DBs: dbSvc, Context: ctx, Deploys: &deploys,
+			Static: web.FS,
+			Health: api.Health{Docker: dockerCheck, Caddy: caddyCheck, Postgres: postgresCheck(dbSvc)},
+		}),
 		ReadHeaderTimeout: 10 * time.Second,
 	}
 	errc := make(chan error, 1)
