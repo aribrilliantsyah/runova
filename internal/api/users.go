@@ -1,7 +1,9 @@
 package api
 
 import (
+	"context"
 	"errors"
+	"log/slog"
 	"net/http"
 	"net/mail"
 	"strings"
@@ -255,6 +257,13 @@ func (s *server) deleteUser(w http.ResponseWriter, r *http.Request) {
 		serverError(w, r, err)
 		return
 	}
+	if s.apps != nil {
+		if err := s.apps.DeleteAllForUser(r.Context(), actor, target); err != nil {
+			appError(w, r, err)
+			return
+		}
+	}
+	s.userRoleHook(r, "Role PostgreSQL untuk "+target.Username+" belum dihapus", func() error { return s.dbs.OnUserDeleted(r.Context(), target.Username) })
 	switch err := s.store.DeleteUser(r.Context(), id); {
 	case errors.Is(err, store.ErrNotFound):
 		writeError(w, http.StatusNotFound, "Pengguna tidak ditemukan")
@@ -266,7 +275,11 @@ func (s *server) deleteUser(w http.ResponseWriter, r *http.Request) {
 		serverError(w, r, err)
 		return
 	}
-	s.userRoleHook(r, "Role PostgreSQL untuk "+target.Username+" belum dihapus", func() error { return s.dbs.OnUserDeleted(r.Context(), target.Username) })
+	if s.apps != nil {
+		if err := s.apps.ApplyCaddy(context.WithoutCancel(r.Context())); err != nil {
+			slog.Error("update caddy after user delete", "user", target.Username, "err", err)
+		}
+	}
 	s.record(r, actor, store.ActUserDelete, target.Username, "")
 	writeJSON(w, http.StatusOK, okBody)
 }

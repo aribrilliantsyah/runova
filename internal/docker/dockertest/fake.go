@@ -36,7 +36,7 @@ type Fake struct {
 	subs       []*subscription
 
 	// PingErr, PullErr, CreateErr, StartErr and EnsureNetworkErr make the matching call fail.
-	PingErr, PullErr, CreateErr, StartErr, EnsureNetworkErr error
+	PingErr, PullErr, CreateErr, StartErr, EnsureNetworkErr, RemoveNetworkErr error
 	// OnStart runs (without the lock) after a container started.
 	OnStart func(c Container)
 	// StatsResult is returned by Stats for running containers.
@@ -182,6 +182,13 @@ func (f *Fake) EnsureNetwork(_ context.Context, name, subnet string) error {
 	defer f.mu.Unlock()
 	f.record("network %s %s", name, subnet)
 	return f.EnsureNetworkErr
+}
+
+func (f *Fake) RemoveNetwork(_ context.Context, name string) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.record("network rm %s", name)
+	return f.RemoveNetworkErr
 }
 
 func (f *Fake) CreateContainer(_ context.Context, name string, spec docker.ContainerSpec) (string, error) {

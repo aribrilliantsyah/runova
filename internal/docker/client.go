@@ -200,6 +200,15 @@ func (c *Client) EnsureNetwork(ctx context.Context, name, subnet string) error {
 	return err
 }
 
+// RemoveNetwork deletes the network; one that does not exist is not an error.
+func (c *Client) RemoveNetwork(ctx context.Context, name string) error {
+	err := c.call(ctx, http.MethodDelete, "/networks/"+url.PathEscape(name), nil, nil, nil)
+	if errors.Is(err, ErrNotFound) {
+		return nil
+	}
+	return err
+}
+
 type (
 	portBinding struct{ HostIp, HostPort string }
 	logConfig   struct {
@@ -273,6 +282,7 @@ func (c *Client) CreateContainer(ctx context.Context, name string, spec Containe
 		"MemorySwap":     spec.MemoryBytes,
 		"NanoCpus":       spec.NanoCPUs,
 		"PidsLimit":      512,
+		"Init":           true,
 		"CapDrop":        []string{"ALL"},
 		"SecurityOpt":    []string{"no-new-privileges"},
 		"RestartPolicy":  restartPolicy{Name: "on-failure"},

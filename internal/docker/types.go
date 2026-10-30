@@ -28,6 +28,7 @@ type Engine interface {
 	ImageExists(ctx context.Context, ref string) (bool, error)
 	PullImage(ctx context.Context, ref string) error
 	EnsureNetwork(ctx context.Context, name, subnet string) error
+	RemoveNetwork(ctx context.Context, name string) error
 	CreateContainer(ctx context.Context, name string, spec ContainerSpec) (id string, err error)
 	StartContainer(ctx context.Context, id string) error
 	StopContainer(ctx context.Context, id string, timeout time.Duration) error

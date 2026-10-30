@@ -162,6 +162,20 @@ func TestLastAdminInStore(t *testing.T) {
 	}
 }
 
+func TestUserIDsAreNeverReused(t *testing.T) {
+	s := newStore(t)
+	ctx := context.Background()
+	mustUser(t, s, "andi", store.RoleAdmin)
+	b := mustUser(t, s, "budi", store.RoleUser)
+	if err := s.DeleteUser(ctx, b.ID); err != nil {
+		t.Fatal(err)
+	}
+	c := mustUser(t, s, "candra", store.RoleUser)
+	if c.ID <= b.ID {
+		t.Fatalf("new user got ID %d after %d was deleted; reuse would hand over UID, network and leftovers", c.ID, b.ID)
+	}
+}
+
 func TestSettingsDefaults(t *testing.T) {
 	s := newStore(t)
 	got, err := s.Settings(context.Background())

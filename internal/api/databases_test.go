@@ -55,11 +55,9 @@ func newDBEnv(t *testing.T) *dbEnv {
 		PortFree: func(int) bool { return true },
 		Chown:    func(string, int) error { return nil },
 		Dial: func(string, string, time.Duration) (net.Conn, error) {
-			c1, c2 := net.Pipe()
-			c2.Close()
-			return c1, nil
+			return silentConn(), nil
 		},
-		HealthTimeout: time.Second, HealthInterval: time.Millisecond,
+		HealthTimeout: time.Second, HealthInterval: time.Millisecond, HealthReadWait: 2 * time.Millisecond,
 		DBEnv: dsvc.AppEnv,
 	}
 	ctx, cancel := context.WithCancel(context.Background())

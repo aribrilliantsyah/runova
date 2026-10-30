@@ -2,10 +2,12 @@ package api_test
 
 import (
 	"context"
+	"errors"
 	"net"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -27,6 +29,23 @@ type appEnv struct {
 	*env
 	engine *dockertest.Fake
 	svc    *apps.Service
+}
+
+// peerCloser closes both ends of a net.Pipe, so a probe that hangs up leaks nothing.
+type peerCloser struct {
+	net.Conn
+	peer net.Conn
+}
+
+func (p peerCloser) Close() error {
+	p.peer.Close()
+	return p.Conn.Close()
+}
+
+// silentConn is what a healthy app looks like to the health probe: connected, sending nothing.
+func silentConn() net.Conn {
+	c1, c2 := net.Pipe()
+	return peerCloser{c1, c2}
 }
 
 // newAppEnv is newEnv with the application endpoints on a fake Docker engine.
@@ -52,11 +71,9 @@ func newAppEnv(t *testing.T, idle time.Duration) *appEnv {
 		PortFree: func(int) bool { return true },
 		Chown:    func(string, int) error { return nil },
 		Dial: func(string, string, time.Duration) (net.Conn, error) {
-			c1, c2 := net.Pipe()
-			c2.Close()
-			return c1, nil
+			return silentConn(), nil
 		},
-		HealthTimeout: time.Second, HealthInterval: time.Millisecond, DrainDelay: time.Millisecond,
+		HealthTimeout: time.Second, HealthInterval: time.Millisecond, HealthReadWait: 2 * time.Millisecond, DrainDelay: time.Millisecond,
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	srv := httptest.NewServer(api.New(api.Config{Store: st, Now: clk.Now, DataDir: dataDir, Apps: svc, Context: ctx, TerminalIdle: idle}))
@@ -214,6 +231,55 @@ func contains(list []string, v string) bool {
 		}
 	}
 	return false
+}
+
+func TestDeleteUserRemovesTheirApps(t *testing.T) {
+	e := newAppEnv(t, 0)
+	admin := e.login("admin", adminPassword)
+	budi := e.addUser("budi", "budi-password-1", store.RoleUser)
+	c := e.login("budi", "budi-password-1")
+	id, _ := c.createApp("billing", nil)
+	c.waitStatus(id, "running")
+	appDir := filepath.Join(e.dataDir, "data", "budi", "billing")
+
+	if r := admin.do("DELETE", "/api/users/"+strconv.FormatInt(budi.ID, 10), nil); r.status != 200 {
+		t.Fatalf("delete user: %d %s", r.status, r.body)
+	}
+	if left := e.engine.Containers(); len(left) != 0 {
+		t.Errorf("containers survived their user: %+v", left)
+	}
+	if rm := e.engine.CallsWithPrefix("network rm runova-u" + strconv.FormatInt(budi.ID, 10)); len(rm) != 1 {
+		t.Errorf("network removals = %v", rm)
+	}
+	for _, dir := range []string{appDir, filepath.Join(e.dataDir, "artifacts", "budi")} {
+		if _, err := os.Stat(dir); !os.IsNotExist(err) {
+			t.Errorf("%s survived: %v", dir, err)
+		}
+	}
+	if _, err := e.store.User(context.Background(), budi.ID); !errors.Is(err, store.ErrNotFound) {
+		t.Errorf("user row: %v", err)
+	}
+}
+
+func TestDeleteUserKeepsRowWhenCleanupFails(t *testing.T) {
+	e := newAppEnv(t, 0)
+	admin := e.login("admin", adminPassword)
+	budi := e.addUser("budi", "budi-password-1", store.RoleUser)
+	c := e.login("budi", "budi-password-1")
+	id, _ := c.createApp("billing", nil)
+	c.waitStatus(id, "running")
+
+	e.engine.RemoveNetworkErr = errors.New("network in use")
+	if r := admin.do("DELETE", "/api/users/"+strconv.FormatInt(budi.ID, 10), nil); r.status != 500 {
+		t.Fatalf("delete user: %d %s, want 500", r.status, r.body)
+	}
+	if _, err := e.store.User(context.Background(), budi.ID); err != nil {
+		t.Fatalf("user row removed although cleanup failed: %v", err)
+	}
+	e.engine.RemoveNetworkErr = nil
+	if r := admin.do("DELETE", "/api/users/"+strconv.FormatInt(budi.ID, 10), nil); r.status != 200 {
+		t.Fatalf("retry: %d %s", r.status, r.body)
+	}
 }
 
 func TestAppOwnership(t *testing.T) {

@@ -33,6 +33,23 @@ func (c *clock) Advance(d time.Duration) {
 	c.t = c.t.Add(d)
 }
 
+// peerCloser closes both ends of a net.Pipe, so a probe that hangs up leaks nothing.
+type peerCloser struct {
+	net.Conn
+	peer net.Conn
+}
+
+func (p peerCloser) Close() error {
+	p.peer.Close()
+	return p.Conn.Close()
+}
+
+// silentConn is what a healthy app looks like to the health probe: connected, sending nothing.
+func silentConn() net.Conn {
+	c1, c2 := net.Pipe()
+	return peerCloser{c1, c2}
+}
+
 // testEnv wires a Service to a real store in a temp dir and a fake Docker.
 type testEnv struct {
 	t      *testing.T
@@ -93,11 +110,10 @@ func newTestEnv(t *testing.T) *testEnv {
 			if !ok {
 				return nil, &net.OpError{Op: "dial", Err: os.ErrDeadlineExceeded}
 			}
-			c1, c2 := net.Pipe()
-			c2.Close()
-			return c1, nil
+			return silentConn(), nil
 		},
 		HealthTimeout:  time.Second,
+		HealthReadWait: 2 * time.Millisecond,
 		HealthInterval: time.Millisecond,
 		ReconnectDelay: time.Millisecond,
 		DrainDelay:     time.Millisecond,
