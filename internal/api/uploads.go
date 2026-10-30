@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"math"
 	"mime"
 	"mime/multipart"
 	"net/http"
@@ -52,6 +53,15 @@ func (s *server) upload(w http.ResponseWriter, r *http.Request) {
 	limit := int64(settings.UploadLimitMB) << 20
 	tooLarge := func() {
 		writeError(w, http.StatusRequestEntityTooLarge, fmt.Sprintf("File melebihi batas %d MB", settings.UploadLimitMB))
+	}
+	pending, err := s.store.CountUploads(r.Context(), user.ID)
+	if err != nil {
+		serverError(w, r, err)
+		return
+	}
+	if pending >= settings.MaxPendingUploads {
+		writeError(w, http.StatusConflict, fmt.Sprintf("Hapus unggahan lama dulu (maksimal %d)", settings.MaxPendingUploads))
+		return
 	}
 
 	if ct, _, _ := mime.ParseMediaType(r.Header.Get("Content-Type")); ct != "multipart/form-data" {
@@ -230,6 +240,47 @@ func CleanupUploads(ctx context.Context, st *store.Store, now time.Time) error {
 		}
 		if err := st.DeleteUpload(ctx, up.ID); err != nil {
 			errs = append(errs, err)
+		}
+	}
+	return errors.Join(errs...)
+}
+
+// SweepUploadDirs removes folders under DataDir/tmp that no upload row owns
+// and that are older than 24 hours: what a crash in the middle of an upload
+// leaves behind. Younger folders may still be receiving their file.
+func SweepUploadDirs(dataDir string, st *store.Store, now time.Time) error {
+	entries, err := os.ReadDir(uploadsDir(dataDir))
+	if errors.Is(err, os.ErrNotExist) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	owned, err := st.ExpiredUploads(context.Background(), math.MaxInt64)
+	if err != nil {
+		return err
+	}
+	known := make(map[string]bool, len(owned))
+	for _, up := range owned {
+		known[up.ID] = true
+	}
+	cutoff := now.Add(-uploadTTL)
+	var errs []error
+	for _, e := range entries {
+		if !e.IsDir() || known[e.Name()] {
+			continue
+		}
+		info, err := e.Info()
+		if err != nil {
+			errs = append(errs, err)
+			continue
+		}
+		if info.ModTime().After(cutoff) {
+			continue
+		}
+		dir := filepath.Join(uploadsDir(dataDir), e.Name())
+		if err := os.RemoveAll(dir); err != nil {
+			errs = append(errs, fmt.Errorf("remove orphan upload dir %s: %w", dir, err))
 		}
 	}
 	return errors.Join(errs...)

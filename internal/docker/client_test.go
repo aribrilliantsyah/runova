@@ -74,6 +74,9 @@ func TestCreateContainerHardening(t *testing.T) {
 	if host["PidsLimit"] != float64(512) || host["ReadonlyRootfs"] != true {
 		t.Errorf("pids/readonly: %v %v", host["PidsLimit"], host["ReadonlyRootfs"])
 	}
+	if host["Init"] != true {
+		t.Errorf("Init = %v, want true (PID 1 must reap and forward SIGTERM)", host["Init"])
+	}
 	if host["Memory"] != float64(256<<20) || host["MemorySwap"] != host["Memory"] || host["NanoCpus"] != float64(500_000_000) {
 		t.Errorf("resources: mem=%v swap=%v cpu=%v", host["Memory"], host["MemorySwap"], host["NanoCpus"])
 	}
@@ -276,6 +279,30 @@ func TestEnsureNetwork(t *testing.T) {
 	if b["Driver"] != "bridge" || jsonOf(b["Labels"]) != `{"runova":"1"}` ||
 		jsonOf(b["IPAM"]) != `{"Config":[{"Subnet":"172.30.1.0/24"}]}` {
 		t.Errorf("create body = %v", b)
+	}
+}
+
+func TestRemoveNetwork(t *testing.T) {
+	var deleted []string
+	c := serve(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != "DELETE" {
+			t.Errorf("unexpected %s %s", r.Method, r.URL)
+		}
+		deleted = append(deleted, r.URL.Path)
+		if r.URL.Path == "/v1.44/networks/gone" {
+			w.WriteHeader(404)
+			io.WriteString(w, `{"message":"network gone not found"}`)
+			return
+		}
+		w.WriteHeader(204)
+	}))
+	for _, name := range []string{"runova-u1", "gone"} {
+		if err := c.RemoveNetwork(context.Background(), name); err != nil {
+			t.Fatalf("RemoveNetwork(%s) = %v", name, err)
+		}
+	}
+	if len(deleted) != 2 || deleted[0] != "/v1.44/networks/runova-u1" {
+		t.Fatalf("requests = %v", deleted)
 	}
 }
 

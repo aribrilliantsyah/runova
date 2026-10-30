@@ -256,4 +256,26 @@ func TestIntegrationEngine(t *testing.T) {
 	if n := strings.Count(procs.String(), "/bin/sh"); n > 1 { // the probe's own shell
 		t.Errorf("closed exec sessions left %d shells running:\n%s", n-1, procs.String())
 	}
+
+	// Init: PID 1 is docker-init, which reaps children and forwards signals.
+	// `sleep` has no SIGTERM handler, and the kernel ignores such signals for
+	// PID 1, so without an init Stop would wait out its whole grace period.
+	p1, err := c.Exec(ctx, shell, uid, []string{"/bin/sh", "-c", "tr '\\0' ' ' </proc/1/cmdline"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var cmdline bytes.Buffer
+	io.Copy(&cmdline, p1)
+	p1.Close()
+	if !strings.Contains(cmdline.String(), "docker-init") && !strings.Contains(cmdline.String(), "tini") {
+		t.Errorf("PID 1 = %q, want docker-init or tini", cmdline.String())
+	}
+	begin := time.Now()
+	if err := c.StopContainer(ctx, shell, 10*time.Second); err != nil {
+		t.Fatal(err)
+	}
+	if took := time.Since(begin); took > 4*time.Second {
+		t.Errorf("stopping a program without a SIGTERM handler took %s; PID 1 swallowed the signal", took.Round(time.Millisecond))
+	}
+	t.Logf("PID 1 = %q, stop took %s", strings.TrimSpace(cmdline.String()), time.Since(begin).Round(time.Millisecond))
 }

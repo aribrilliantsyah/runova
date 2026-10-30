@@ -239,6 +239,41 @@ func TestUploadTooLarge(t *testing.T) {
 	}
 }
 
+func TestUploadPendingLimitPerUser(t *testing.T) {
+	e := newEnv(t)
+	e.setSettings(func(s *store.Settings) { s.MaxPendingUploads = 2 })
+	e.addUser("budi", "budi-password-1", store.RoleUser)
+	c := e.login("admin", adminPassword)
+	var first uploadResult
+	for i := range 2 {
+		r := c.upload("a.bin", []byte("x"))
+		if r.status != 201 {
+			t.Fatalf("upload %d: %d %s", i, r.status, r.body)
+		}
+		if i == 0 {
+			r.into(t, &first)
+		}
+	}
+	before := e.tmpEntries()
+	r := c.upload("a.bin", []byte("x"))
+	if r.status != 409 || r.errMsg(t) != "Hapus unggahan lama dulu (maksimal 2)" {
+		t.Fatalf("third upload: %d %s", r.status, r.body)
+	}
+	if got := e.tmpEntries(); len(got) != len(before) {
+		t.Errorf("rejected upload left files: %v -> %v", before, got)
+	}
+
+	if r := e.login("budi", "budi-password-1").upload("a.bin", []byte("x")); r.status != 201 {
+		t.Errorf("another user is limited by someone else's uploads: %d %s", r.status, r.body)
+	}
+	if r := c.do("DELETE", "/api/uploads/"+first.ID, nil); r.status != 200 {
+		t.Fatalf("delete: %d", r.status)
+	}
+	if r := c.upload("a.bin", []byte("x")); r.status != 201 {
+		t.Errorf("after deleting one: %d %s", r.status, r.body)
+	}
+}
+
 func TestUploadBodyOverLimitWithoutLengthIsRejected(t *testing.T) {
 	e := newEnv(t)
 	e.setSettings(func(s *store.Settings) { s.UploadLimitMB = 1 })
@@ -379,5 +414,49 @@ func TestCleanupExpiredUploads(t *testing.T) {
 	}
 	if _, err := e.store.Upload(context.Background(), fresh.ID, admin.ID); err != nil {
 		t.Errorf("fresh upload row: %v", err)
+	}
+}
+
+func TestSweepUploadDirs(t *testing.T) {
+	e := newEnv(t)
+	c := e.login("admin", adminPassword)
+	var owned uploadResult
+	c.upload("app.jar", jarWithMajor(t, 61)).into(t, &owned)
+
+	tmp := filepath.Join(e.dataDir, "tmp")
+	mkdir := func(name string, age time.Duration) {
+		t.Helper()
+		dir := filepath.Join(tmp, name)
+		if err := os.MkdirAll(dir, 0o700); err != nil {
+			t.Fatal(err)
+		}
+		when := e.clock.Now().Add(-age)
+		if err := os.Chtimes(dir, when, when); err != nil {
+			t.Fatal(err)
+		}
+	}
+	mkdir("orphan-old", 25*time.Hour)
+	mkdir("orphan-fresh", time.Hour)
+	// The owned folder is also old on disk: a row protects it, expiry is CleanupUploads' job.
+	old := e.clock.Now().Add(-48 * time.Hour)
+	if err := os.Chtimes(filepath.Join(tmp, owned.ID), old, old); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := api.SweepUploadDirs(e.dataDir, e.store, e.clock.Now()); err != nil {
+		t.Fatal(err)
+	}
+	got, want := e.tmpEntries(), []string{"orphan-fresh", owned.ID}
+	slices.Sort(got)
+	slices.Sort(want)
+	if !slices.Equal(got, want) {
+		t.Errorf("tmp = %v, want %v", got, want)
+	}
+}
+
+func TestSweepUploadDirsWithoutTmp(t *testing.T) {
+	e := newEnv(t)
+	if err := api.SweepUploadDirs(filepath.Join(e.dataDir, "nowhere"), e.store, e.clock.Now()); err != nil {
+		t.Fatalf("missing tmp dir: %v", err)
 	}
 }

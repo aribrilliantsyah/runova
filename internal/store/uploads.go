@@ -56,6 +56,15 @@ func (s *Store) Upload(ctx context.Context, id string, userID int64) (Upload, er
 	return u, notFound(err, "upload")
 }
 
+// CountUploads returns how many uploads the user has waiting.
+func (s *Store) CountUploads(ctx context.Context, userID int64) (int, error) {
+	var n int
+	if err := s.db.QueryRowContext(ctx, `SELECT count(*) FROM uploads WHERE user_id = ?`, userID).Scan(&n); err != nil {
+		return 0, fmt.Errorf("count uploads: %w", err)
+	}
+	return n, nil
+}
+
 func (s *Store) DeleteUpload(ctx context.Context, id string) error {
 	if _, err := s.db.ExecContext(ctx, `DELETE FROM uploads WHERE id = ?`, id); err != nil {
 		return fmt.Errorf("delete upload: %w", err)

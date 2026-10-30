@@ -2,6 +2,7 @@ package apps_test
 
 import (
 	"context"
+	"errors"
 	"strconv"
 	"testing"
 	"time"
@@ -386,4 +387,63 @@ func TestStopEchoDoesNotSwallowLaterCrash(t *testing.T) {
 		got, _ := e.store.App(ctx, app.ID)
 		return got.Status == store.AppFailed
 	})
+}
+
+// A container that stops while the event stream is down produces no event;
+// the reconcile after the reconnect has to notice it.
+func TestMonitorReconcilesAfterReconnect(t *testing.T) {
+	ctx := context.Background()
+	e := newTestEnv(t)
+	u := e.addUser("budi", store.RoleUser, roomyQuota)
+	app, _ := deployFirst(t, e, u, "billing")
+	cid := activeContainer(t, e, app)
+	e.svc.ReconnectDelay = 300 * time.Millisecond
+	startMonitor(t, e)
+
+	e.engine.Disconnect(errors.New("stream cut"))
+	// The monitor waits ReconnectDelay before it subscribes again; the
+	// container exits meanwhile and no event reports it.
+	e.engine.Update(cid, func(c *dockertest.Container) { c.State.Running, c.State.Status = false, "exited" })
+
+	waitFor(t, "app stopped by the reconcile after reconnect", func() bool {
+		got, _ := e.store.App(ctx, app.ID)
+		return got.Status == store.AppStopped
+	})
+}
+
+// Reconcile runs next to deploys now: it must leave an app alone while its
+// change lock is held, including the container a deploy has just created.
+func TestReconcileSkipsBusyApp(t *testing.T) {
+	ctx := context.Background()
+	e := newTestEnv(t)
+	u := e.addUser("budi", store.RoleUser, roomyQuota)
+	app, _ := deployFirst(t, e, u, "billing")
+	d2 := newVersion(t, e, u, app)
+
+	hold, started := make(chan struct{}), make(chan struct{})
+	e.setHealthy(func(string) bool {
+		select {
+		case <-started:
+		default:
+			close(started)
+		}
+		<-hold
+		return true
+	})
+	done := make(chan error, 1)
+	go func() { done <- e.svc.Deploy(ctx, u, app.ID, d2.ID) }()
+	<-started
+
+	// The new container exists and is not yet recorded as the active one.
+	err := e.svc.Reconcile(ctx)
+	close(hold)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := <-done; err != nil {
+		t.Fatalf("deploy: %v (reconcile must not remove the container being deployed)", err)
+	}
+	if got := len(e.engine.Containers()); got != 1 {
+		t.Errorf("containers after deploy = %d, want 1", got)
+	}
 }

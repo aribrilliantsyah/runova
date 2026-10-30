@@ -200,6 +200,15 @@ func (c *Client) EnsureNetwork(ctx context.Context, name, subnet string) error {
 	return err
 }
 
+// RemoveNetwork deletes the network; one that does not exist is not an error.
+func (c *Client) RemoveNetwork(ctx context.Context, name string) error {
+	err := c.call(ctx, http.MethodDelete, "/networks/"+url.PathEscape(name), nil, nil, nil)
+	if errors.Is(err, ErrNotFound) {
+		return nil
+	}
+	return err
+}
+
 type (
 	portBinding struct{ HostIp, HostPort string }
 	logConfig   struct {
@@ -273,6 +282,7 @@ func (c *Client) CreateContainer(ctx context.Context, name string, spec Containe
 		"MemorySwap":     spec.MemoryBytes,
 		"NanoCpus":       spec.NanoCPUs,
 		"PidsLimit":      512,
+		"Init":           true,
 		"CapDrop":        []string{"ALL"},
 		"SecurityOpt":    []string{"no-new-privileges"},
 		"RestartPolicy":  restartPolicy{Name: "on-failure"},
@@ -477,9 +487,11 @@ func parseLogLine(stream byte, line []byte) LogLine {
 	return l
 }
 
-// Events streams container events whose labels match labelFilter. The event
-// channel is closed when the stream ends; the error channel then yields the
-// reason (nothing when the context was canceled or the daemon closed cleanly).
+// Events streams container events whose labels match labelFilter. The
+// subscription is in place when Events returns (the Engine has answered the
+// request), so nothing that happens afterwards is missed. The event channel
+// is closed when the stream ends; the error channel then yields the reason
+// (nothing when the context was canceled or the daemon closed cleanly).
 func (c *Client) Events(ctx context.Context, labelFilter map[string]string) (<-chan Event, <-chan error) {
 	events := make(chan Event)
 	errc := make(chan error, 1)
@@ -487,16 +499,18 @@ func (c *Client) Events(ctx context.Context, labelFilter map[string]string) (<-c
 	if len(labelFilter) > 0 {
 		filters["label"] = labelFilters(labelFilter)
 	}
+	resp, err := c.do(ctx, http.MethodGet, "/events", url.Values{"filters": {filterJSON(filters)}}, nil)
+	if err != nil {
+		if ctx.Err() == nil {
+			errc <- err
+		}
+		close(errc)
+		close(events)
+		return events, errc
+	}
 	go func() {
 		defer close(errc)
 		defer close(events)
-		resp, err := c.do(ctx, http.MethodGet, "/events", url.Values{"filters": {filterJSON(filters)}}, nil)
-		if err != nil {
-			if ctx.Err() == nil {
-				errc <- err
-			}
-			return
-		}
 		defer resp.Body.Close()
 		dec := json.NewDecoder(resp.Body)
 		for {

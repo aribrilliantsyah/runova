@@ -28,6 +28,7 @@ var ErrAppNotFound = errors.New("app not found")
 const (
 	defaultHealthTimeout  = 60 * time.Second
 	defaultHealthInterval = 500 * time.Millisecond
+	defaultHealthReadWait = 300 * time.Millisecond
 	dialTimeout           = time.Second
 	stopGrace             = 10 * time.Second
 	keepDeployments       = 10
@@ -54,6 +55,8 @@ type Service struct {
 
 	HealthTimeout  time.Duration // 0 means 60 s
 	HealthInterval time.Duration // 0 means 500 ms
+	// HealthReadWait is how long a health probe waits for the app to close the connection; 0 means 300 ms.
+	HealthReadWait time.Duration
 	// ReconnectDelay is the pause before Monitor resubscribes to Docker events; 0 means 2 s.
 	ReconnectDelay time.Duration
 	// DrainDelay is how long a zero-downtime deploy keeps the old container after Caddy switched; 0 means 5 s.
@@ -101,6 +104,13 @@ func (s *Service) healthInterval() time.Duration {
 		return s.HealthInterval
 	}
 	return defaultHealthInterval
+}
+
+func (s *Service) healthReadWait() time.Duration {
+	if s.HealthReadWait > 0 {
+		return s.HealthReadWait
+	}
+	return defaultHealthReadWait
 }
 
 // lockApp takes the app's change lock without waiting; ok is false when a

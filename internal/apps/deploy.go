@@ -31,15 +31,30 @@ func (s *Service) lockOrBusy(appID int64) (func(), error) {
 // then makes the deployment the active one. A failed deploy is recorded on
 // the deployment and the app; the error returned is the cause.
 func (s *Service) Deploy(ctx context.Context, user store.User, appID, deploymentID int64) error {
+	release, err := s.Lock(ctx, user, appID)
+	if err != nil {
+		return err
+	}
+	defer release()
+	return s.DeployLocked(ctx, user, appID, deploymentID)
+}
+
+// Lock takes the app's change lock for a caller that must know it holds the
+// app before it prepares a deployment: ErrBusy when a deploy or another
+// change is running. Run the deployment with DeployLocked, then call release.
+func (s *Service) Lock(ctx context.Context, user store.User, appID int64) (release func(), err error) {
+	if _, _, err := s.load(ctx, user, appID); err != nil {
+		return nil, err
+	}
+	return s.lockOrBusy(appID)
+}
+
+// DeployLocked is Deploy for a caller that already holds the app through Lock.
+func (s *Service) DeployLocked(ctx context.Context, user store.User, appID, deploymentID int64) error {
 	app, owner, err := s.load(ctx, user, appID)
 	if err != nil {
 		return err
 	}
-	unlock, err := s.lockOrBusy(appID)
-	if err != nil {
-		return err
-	}
-	defer unlock()
 	return s.deployLocked(ctx, user, owner, app, deploymentID)
 }
 
@@ -162,7 +177,7 @@ func (s *Service) rollout(ctx context.Context, owner store.User, app store.App, 
 	if err := s.Engine.StartContainer(ctx, containerID); err != nil {
 		return containerID, fmt.Errorf("start container: %w", err)
 	}
-	if err := s.waitHealthy(ctx, d.HostPort); err != nil {
+	if err := s.waitHealthy(ctx, containerID, d.HostPort); err != nil {
 		return containerID, err
 	}
 	return containerID, nil
@@ -195,9 +210,13 @@ func (s *Service) removeContainerOf(ctx context.Context, d store.Deployment) err
 	return nil
 }
 
-// waitHealthy polls 127.0.0.1:port until a TCP connection succeeds or the
-// health timeout passes.
-func (s *Service) waitHealthy(ctx context.Context, port int) error {
+// waitHealthy polls 127.0.0.1:port until the app answers or the health
+// timeout passes. Docker's port proxy accepts connections even when nothing
+// listens in the container and then closes them at once, so a connect alone
+// proves nothing: a healthy app stays quiet (the read times out) or sends
+// data, while EOF or a reset means nobody is home. Every round also checks
+// that the container still runs; one that exited fails the deploy at once.
+func (s *Service) waitHealthy(ctx context.Context, containerID string, port int) error {
 	dial := s.Dial
 	if dial == nil {
 		dial = net.DialTimeout
@@ -206,9 +225,14 @@ func (s *Service) waitHealthy(ctx context.Context, port int) error {
 	timeout := s.healthTimeout()
 	deadline := time.Now().Add(timeout)
 	for {
-		conn, err := dial("tcp", addr, dialTimeout)
-		if err == nil {
-			conn.Close()
+		st, err := s.Engine.InspectContainer(ctx, containerID)
+		if err != nil {
+			return fmt.Errorf("inspect container: %w", err)
+		}
+		if !st.Running {
+			return fmt.Errorf("aplikasi berhenti saat dijalankan (%s, exit code %d)", st.Status, st.ExitCode)
+		}
+		if s.accepts(dial, addr) {
 			return nil
 		}
 		if time.Now().After(deadline) {
@@ -220,6 +244,21 @@ func (s *Service) waitHealthy(ctx context.Context, port int) error {
 		case <-time.After(s.healthInterval()):
 		}
 	}
+}
+
+// accepts reports whether addr holds a connection open or sends data.
+func (s *Service) accepts(dial func(network, addr string, timeout time.Duration) (net.Conn, error), addr string) bool {
+	conn, err := dial("tcp", addr, dialTimeout)
+	if err != nil {
+		return false
+	}
+	defer conn.Close()
+	if err := conn.SetReadDeadline(time.Now().Add(s.healthReadWait())); err != nil {
+		return false
+	}
+	var b [1]byte
+	_, err = conn.Read(b[:])
+	return err == nil || errors.Is(err, os.ErrDeadlineExceeded)
 }
 
 // failDeployment records a failed deploy: the last log lines of the failed
