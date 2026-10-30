@@ -7,8 +7,10 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 	"testing"
+	"time"
 )
 
 // buildELF writes a minimal little-endian ELF (header, one PT_LOAD, optional
@@ -315,5 +317,25 @@ func TestScanEnvOverCapKeepsOnlyLikelyNames(t *testing.T) {
 	}
 	if got := envNames(env); !slices.Equal(got, []string{"DATABASE_URL"}) {
 		t.Errorf("env = %v", got)
+	}
+}
+
+// Every candidate run used to be compared against all names found so far, so
+// a large binary repeating a few thousand names took minutes of CPU.
+func TestScanEnvManyRepeatsIsLinear(t *testing.T) {
+	var b bytes.Buffer
+	b.WriteString("os.Getenv\x00")
+	for i := range scanMaxCands - 1 {
+		b.WriteString("NAME_" + strconv.Itoa(i) + "\x00")
+	}
+	for b.Len() < 8<<20 {
+		b.WriteString("NAME_0\x00")
+	}
+	start := time.Now()
+	if _, err := scanEnv(bytes.NewReader(b.Bytes())); err != nil {
+		t.Fatal(err)
+	}
+	if d := time.Since(start); d > 5*time.Second {
+		t.Errorf("scanning 8 MB took %v", d)
 	}
 }
