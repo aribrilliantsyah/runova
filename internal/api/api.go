@@ -17,13 +17,15 @@ import (
 )
 
 type Config struct {
-	Store *store.Store
-	Now   func() time.Time
+	Store   *store.Store
+	Now     func() time.Time
+	DataDir string
 }
 
 type server struct {
 	store    *store.Store
 	now      func() time.Time
+	dataDir  string
 	sessions *auth.Sessions
 	throttle *auth.Throttle
 }
@@ -33,6 +35,7 @@ func New(cfg Config) http.Handler {
 	s := &server{
 		store:    cfg.Store,
 		now:      cfg.Now,
+		dataDir:  cfg.DataDir,
 		sessions: &auth.Sessions{Store: cfg.Store, Now: cfg.Now},
 		throttle: &auth.Throttle{Store: cfg.Store, Now: cfg.Now},
 	}
@@ -55,6 +58,9 @@ func New(cfg Config) http.Handler {
 	mux.HandleFunc("PUT /api/settings", admin(s.putSettings))
 
 	mux.HandleFunc("GET /api/activity", user(s.activity))
+
+	mux.HandleFunc("POST /api/uploads", user(s.upload))
+	mux.HandleFunc("DELETE /api/uploads/{id}", user(s.deleteUpload))
 
 	mux.HandleFunc("/api/", func(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusNotFound, "Tidak ditemukan")

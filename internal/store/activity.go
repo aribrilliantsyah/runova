@@ -15,6 +15,7 @@ const (
 	ActQuotaUpdate    = "quota.update"
 	ActPasswordChange = "password.change"
 	ActSettingsUpdate = "settings.update"
+	ActUpload         = "upload"
 )
 
 type Activity struct {
