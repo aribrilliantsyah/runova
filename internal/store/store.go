@@ -73,7 +73,11 @@ func Open(path string) (*Store, error) {
 	if err != nil {
 		return nil, fmt.Errorf("create %s: %w", path, err)
 	}
+	err = f.Chmod(0o600)
 	f.Close()
+	if err != nil {
+		return nil, fmt.Errorf("chmod %s: %w", path, err)
+	}
 	q := url.Values{
 		"_pragma": {"foreign_keys(1)", "journal_mode(WAL)", "busy_timeout(5000)", "synchronous(NORMAL)"},
 		"_txlock": {"immediate"},

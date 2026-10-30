@@ -65,7 +65,7 @@ func isLoopback(r *http.Request) bool {
 		return false
 	}
 	addr, err := netip.ParseAddr(host)
-	return err == nil && addr.IsLoopback()
+	return err == nil && addr.Unmap().IsLoopback()
 }
 
 // IsHTTPS reports whether the client reached us over TLS, directly or through
@@ -84,7 +84,9 @@ func ClientIP(r *http.Request) string {
 	if isLoopback(r) {
 		first, _, _ := strings.Cut(r.Header.Get("X-Forwarded-For"), ",")
 		if addr, err := netip.ParseAddr(strings.TrimSpace(first)); err == nil {
-			return addr.String()
+			// One canonical spelling per client, or "::ffff:1.2.3.4" and "1.2.3.4"
+			// would get separate login-failure counters.
+			return addr.Unmap().WithZone("").String()
 		}
 	}
 	return host

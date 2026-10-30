@@ -710,3 +710,35 @@ func TestUnknownRoute(t *testing.T) {
 		t.Fatalf("unknown route: %d %s", r.status, r.body)
 	}
 }
+
+// Concurrent guesses must not slip past the lockout: the check-and-count step
+// is atomic, so exactly MaxFailures attempts get an answer and the rest are 429.
+func TestLoginLockoutHoldsUnderConcurrency(t *testing.T) {
+	e := newEnv(t)
+	const n = 40
+	body := `{"username":"admin","password":"salah-salah-salah"}`
+	codes := make(chan int, n)
+	var wg sync.WaitGroup
+	for range n {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			res, err := http.Post(e.srv.URL+"/api/login", "application/json", strings.NewReader(body))
+			if err != nil {
+				codes <- -1
+				return
+			}
+			res.Body.Close()
+			codes <- res.StatusCode
+		}()
+	}
+	wg.Wait()
+	close(codes)
+	got := map[int]int{}
+	for c := range codes {
+		got[c]++
+	}
+	if got[401] != auth.MaxFailures || got[429] != n-auth.MaxFailures {
+		t.Fatalf("statuses = %v, want %d×401 and %d×429", got, auth.MaxFailures, n-auth.MaxFailures)
+	}
+}
