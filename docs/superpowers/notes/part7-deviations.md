@@ -32,7 +32,7 @@ Nama, signature, dan konstanta di blok Interfaces rencana tidak diubah. Hal-hal 
 ## Belum teratasi / tidak teruji
 
 - **Installer belum dijalankan di Ubuntu 26.04 sungguhan** (tanpa VM sesuai keputusan user). Diverifikasi terhadap paket sungguhan di container `ubuntu:26.04`: `docker.io 29.1.3` memuat `/usr/bin/docker-init`, `caddy 2.6.2` memiliki conffile `/etc/caddy/Caddyfile`, dan `postgresql-common` menambah `include_dir 'conf.d'` otomatis (sehingga `conf.d/runova.conf` terbaca). Belum teruji: `apt-get install` utuh, `systemctl`, `ufw` nyata, urutan start saat boot, aturan Docker-vs-ufw.
-- Caddy di Ubuntu 26.04 adalah **2.6.2**, sedangkan e2e memakai `caddy:2` (2.11). Konfigurasi JSON yang dikirim Runova (Bagian 4) diuji pada 2.11; fitur yang dipakai (`default_sni`, `automate`, `internal` issuer) ada di 2.6, tetapi belum diperiksa di versi itu.
+- Caddy di Ubuntu 26.04 adalah **2.6.2**. Koordinator mengganti image e2e menjadi `caddy:2.6.2` (bisa diubah lewat `CADDY_IMAGE`) dan menjalankan ulang e2e: kedelapan skenario lulus (deploy tanpa jeda 156 permintaan, 0 gagal), jadi konfigurasi JSON Bagian 4 terbukti jalan di 2.6.2.
 - Pada Caddy 2.6.2, `caddy.service` bawaan paket memakai `Type=notify`; drop-in mengganti `ExecStart` saja.
 - Image `eclipse-temurin:21-jre` ditarik saat deploy pertama (`docker pull`): server tanpa akses internet tidak bisa mendeploy JAR sampai image ada.
 

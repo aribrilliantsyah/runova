@@ -135,7 +135,7 @@ Caddyfile (`{ admin localhost:2019 }`), `daemon.json`, aturan `ufw`, dan paket a
 
 ## Status pengujian
 
-Jujur: **installer belum diuji di Ubuntu Server 26.04 sungguhan.** Yang sudah dijalankan: uji `bats` untuk logika installer (dengan stub), `shellcheck` bersih, nama paket dan berkas `docker-init`, `Caddyfile`, dan template PostgreSQL dicocokkan dengan paket Ubuntu 26.04 di container, dan alur produk diuji end-to-end di mesin pengembangan (Docker nyata, `caddy:2`, `postgres:18`). Belum teruji: apt/systemd/ufw nyata, reboot server (unit memakai `Wants`/`After`, `Restart=on-failure`, dan Caddy `--resume`), aturan Docker-vs-ufw, dan sertifikat domain sungguhan. Coba di server percobaan dulu.
+Jujur: **installer belum diuji di Ubuntu Server 26.04 sungguhan.** Yang sudah dijalankan: uji `bats` untuk logika installer (dengan stub), `shellcheck` bersih, nama paket dan berkas `docker-init`, `Caddyfile`, dan template PostgreSQL dicocokkan dengan paket Ubuntu 26.04 di container, dan alur produk diuji end-to-end di mesin pengembangan (Docker nyata, `caddy:2.6.2` — versi yang sama dengan paket Ubuntu 26.04 — dan `postgres:18`). Belum teruji: apt/systemd/ufw nyata, reboot server (unit memakai `Wants`/`After`, `Restart=on-failure`, dan Caddy `--resume`), aturan Docker-vs-ufw, dan sertifikat domain sungguhan. Coba di server percobaan dulu.
 
 ## Menghubungkan domain
 
@@ -230,7 +230,7 @@ Tanpa VM. Installer diuji dengan `bats` dan `shellcheck` di Docker (stub menggan
 test/bats.sh
 ```
 
-Alur produk (login, pengguna, database, deploy binary dan JAR, deploy tanpa jeda, isolasi antar-pengguna, restart Runova, backup dan restore) diuji dengan Runova dari source, Docker nyata, `caddy:2` dan `postgres:18` di container, tanpa root:
+Alur produk (login, pengguna, database, deploy binary dan JAR, deploy tanpa jeda, isolasi antar-pengguna, restart Runova, backup dan restore) diuji dengan Runova dari source, Docker nyata, `caddy:2.6.2` (versi paket Ubuntu 26.04; ganti lewat `CADDY_IMAGE`) dan `postgres:18` di container, tanpa root:
 
 ```bash
 test/e2e/stack.sh up && test/e2e/run.sh && test/e2e/stack.sh down

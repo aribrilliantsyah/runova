@@ -72,7 +72,7 @@ up_caddy() {
 	docker run -d --name "$CADDY_CONTAINER" --network host \
 		-v "$STATE/Caddyfile:/etc/caddy/Caddyfile:ro" \
 		-v "${CADDY_VOLUMES[0]}:/config" -v "${CADDY_VOLUMES[1]}:/data" \
-		caddy:2 caddy run --resume --config /etc/caddy/Caddyfile >/dev/null
+		"${CADDY_IMAGE:-caddy:2.6.2}" caddy run --resume --config /etc/caddy/Caddyfile >/dev/null
 	wait_for 30 "Caddy admin API" curl -sf http://127.0.0.1:2019/config/
 }
 
@@ -126,7 +126,7 @@ up() {
 	if docker container inspect "$PG_CONTAINER" "$CADDY_CONTAINER" >/dev/null 2>&1 || [[ -d $STATE ]]; then
 		die "stack sudah ada atau sisa lama tertinggal; jalankan 'test/e2e/stack.sh down' dulu"
 	fi
-	for image in postgres:18 caddy:2 gcr.io/distroless/static-debian12 eclipse-temurin:21-jre; do
+	for image in postgres:18 "${CADDY_IMAGE:-caddy:2.6.2}" gcr.io/distroless/static-debian12 eclipse-temurin:21-jre; do
 		docker image inspect "$image" >/dev/null 2>&1 || docker pull -q "$image" >/dev/null
 	done
 	mkdir -p "$STATE/data"
