@@ -5,6 +5,7 @@ import (
 	"bufio"
 	"bytes"
 	"encoding/binary"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -16,13 +17,20 @@ import (
 )
 
 const (
-	maxNestedJar    = 64 << 20
-	maxManifest     = 1 << 20
-	maxPropsFile    = 1 << 20
-	manifestPath    = "META-INF/MANIFEST.MF"
-	multiReleaseDir = "META-INF/versions/"
-	maxJavaKnown    = 25
-	classMagic      = 0xCAFEBABE
+	maxNestedJar = 64 << 20
+	// maxNestedTotal bounds the bytes inflated from all nested jars together.
+	maxNestedTotal = 1 << 30
+	// maxDirectoryBytes bounds a zip's central directory. archive/zip builds
+	// one struct per entry before any check can run (about 570 bytes each), so
+	// millions of tiny entries in an upload within the size limit would
+	// exhaust memory.
+	maxDirectoryBytes = 16 << 20
+	maxManifest       = 1 << 20
+	maxPropsFile      = 1 << 20
+	manifestPath      = "META-INF/MANIFEST.MF"
+	multiReleaseDir   = "META-INF/versions/"
+	maxJavaKnown      = 25
+	classMagic        = 0xCAFEBABE
 )
 
 var propertyFiles = []string{
@@ -49,16 +57,80 @@ func InspectJar(path string) (Report, error) {
 		return Report{}, err
 	}
 	rep := newReport(KindJar)
-	zr, err := zip.NewReader(f, fi.Size())
+	zr, err := openZip(f, fi.Size())
+	if errors.Is(err, errJarTooBig) {
+		rep.Problems = append(rep.Problems, "JAR terlalu kompleks (terlalu banyak entri atau isi terlalu besar)")
+		return rep, nil
+	}
 	if err != nil {
 		rep.Problems = append(rep.Problems, "Bukan file JAR yang valid")
 		return rep, nil
 	}
 	if err := inspectZip(zr, &rep); err != nil {
+		msg := "Bukan file JAR yang valid"
+		if errors.Is(err, errJarTooBig) {
+			msg = "JAR terlalu kompleks (terlalu banyak entri atau isi terlalu besar)"
+		}
 		rep = newReport(KindJar)
-		rep.Problems = append(rep.Problems, "Bukan file JAR yang valid")
+		rep.Problems = append(rep.Problems, msg)
 	}
 	return rep, nil
+}
+
+var errJarTooBig = errors.New("zip central directory too large")
+
+// openZip is zip.NewReader after a check of the central directory size taken
+// straight from the end-of-central-directory record.
+func openZip(ra io.ReaderAt, size int64) (*zip.Reader, error) {
+	dir, err := directorySize(ra, size)
+	if err == nil && dir > maxDirectoryBytes {
+		return nil, errJarTooBig
+	}
+	return zip.NewReader(ra, size)
+}
+
+// directorySize returns the central directory size recorded by the zip's
+// end record (zip64 aware). A zip it cannot parse reports an error, which
+// zip.NewReader then reproduces with its own message.
+func directorySize(ra io.ReaderAt, size int64) (uint64, error) {
+	const (
+		eocdLen     = 22
+		eocdSig     = 0x06054b50
+		locatorLen  = 20
+		locatorSig  = 0x07064b50
+		eocd64Sig   = 0x06064b50
+		maxComment  = 1<<16 - 1
+		sizeMarker  = 0xFFFFFFFF
+		eocd64MinSz = 56
+	)
+	n := min(size, eocdLen+maxComment)
+	tail := make([]byte, n)
+	if _, err := ra.ReadAt(tail, size-n); err != nil && err != io.EOF {
+		return 0, err
+	}
+	i := bytes.LastIndex(tail, []byte{0x50, 0x4b, 0x05, 0x06})
+	if i < 0 || len(tail)-i < eocdLen {
+		return 0, errors.New("no end of central directory")
+	}
+	dir := uint64(binary.LittleEndian.Uint32(tail[i+12:]))
+	if dir != sizeMarker {
+		return dir, nil
+	}
+	if i < locatorLen || binary.LittleEndian.Uint32(tail[i-locatorLen:]) != locatorSig {
+		return 0, errors.New("no zip64 locator")
+	}
+	off := binary.LittleEndian.Uint64(tail[i-locatorLen+8:])
+	if off > uint64(size)-eocd64MinSz {
+		return 0, errors.New("bad zip64 offset")
+	}
+	rec := make([]byte, eocd64MinSz)
+	if _, err := ra.ReadAt(rec, int64(off)); err != nil {
+		return 0, err
+	}
+	if binary.LittleEndian.Uint32(rec) != eocd64Sig {
+		return 0, errors.New("bad zip64 record")
+	}
+	return binary.LittleEndian.Uint64(rec[40:]), nil
 }
 
 func inspectZip(zr *zip.Reader, rep *Report) error {
@@ -76,7 +148,8 @@ func inspectZip(zr *zip.Reader, rep *Report) error {
 		rep.Problems = append(rep.Problems, "Manifest tidak punya Main-Class")
 	}
 
-	major, err := maxClassMajor(zr, true)
+	nestedLeft := int64(maxNestedTotal)
+	major, err := maxClassMajor(zr, &nestedLeft)
 	if err != nil {
 		return err
 	}
@@ -183,9 +256,11 @@ func manifestMainClass(f *zip.File) (string, error) {
 }
 
 // maxClassMajor returns the highest class file major version in zr, ignoring
-// multi-release entries. With nested true it also opens BOOT-INF/lib and
-// WEB-INF/lib jars from memory. 0 means no class was found.
-func maxClassMajor(zr *zip.Reader, nested bool) (uint16, error) {
+// multi-release entries. With a non-nil nestedLeft it also opens BOOT-INF/lib
+// and WEB-INF/lib jars from memory, spending the budget on the bytes it
+// inflates (a jar bigger than what is left fails the inspection). 0 means no
+// class was found.
+func maxClassMajor(zr *zip.Reader, nestedLeft *int64) (uint16, error) {
 	var highest uint16
 	for _, f := range zr.File {
 		switch {
@@ -196,16 +271,19 @@ func maxClassMajor(zr *zip.Reader, nested bool) (uint16, error) {
 				return 0, err
 			}
 			highest = max(highest, m)
-		case nested && isNestedJar(f.Name) && f.UncompressedSize64 <= maxNestedJar:
+		case nestedLeft != nil && isNestedJar(f.Name) && f.UncompressedSize64 <= maxNestedJar:
 			data, err := readEntry(f, maxNestedJar)
 			if err != nil {
 				return 0, err
 			}
-			inner, err := zip.NewReader(bytes.NewReader(data), int64(len(data)))
+			if *nestedLeft -= int64(len(data)); *nestedLeft < 0 {
+				return 0, errJarTooBig
+			}
+			inner, err := openZip(bytes.NewReader(data), int64(len(data)))
 			if err != nil {
 				return 0, err
 			}
-			m, err := maxClassMajor(inner, false)
+			m, err := maxClassMajor(inner, nil)
 			if err != nil {
 				return 0, err
 			}
