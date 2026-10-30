@@ -1,0 +1,90 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>api.js</title>
+<body>
+<script type="module">
+import { test, assert, eq, run } from "/test/harness.js";
+import * as api from "/assets/js/api.js";
+
+const realFetch = window.fetch;
+function stub(status, body) {
+  window.fetch = async () => new Response(body === undefined ? "" : JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } });
+}
+const restore = () => { window.fetch = realFetch; sessionStorage.clear(); };
+
+test("401 emits unauthorized and keeps the return path", async () => {
+  try {
+    sessionStorage.clear();
+    location.hash = "#/apps/7/env";
+    let fired = 0;
+    const on = () => fired++;
+    addEventListener(api.UNAUTHORIZED, on);
+    stub(401, { error: "Masuk dulu" });
+    let err;
+    try { await api.get("/api/apps"); } catch (e) { err = e; }
+    removeEventListener(api.UNAUTHORIZED, on);
+    eq(fired, 1);
+    eq(sessionStorage.getItem(api.RETURN_KEY), "#/apps/7/env");
+    assert(err instanceof api.ApiError && err.status === 401);
+  } finally { restore(); }
+});
+
+test("401 from login or me is an ordinary answer", async () => {
+  try {
+    let fired = 0;
+    const on = () => fired++;
+    addEventListener(api.UNAUTHORIZED, on);
+    stub(401, { error: "Username atau password salah" });
+    for (const p of ["/api/login", "/api/me"]) {
+      try { await api.post(p, {}); } catch (e) { eq(e.status, 401); }
+    }
+    removeEventListener(api.UNAUTHORIZED, on);
+    eq(fired, 0);
+    eq(sessionStorage.getItem(api.RETURN_KEY), null);
+  } finally { restore(); }
+});
+
+test("error message comes from the body", async () => {
+  try {
+    stub(409, { error: "Domain sudah dipakai" });
+    try { await api.post("/api/apps/1/domains", { host: "a.b.c" }); assert(false, "did not throw"); }
+    catch (e) { eq(e.message, "Domain sudah dipakai"); eq(e.status, 409); }
+  } finally { restore(); }
+});
+
+test("429 shows the server's text as it is", async () => {
+  try {
+    stub(429, { error: "Terlalu banyak percobaan. Coba lagi pukul 14:05" });
+    try { await api.post("/api/login", {}); assert(false); }
+    catch (e) { eq(e.message, "Terlalu banyak percobaan. Coba lagi pukul 14:05"); }
+  } finally { restore(); }
+});
+
+test("a non-JSON failure still gets a message", async () => {
+  try {
+    window.fetch = async () => new Response("<html>bad gateway</html>", { status: 502 });
+    try { await api.get("/api/x"); assert(false); } catch (e) { assert(e.message.includes("502"), e.message); }
+  } finally { restore(); }
+});
+
+test("a network failure is an ApiError with status 0", async () => {
+  try {
+    window.fetch = async () => { throw new TypeError("failed"); };
+    try { await api.get("/api/x"); assert(false); } catch (e) { eq(e.status, 0); assert(e instanceof api.ApiError); }
+  } finally { restore(); }
+});
+
+test("mutations send JSON with credentials", async () => {
+  try {
+    let seen;
+    window.fetch = async (url, init) => { seen = { url, init }; return new Response("{}", { status: 200 }); };
+    await api.put("/api/apps/1/env", [{ name: "A", value: "b" }]);
+    eq(seen.init.method, "PUT");
+    eq(seen.init.headers["Content-Type"], "application/json");
+    eq(seen.init.credentials, "same-origin");
+    eq(seen.init.body, '[{"name":"A","value":"b"}]');
+  } finally { restore(); }
+});
+
+run();
+</script>

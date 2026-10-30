@@ -19,6 +19,8 @@ type Config struct {
 	PGDSN string
 	// PGHBAPath is the pg_hba.d file Runova writes.
 	PGHBAPath string
+	// FakeBackends replaces Docker, Caddy and PostgreSQL with in-memory fakes (development and UI tests only).
+	FakeBackends bool
 }
 
 // Load reads configuration through getenv, falling back to the defaults.
@@ -37,6 +39,7 @@ func Load(getenv func(string) string) Config {
 		CaddyAdmin:    get("RUNOVA_CADDY_ADMIN", "http://127.0.0.1:2019"),
 		PGDSN:         get("RUNOVA_PG_DSN", "host=/var/run/postgresql user=runova dbname=postgres"),
 		PGHBAPath:     get("RUNOVA_PG_HBA", "/etc/postgresql/18/main/pg_hba.d/runova.conf"),
+		FakeBackends:  getenv("RUNOVA_FAKE_BACKENDS") == "1",
 	}
 }
 
