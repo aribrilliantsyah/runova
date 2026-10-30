@@ -14,7 +14,11 @@ const (
 	glibcImage  = "ubuntu:26.04"
 	appMount    = "/app"
 	dataMount   = "/data"
-	tmpOptions  = "rw,size=64m,mode=1777"
+	// exec: Docker mounts tmpfs noexec by default, which breaks JVM apps that
+	// unpack native libraries into /tmp (Netty, sqlite-jdbc, zstd-jni). /data is
+	// a writable, executable bind mount anyway, so noexec protected nothing.
+	// nosuid and nodev stay (Docker's defaults), as does no-new-privileges.
+	tmpOptions = "rw,exec,size=64m,mode=1777"
 )
 
 func networkName(userID int64) string { return "runova-u" + strconv.FormatInt(userID, 10) }
