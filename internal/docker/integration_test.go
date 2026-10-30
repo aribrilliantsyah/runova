@@ -223,4 +223,37 @@ func TestIntegrationEngine(t *testing.T) {
 	if fields[1] != "24" || fields[2] != "80" {
 		t.Fatalf("stty size = %q %q, want the resized 24 80", fields[1], fields[2])
 	}
+
+	// The hardening the client applies must hold inside a real container,
+	// and a session closed by the caller must not leave its shell behind.
+	sh, err := c.Exec(ctx, shell, uid, []string{"/bin/sh", "-c", "grep -E 'NoNewPrivs|CapEff' /proc/self/status; touch /rootfs-probe 2>&1; ulimit -u"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var hard bytes.Buffer
+	io.Copy(&hard, sh)
+	sh.Close()
+	for _, want := range []string{"NoNewPrivs:\t1", "CapEff:\t0000000000000000", "Read-only file system"} {
+		if !strings.Contains(hard.String(), want) {
+			t.Errorf("hardening probe output lacks %q:\n%s", want, hard.String())
+		}
+	}
+
+	idle, err := c.Exec(ctx, shell, uid, []string{"/bin/sh"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	time.Sleep(500 * time.Millisecond)
+	idle.Close()
+	time.Sleep(time.Second)
+	ps, err := c.Exec(ctx, shell, uid, []string{"/bin/sh", "-c", "ps -eo args 2>/dev/null || ls /proc | grep -c '^[0-9]'"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var procs bytes.Buffer
+	io.Copy(&procs, ps)
+	ps.Close()
+	if n := strings.Count(procs.String(), "/bin/sh"); n > 1 { // the probe's own shell
+		t.Errorf("closed exec sessions left %d shells running:\n%s", n-1, procs.String())
+	}
 }

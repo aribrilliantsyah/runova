@@ -72,11 +72,13 @@ func scanEnv(r io.Reader) ([]EnvVar, error) {
 		overflow bool
 		found    bool
 		names    []string
+		seen     = map[string]struct{}{}
 	)
 	endRun := func() {
 		if !overflow {
 			name := strings.TrimLeft(string(run), "0123456789_")
-			if scanCandidate(name) && len(names) < scanMaxCands && !slices.Contains(names, name) {
+			if _, dup := seen[name]; !dup && len(names) < scanMaxCands && scanCandidate(name) {
+				seen[name] = struct{}{}
 				names = append(names, name)
 			}
 		}

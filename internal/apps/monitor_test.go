@@ -324,3 +324,66 @@ func TestReconcileInterruptedDeploy(t *testing.T) {
 		t.Errorf("host ports still held: %v", used)
 	}
 }
+
+// restart policy on-failure never restarts a container that exited 0, so the
+// panel must not keep showing the app as running.
+func TestCleanExitMarksStopped(t *testing.T) {
+	ctx := context.Background()
+	e := newTestEnv(t)
+	u := e.addUser("budi", store.RoleUser, roomyQuota)
+	app, _ := deployFirst(t, e, u, "billing")
+	cid := activeContainer(t, e, app)
+	startMonitor(t, e)
+
+	labels := map[string]string{"runova.app": strconv.FormatInt(app.ID, 10), "exitCode": "0"}
+	e.engine.Emit(docker.Event{ContainerID: cid, Action: "die", Labels: labels, Time: e.clock.Now()})
+	waitFor(t, "app stopped", func() bool {
+		got, _ := e.store.App(ctx, app.ID)
+		return got.Status == store.AppStopped
+	})
+	if n := len(e.engine.CallsWithPrefix("stop ")); n != 0 {
+		t.Errorf("stop calls = %d; a clean exit needs no stop", n)
+	}
+	list, _ := e.store.Notifications(ctx, u.ID, 10)
+	if len(list) != 1 || list[0].Level != store.LevelInfo {
+		t.Fatalf("notifications = %+v, want one info notice", list)
+	}
+}
+
+// The die that echoes a user's stop arrives while the app is stopped. It must
+// use up the stop note, or the first real crash after Start would go uncounted.
+func TestStopEchoDoesNotSwallowLaterCrash(t *testing.T) {
+	ctx := context.Background()
+	e := newTestEnv(t)
+	u := e.addUser("budi", store.RoleUser, roomyQuota)
+	app, _ := deployFirst(t, e, u, "billing")
+	cid := activeContainer(t, e, app)
+	other, _ := deployFirst(t, e, u, "other")
+	otherCID := activeContainer(t, e, other)
+	startMonitor(t, e)
+
+	if err := e.svc.Stop(ctx, u, app.ID); err != nil {
+		t.Fatal(err)
+	}
+	die(t, e, app, cid)
+	// Events are handled in order: once the other app's clean exit has been
+	// applied, the echo of the stop before it has been handled too.
+	e.engine.Emit(docker.Event{ContainerID: otherCID, Action: "die", Time: e.clock.Now(),
+		Labels: map[string]string{"runova.app": strconv.FormatInt(other.ID, 10), "exitCode": "0"}})
+	waitFor(t, "barrier event handled", func() bool {
+		got, _ := e.store.App(ctx, other.ID)
+		return got.Status == store.AppStopped
+	})
+
+	if err := e.svc.Start(ctx, u, app.ID); err != nil {
+		t.Fatal(err)
+	}
+	for range 6 {
+		die(t, e, app, cid)
+		e.clock.Advance(time.Second)
+	}
+	waitFor(t, "app failed after 6 real crashes", func() bool {
+		got, _ := e.store.App(ctx, app.ID)
+		return got.Status == store.AppFailed
+	})
+}

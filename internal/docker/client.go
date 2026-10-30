@@ -16,6 +16,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -211,7 +212,48 @@ type (
 	}
 )
 
+// ErrInsecureSpec is returned (wrapped) by CreateContainer for a spec that
+// lacks what every Runova container must have: a non-root numeric user, a
+// memory and CPU limit, and a read-only root filesystem.
+var ErrInsecureSpec = errors.New("docker: insecure container spec")
+
+// checkSpec refuses specs that would weaken the isolation policy. The client
+// already forces cap-drop, no-new-privileges and the pids limit; these fields
+// come from the caller, so a zero value would mean "unlimited" or "root".
+func checkSpec(spec ContainerSpec) error {
+	switch {
+	case !nonRootUser(spec.User):
+		return fmt.Errorf("%w: user %q is not a non-root uid[:gid]", ErrInsecureSpec, spec.User)
+	case spec.MemoryBytes <= 0:
+		return fmt.Errorf("%w: no memory limit", ErrInsecureSpec)
+	case spec.NanoCPUs <= 0:
+		return fmt.Errorf("%w: no cpu limit", ErrInsecureSpec)
+	case !spec.ReadOnly:
+		return fmt.Errorf("%w: root filesystem must be read-only", ErrInsecureSpec)
+	}
+	return nil
+}
+
+// nonRootUser reports whether user is "uid" or "uid:gid" with nonzero numeric
+// ids. Names ("root", "") are refused: the image decides what they mean.
+func nonRootUser(user string) bool {
+	uid, gid, hasGID := strings.Cut(user, ":")
+	ids := []string{uid}
+	if hasGID {
+		ids = append(ids, gid)
+	}
+	for _, id := range ids {
+		if n, err := strconv.ParseUint(id, 10, 32); err != nil || n == 0 {
+			return false
+		}
+	}
+	return true
+}
+
 func (c *Client) CreateContainer(ctx context.Context, name string, spec ContainerSpec) (string, error) {
+	if err := checkSpec(spec); err != nil {
+		return "", err
+	}
 	cfg := map[string]any{
 		"Image":  spec.Image,
 		"Cmd":    spec.Cmd,
@@ -357,7 +399,11 @@ func (c *Client) Logs(ctx context.Context, id string, tail int, follow bool) (io
 	return resp.Body, nil
 }
 
-const maxFrame = 1 << 20
+const (
+	maxFrame = 1 << 20
+	// maxLine is the longest log line delivered whole; longer ones are cut into pieces of this size.
+	maxLine = 64 << 10
+)
 
 // ReadLogs demultiplexes a Docker log stream (8-byte frame headers) into
 // lines, calling fn for each in order. A line without a trailing newline at
@@ -395,6 +441,14 @@ func ReadLogs(r io.Reader, fn func(LogLine) error) error {
 				return err
 			}
 			buf = buf[i+1:]
+		}
+		// A program that never prints a newline would otherwise grow buf
+		// without bound (and each frame re-copies it).
+		for len(buf) > maxLine {
+			if err := emit(stream, buf[:maxLine]); err != nil {
+				return err
+			}
+			buf = buf[maxLine:]
 		}
 		partial[stream] = append([]byte(nil), buf...)
 	}
@@ -556,7 +610,7 @@ func (c *Client) Exec(ctx context.Context, id string, user string, cmd []string)
 		return nil, readError(resp)
 	}
 	s := &execSession{c: c, id: created.Id, conn: conn, r: br}
-	s.stop = context.AfterFunc(ctx, func() { conn.Close() })
+	s.stop = context.AfterFunc(ctx, func() { s.shutdown() })
 	return s, nil
 }
 
@@ -566,14 +620,38 @@ type execSession struct {
 	conn net.Conn
 	r    *bufio.Reader // may hold bytes the Engine sent right after the 101 headers
 	stop func() bool
+	once sync.Once
+	err  error
 }
 
 func (s *execSession) Read(p []byte) (int, error)  { return s.r.Read(p) }
 func (s *execSession) Write(p []byte) (int, error) { return s.conn.Write(p) }
 
+// hangupGap separates Ctrl-C from Ctrl-D: sent in one write the shell can
+// still be busy reading the interrupt and swallow the end-of-file (measured
+// against a real Engine), leaving it running.
+const hangupGap = 100 * time.Millisecond
+
+// Close ends the session. Dropping the hijacked connection alone leaves the
+// exec'd shell running inside the container (the Engine keeps the TTY open
+// and never sends SIGHUP), so every closed terminal would leak a process.
+// The shell gets Ctrl-C (ends the foreground job) and then Ctrl-D (ends the
+// shell at its empty prompt) before the connection is dropped.
 func (s *execSession) Close() error {
 	s.stop()
-	return s.conn.Close()
+	return s.shutdown()
+}
+
+func (s *execSession) shutdown() error {
+	s.once.Do(func() {
+		s.conn.SetWriteDeadline(time.Now().Add(time.Second))
+		if _, err := s.conn.Write([]byte{0x03}); err == nil {
+			time.Sleep(hangupGap)
+			s.conn.Write([]byte{0x04, 0x04})
+		}
+		s.err = s.conn.Close()
+	})
+	return s.err
 }
 
 func (s *execSession) Resize(ctx context.Context, rows, cols uint) error {

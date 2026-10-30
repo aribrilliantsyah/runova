@@ -456,3 +456,95 @@ func TestExecHijack(t *testing.T) {
 		t.Errorf("resize query = %q", resize)
 	}
 }
+
+// A closed terminal must tell the shell to quit: dropping the hijacked
+// connection alone leaves /bin/sh running in the container.
+func TestExecCloseHangsUpShell(t *testing.T) {
+	received := make(chan string, 1)
+	c := serve(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/v1.44/containers/abc/exec":
+			w.WriteHeader(http.StatusCreated)
+			io.WriteString(w, `{"Id":"e1"}`)
+		case "/v1.44/exec/e1/start":
+			conn, brw, err := w.(http.Hijacker).Hijack()
+			if err != nil {
+				t.Error(err)
+				return
+			}
+			defer conn.Close()
+			io.WriteString(conn, "HTTP/1.1 101 UPGRADED\r\nConnection: Upgrade\r\nUpgrade: tcp\r\n\r\n")
+			data, _ := io.ReadAll(brw)
+			received <- string(data)
+		}
+	}))
+	s, err := c.Exec(context.Background(), "abc", "100001:100001", []string{"/bin/sh"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := s.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.Close(); err != nil {
+		t.Fatalf("second Close = %v", err)
+	}
+	select {
+	case got := <-received:
+		if !strings.HasSuffix(got, "\x03\x04\x04") {
+			t.Errorf("shell received %q on close, want it to end with Ctrl-C then Ctrl-D", got)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("server never saw the session end")
+	}
+}
+
+// A program that prints without ever ending a line must not make ReadLogs
+// buffer its whole output.
+func TestLogsDemuxCapsLineLength(t *testing.T) {
+	const total = 10 * maxLine
+	var stream []byte
+	stream = append(stream, frame(1, "2026-10-30T09:00:00Z ")...)
+	for range total / (maxLine / 4) {
+		stream = append(stream, frame(1, strings.Repeat("x", maxLine/4))...)
+	}
+	stream = append(stream, frame(1, "\nnext\n")...)
+
+	var got []LogLine
+	err := ReadLogs(bytes.NewReader(stream), func(l LogLine) error { got = append(got, l); return nil })
+	if err != nil {
+		t.Fatal(err)
+	}
+	sum := 0
+	for _, l := range got[:len(got)-1] {
+		if len(l.Text) > maxLine {
+			t.Fatalf("delivered a %d byte line, limit %d", len(l.Text), maxLine)
+		}
+		sum += len(l.Text)
+	}
+	if sum != total || got[len(got)-1].Text != "next" || len(got) < 10 {
+		t.Errorf("got %d lines, %d bytes before 'next' (want %d bytes, last %q)", len(got), sum, total, got[len(got)-1].Text)
+	}
+}
+
+// Every container must run as its owner's UID with memory and CPU limits and a
+// read-only root; a spec missing any of them is refused before anything is sent.
+func TestCreateContainerRefusesInsecureSpec(t *testing.T) {
+	c := serve(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		t.Errorf("request sent for an insecure spec: %s", r.URL.Path)
+	}))
+	ok := ContainerSpec{Image: "img", User: "100001:100001", MemoryBytes: 64 << 20, NanoCPUs: 100_000_000, ReadOnly: true}
+	bad := map[string]ContainerSpec{}
+	for _, user := range []string{"", "root", "0", "0:0", "100001:0", "100001:root", "100001:", ":100001", "-1"} {
+		s := ok
+		s.User = user
+		bad["user "+user] = s
+	}
+	noMem, noCPU, writable := ok, ok, ok
+	noMem.MemoryBytes, noCPU.NanoCPUs, writable.ReadOnly = 0, 0, false
+	bad["no memory"], bad["no cpu"], bad["writable root"] = noMem, noCPU, writable
+	for name, spec := range bad {
+		if _, err := c.CreateContainer(context.Background(), "x", spec); !errors.Is(err, ErrInsecureSpec) {
+			t.Errorf("%s: err = %v, want ErrInsecureSpec", name, err)
+		}
+	}
+}

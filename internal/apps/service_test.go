@@ -206,6 +206,9 @@ func TestContainerSpec(t *testing.T) {
 	if spec.MemoryBytes != 512<<20 || spec.NanoCPUs != 500_000_000 || spec.Network != "runova-u2" || !spec.ReadOnly {
 		t.Errorf("limits: %+v", spec)
 	}
+	if opts := spec.Tmpfs["/tmp"]; !strings.Contains(","+opts+",", ",exec,") || !strings.Contains(","+opts+",", ",mode=1777,") {
+		t.Errorf("/tmp tmpfs options = %q, want exec (native libs unpacked by JVM apps) and mode=1777 (user UID can write)", opts)
+	}
 	if spec.InternalPort != 8080 || spec.HostPort != 30123 || spec.Tmpfs["/tmp"] == "" {
 		t.Errorf("ports/tmpfs: %+v", spec)
 	}

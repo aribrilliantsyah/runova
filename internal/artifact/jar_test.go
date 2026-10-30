@@ -1,9 +1,13 @@
 package artifact
 
 import (
+	"archive/zip"
+	"errors"
 	"os"
 	"path/filepath"
+	"runtime"
 	"slices"
+	"strconv"
 	"testing"
 )
 
@@ -219,5 +223,67 @@ func TestJarPortPlaceholderWithoutDefault(t *testing.T) {
 	}
 	if rep.Port != 8080 || rep.PortSource != "bawaan" {
 		t.Errorf("port = %d (%s)", rep.Port, rep.PortSource)
+	}
+}
+
+// A JAR within the upload size limit can still carry millions of tiny entries;
+// archive/zip allocates a struct for each before anything can be checked.
+func TestJarTooManyEntriesIsRejectedCheaply(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "many.jar")
+	f, err := os.Create(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	zw := zip.NewWriter(f)
+	for i := range 400_000 {
+		if _, err := zw.CreateHeader(&zip.FileHeader{Name: "a/b/c/d/e/f/g/h/" + strconv.Itoa(i) + ".class", Method: zip.Store}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := zw.Close(); err != nil {
+		t.Fatal(err)
+	}
+	f.Close()
+
+	var before, after runtime.MemStats
+	runtime.ReadMemStats(&before)
+	rep, err := InspectJar(path)
+	runtime.ReadMemStats(&after)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !hasProblem(rep, "terlalu kompleks") {
+		t.Errorf("problems = %v, want the too-complex problem", rep.Problems)
+	}
+	if alloc := after.TotalAlloc - before.TotalAlloc; alloc > 64<<20 {
+		t.Errorf("inspection allocated %d MB for a JAR it should refuse up front", alloc>>20)
+	}
+}
+
+func TestJarNestedBudget(t *testing.T) {
+	lib := zipBytes(t, map[string][]byte{"lib/A.class": classBytes(52)})
+	files := map[string][]byte{
+		"META-INF/MANIFEST.MF": manifest("Main-Class", "app.Main"),
+		"app/Main.class":       classBytes(52),
+	}
+	for i := range 3 {
+		files["BOOT-INF/lib/"+strconv.Itoa(i)+".jar"] = lib
+	}
+	path := buildJar(t, files)
+
+	f, _ := os.Open(path)
+	defer f.Close()
+	st, _ := f.Stat()
+	zr, err := zip.NewReader(f, st.Size())
+	if err != nil {
+		t.Fatal(err)
+	}
+	left := int64(2*len(lib) + len(lib)/2)
+	if _, err := maxClassMajor(zr, &left); !errors.Is(err, errJarTooBig) {
+		t.Errorf("err = %v, want errJarTooBig once the nested budget is spent", err)
+	}
+	left = int64(3 * len(lib))
+	if m, err := maxClassMajor(zr, &left); err != nil || m != 52 {
+		t.Errorf("within budget: major=%d err=%v", m, err)
 	}
 }

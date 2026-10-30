@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strings"
 	"testing"
 )
 
@@ -109,6 +110,8 @@ func TestTarRejectsTraversalAndLinks(t *testing.T) {
 		"hardlink": {reg("app", []byte("x")), {name: "link", typeflag: tar.TypeLink, link: "app"}},
 		"device":   {{name: "dev", typeflag: tar.TypeChar}},
 		"abs dir":  {{name: "/tmp/", typeflag: tar.TypeDir}},
+		"too long": {reg(strings.Repeat("a", 300), []byte("x"))},
+		"control":  {reg("app\x01evil", []byte("x"))},
 	}
 	for name, entries := range cases {
 		parent := t.TempDir()

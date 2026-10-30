@@ -21,6 +21,7 @@ var (
 const (
 	envExampleName = ".env.example"
 	maxEnvExample  = 1 << 20
+	maxEntryName   = 255
 	// tarOverhead is the decompressed stream allowance beyond the content
 	// limit for tar headers and padding.
 	tarOverhead = 1 << 20
@@ -174,7 +175,11 @@ func writeEntry(dst string, r io.Reader, remaining int64) (int64, error) {
 // cleanEntryName normalises a tar entry name. It reports false for absolute
 // paths and any path with a ".." element. The archive root ("./") yields ".".
 func cleanEntryName(name string) (string, bool) {
-	if name == "" || strings.HasPrefix(name, "/") {
+	// Over-long names and control characters (NUL included) cannot be created
+	// on disk; refusing them here keeps a crafted archive from surfacing as an
+	// I/O error (HTTP 500) instead of a rejected upload.
+	if name == "" || strings.HasPrefix(name, "/") || len(name) > maxEntryName ||
+		strings.ContainsFunc(name, func(r rune) bool { return r < 0x20 || r == 0x7f }) {
 		return "", false
 	}
 	for elem := range strings.SplitSeq(name, "/") {
