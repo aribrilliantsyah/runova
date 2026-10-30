@@ -1,0 +1,3 @@
+#!/usr/bin/env bash
+echo "psql $*" >> "$CALLS"
+if [[ " $* " == *" -f - "* ]]; then cat >> "$RUNOVA_ROOT/.psql-input"; else echo 1; fi

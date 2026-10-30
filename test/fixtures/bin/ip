@@ -1,0 +1,2 @@
+#!/usr/bin/env bash
+echo "1.1.1.1 via 10.0.0.1 dev eth0 src ${TEST_IP:-203.0.113.9} uid 0"

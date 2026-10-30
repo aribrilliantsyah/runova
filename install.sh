@@ -1,0 +1,594 @@
+#!/usr/bin/env bash
+# Runova installer for Ubuntu Server 26.04 (amd64).
+#
+#   sudo ./install.sh [--domain panel.contoh.id | --port 8443] [--public-ip IP] [--yes]
+#
+# Every step checks first whether it is already done, so running the same
+# command again updates the binary and the unit and leaves data, keys and the
+# admin alone. Only what needs root and OS packages happens here; the keys,
+# the admin and the panel address are written by `runova` itself, run as the
+# runova user so that the files it creates belong to the service.
+
+# RUNOVA_ROOT prefixes every path, RUNOVA_SRC is the folder with the release
+# files; both exist so the bats tests can run the steps in a scratch folder.
+ROOT="${RUNOVA_ROOT:-}"
+SRC_DIR="${RUNOVA_SRC:-$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)}"
+
+SERVICE_USER=runova
+ETC_DIR="$ROOT/etc/runova"
+DATA_DIR="$ROOT/var/lib/runova"
+ENV_FILE="$ETC_DIR/runova.env"
+SECRET_KEY="$ETC_DIR/secret.key"
+BIN="$ROOT/usr/local/bin/runova"
+UNIT="$ROOT/etc/systemd/system/runova.service"
+CADDYFILE="$ROOT/etc/caddy/Caddyfile"
+CADDY_DROPIN="$ROOT/etc/systemd/system/caddy.service.d/runova.conf"
+DOCKER_DAEMON_JSON="$ROOT/etc/docker/daemon.json"
+PG_ETC="$ROOT/etc/postgresql/18/main"
+
+DEFAULT_PORT=8443
+DEFAULT_LISTEN=127.0.0.1:7070
+DOCKER_POOL_BASE=172.31.0.0/16
+RUNOVA_SUBNET=172.30.0.0/16
+PACKAGES=(docker.io caddy postgresql-18 ufw jq curl)
+
+DOMAIN=""
+PORT=""
+PUBLIC_IP=""
+ASSUME_YES=0
+PANEL_EXPLICIT=0
+ADMIN_PASSWORD=""
+VERSION=""
+PUT_CHANGED=0
+
+log() { printf '==> %s\n' "$*"; }
+warn() { printf 'Peringatan: %s\n' "$*" >&2; }
+die() {
+	printf 'Galat: %s\n' "$*" >&2
+	exit 1
+}
+
+usage() {
+	cat <<'EOF'
+Penggunaan: sudo ./install.sh [opsi]
+
+  --domain <host>    panel di https://<host> (HTTPS otomatis)
+  --port <n>         panel di https://<IP server>:<n> (bawaan bila tanpa opsi: 8443)
+  --public-ip <ip>   IP publik server, disimpan ke setelan Runova
+  --yes, -y          jangan bertanya (untuk instalasi tanpa terminal)
+  --help, -h         tampilkan bantuan ini
+
+--domain dan --port tidak bisa dipakai bersamaan. Tanpa keduanya pada
+pemasangan ulang, alamat panel yang sudah ada tidak diubah.
+EOF
+}
+
+valid_domain() {
+	local d=$1
+	((${#d} <= 253)) || return 1
+	[[ $d =~ ^[0-9.]+$ ]] && return 1
+	[[ $d =~ ^([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$ ]]
+}
+
+valid_port() {
+	local p=$1
+	[[ $p =~ ^[0-9]+$ ]] || return 1
+	((p >= 1024 && p <= 65535)) || return 1
+	# 2019 is Caddy's admin API, 5432 PostgreSQL, 7070 Runova itself, 20000-20999 the app IP ports.
+	((p != 2019 && p != 5432 && p != 7070 && (p < 20000 || p > 20999)))
+}
+
+valid_ip() {
+	local ip=$1 octet
+	if [[ $ip =~ ^([0-9]{1,3})\.([0-9]{1,3})\.([0-9]{1,3})\.([0-9]{1,3})$ ]]; then
+		for octet in "${BASH_REMATCH[@]:1}"; do
+			((10#$octet <= 255)) || return 1
+		done
+		return 0
+	fi
+	[[ $ip == *:* && $ip =~ ^[0-9a-fA-F:.]+$ ]]
+}
+
+set_option() {
+	local name=$1 value=$2
+	case "$name" in
+	--domain)
+		value=${value,,}
+		valid_domain "$value" || die "Domain tidak valid: $value"
+		DOMAIN=$value
+		;;
+	--port)
+		valid_port "$value" || die "Port panel tidak valid: $value (pakai 1024-65535, bukan 2019, 5432, 7070, atau 20000-20999)"
+		PORT=$value
+		;;
+	--public-ip)
+		valid_ip "$value" || die "IP publik tidak valid: $value"
+		PUBLIC_IP=$value
+		;;
+	esac
+}
+
+parse_args() {
+	DOMAIN="" PORT="" PUBLIC_IP="" ASSUME_YES=0 PANEL_EXPLICIT=0
+	while (($# > 0)); do
+		case "$1" in
+		--domain | --port | --public-ip)
+			(($# >= 2)) || die "Opsi $1 butuh nilai"
+			set_option "$1" "$2"
+			shift 2
+			;;
+		--domain=* | --port=* | --public-ip=*)
+			set_option "${1%%=*}" "${1#*=}"
+			shift
+			;;
+		--yes | -y)
+			ASSUME_YES=1
+			shift
+			;;
+		-h | --help)
+			usage
+			exit 0
+			;;
+		*) die "Opsi tidak dikenal: $1 (lihat --help)" ;;
+		esac
+	done
+	if [[ -n $DOMAIN && -n $PORT ]]; then
+		die "--domain dan --port tidak bisa dipakai bersamaan: panel dibuka lewat domain atau lewat IP:port"
+	fi
+	if [[ -n $DOMAIN || -n $PORT ]]; then
+		PANEL_EXPLICIT=1
+	fi
+}
+
+check_os() {
+	local id version arch
+	# shellcheck disable=SC1091
+	id=$(. "$ROOT/etc/os-release" 2>/dev/null && printf '%s' "${ID:-}")
+	# shellcheck disable=SC1091
+	version=$(. "$ROOT/etc/os-release" 2>/dev/null && printf '%s' "${VERSION_ID:-}")
+	if [[ $id != ubuntu || $version != 26.04 ]]; then
+		die "Runova hanya mendukung Ubuntu Server 26.04 (terdeteksi: ${id:-tidak diketahui} ${version})"
+	fi
+	arch=$(uname -m)
+	[[ $arch == x86_64 ]] || die "Runova hanya mendukung arsitektur amd64 (x86_64); terdeteksi: $arch"
+}
+
+confirm_plan() {
+	local answer
+	if ((ASSUME_YES)); then
+		return 0
+	fi
+	[[ -t 0 ]] || die "Tidak ada terminal untuk bertanya; tambahkan --yes untuk instalasi tanpa tanya"
+	cat <<'EOF'
+Installer akan memasang docker.io, caddy, postgresql-18, ufw, jq, dan curl dari apt Ubuntu,
+membuat user "runova", mengatur Caddy dan PostgreSQL, membuka port di ufw (dan
+mengaktifkan ufw bila belum aktif, SSH diizinkan lebih dulu), lalu menjalankan Runova.
+EOF
+	read -r -p "Lanjutkan? [y/N] " answer
+	[[ $answer == [yY]* ]] || die "Dibatalkan"
+}
+
+# wait_for TRIES COMMAND...: runs the command once a second until it succeeds.
+wait_for() {
+	local tries=$1 i
+	shift
+	for ((i = 0; i < tries; i++)); do
+		if "$@" >/dev/null 2>&1; then
+			return 0
+		fi
+		sleep 1
+	done
+	return 1
+}
+
+# put_file DEST MODE: writes stdin to DEST through a temporary file in the same
+# folder and sets PUT_CHANGED to 1 when the content differs from what was there.
+put_file() {
+	local dest=$1 mode=$2 tmp
+	tmp=$(mktemp "$dest.new.XXXXXX")
+	cat >"$tmp"
+	chmod "$mode" "$tmp"
+	if [[ -f $dest ]] && cmp -s "$tmp" "$dest"; then
+		rm -f "$tmp"
+		chmod "$mode" "$dest"
+		PUT_CHANGED=0
+	else
+		mv -f "$tmp" "$dest"
+		PUT_CHANGED=1
+	fi
+}
+
+# as_runova SUBCOMMAND...: runs the installed binary as the service user.
+as_runova() {
+	(cd / && runuser -u "$SERVICE_USER" -- env "RUNOVA_DATA=$DATA_DIR" "RUNOVA_SECRET_KEY=$SECRET_KEY" "$BIN" "$@")
+}
+
+package_installed() {
+	[[ $(dpkg-query -W -f="\${Status}" "$1" 2>/dev/null) == "install ok installed" ]]
+}
+
+step_packages() {
+	local missing=() p
+	for p in "${PACKAGES[@]}"; do
+		if ! package_installed "$p"; then
+			missing+=("$p")
+		fi
+	done
+	if ((${#missing[@]} == 0)); then
+		log "Paket sudah terpasang"
+		return 0
+	fi
+	log "Memasang paket: ${missing[*]}"
+	apt-get update
+	DEBIAN_FRONTEND=noninteractive apt-get install -y "${missing[@]}"
+}
+
+step_user_dirs() {
+	local groups
+	getent group docker >/dev/null || die "Grup docker tidak ada; apakah paket docker.io terpasang?"
+	if groups=$(id -nG "$SERVICE_USER" 2>/dev/null); then
+		case " $groups " in
+		*" docker "*) ;;
+		*) usermod -aG docker "$SERVICE_USER" ;;
+		esac
+	else
+		log "Membuat user $SERVICE_USER"
+		useradd --system --user-group --groups docker --home-dir /var/lib/runova \
+			--no-create-home --shell /usr/sbin/nologin "$SERVICE_USER"
+	fi
+	# The folders belong to runova before `runova keygen` and `runova admin create`
+	# run, or the key and the database would end up owned by root.
+	install -d -m 0750 "$ETC_DIR" "$DATA_DIR"
+	chown "$SERVICE_USER:$SERVICE_USER" "$ETC_DIR" "$DATA_DIR"
+}
+
+step_binary() {
+	local src="$SRC_DIR/runova" tmp
+	[[ -f $src ]] || die "$src tidak ditemukan; jalankan install.sh dari folder hasil ekstrak rilis"
+	VERSION=$("$src" version) || die "$src tidak bisa dijalankan di server ini"
+	VERSION=${VERSION#runova }
+	install -d -m 0755 "$(dirname "$BIN")"
+	tmp=$(mktemp "$BIN.new.XXXXXX")
+	if ! install -m 0755 "$src" "$tmp"; then
+		rm -f "$tmp"
+		die "Gagal menyalin binary ke $(dirname "$BIN")"
+	fi
+	mv -f "$tmp" "$BIN"
+	log "Binary runova $VERSION terpasang di /usr/local/bin/runova"
+}
+
+step_secret() {
+	if [[ -e $SECRET_KEY ]]; then
+		log "Kunci enkripsi sudah ada"
+		return 0
+	fi
+	log "Membuat kunci enkripsi"
+	as_runova keygen
+}
+
+step_env_file() {
+	if [[ -e $ENV_FILE ]]; then
+		log "Konfigurasi $ENV_FILE sudah ada, tidak diubah"
+	else
+		log "Menulis $ENV_FILE"
+		put_file "$ENV_FILE" 0640 <<EOF
+RUNOVA_LISTEN=$DEFAULT_LISTEN
+RUNOVA_DATA=/var/lib/runova
+RUNOVA_SECRET_KEY=/etc/runova/secret.key
+EOF
+	fi
+	chown "root:$SERVICE_USER" "$ENV_FILE"
+	chmod 0640 "$ENV_FILE"
+}
+
+step_docker_daemon() {
+	local merged
+	install -d -m 0755 "$(dirname "$DOCKER_DAEMON_JSON")"
+	if [[ -s $DOCKER_DAEMON_JSON ]]; then
+		jq -e 'type == "object"' "$DOCKER_DAEMON_JSON" >/dev/null 2>&1 ||
+			die "$DOCKER_DAEMON_JSON bukan objek JSON yang valid; perbaiki dulu lalu jalankan ulang"
+		if jq -e '."default-address-pools" != null' "$DOCKER_DAEMON_JSON" >/dev/null; then
+			if ! jq -e --arg base "$DOCKER_POOL_BASE" '."default-address-pools" | any(.base == $base)' "$DOCKER_DAEMON_JSON" >/dev/null; then
+				warn "$DOCKER_DAEMON_JSON sudah punya default-address-pools sendiri; dibiarkan. Pastikan tidak tumpang tindih dengan $RUNOVA_SUBNET (jaringan pengguna Runova)."
+			fi
+			return 0
+		fi
+		merged=$(jq --arg base "$DOCKER_POOL_BASE" '. + {"default-address-pools": [{"base": $base, "size": 24}]}' "$DOCKER_DAEMON_JSON")
+	else
+		merged=$(jq -n --arg base "$DOCKER_POOL_BASE" '{"default-address-pools": [{"base": $base, "size": 24}]}')
+	fi
+	put_file "$DOCKER_DAEMON_JSON" 0644 <<<"$merged"
+	if ((PUT_CHANGED)); then
+		log "Jaringan bawaan Docker dipindah ke $DOCKER_POOL_BASE; Docker dijalankan ulang"
+		systemctl restart docker
+	fi
+}
+
+caddyfile_wanted() {
+	printf '{\n\tadmin localhost:2019\n}\n'
+}
+
+# caddyfile_pristine FILE: true when FILE is the Caddyfile the package shipped.
+caddyfile_pristine() {
+	local want have
+	want=$(dpkg-query -W -f="\${Conffiles}\n" caddy 2>/dev/null | awk '$1 == "/etc/caddy/Caddyfile" { print $2 }')
+	[[ -n $want ]] || return 1
+	have=$(md5sum "$1" | awk '{ print $1 }')
+	[[ $have == "$want" ]]
+}
+
+step_caddy() {
+	local changed=0 backup
+	install -d -m 0755 "$(dirname "$CADDYFILE")" "$(dirname "$CADDY_DROPIN")"
+	if [[ -f $CADDYFILE ]] && ! caddyfile_wanted | cmp -s - "$CADDYFILE" && ! caddyfile_pristine "$CADDYFILE"; then
+		if ((!ASSUME_YES)); then
+			die "$CADDYFILE sudah diubah dan bukan bawaan paket. Runova mengatur Caddy lewat API dan memerlukan Caddyfile yang hanya berisi '{ admin localhost:2019 }'. Pindahkan situs Anda dulu, atau jalankan ulang dengan --yes untuk menyalin cadangan ke $CADDYFILE.runova-backup lalu menggantinya."
+		fi
+		backup="$CADDYFILE.runova-backup"
+		if [[ -e $backup ]]; then
+			backup="$backup.$(date +%s)"
+		fi
+		cp -p "$CADDYFILE" "$backup"
+		warn "Caddyfile lama disalin ke $backup"
+	fi
+	put_file "$CADDYFILE" 0644 < <(caddyfile_wanted)
+	changed=$((changed | PUT_CHANGED))
+	# --resume keeps the configuration Runova sends through the API across a Caddy restart.
+	put_file "$CADDY_DROPIN" 0644 <<'EOF'
+[Service]
+ExecStart=
+ExecStart=/usr/bin/caddy run --environ --resume --config /etc/caddy/Caddyfile
+EOF
+	changed=$((changed | PUT_CHANGED))
+	systemctl daemon-reload
+	systemctl enable caddy
+	if ((changed)); then
+		systemctl restart caddy
+	else
+		systemctl start caddy
+	fi
+}
+
+step_postgres() {
+	local conf_changed=0 hba_changed=0 hba="$PG_ETC/pg_hba.conf" hba_d="$PG_ETC/pg_hba.d"
+	[[ -f $hba ]] || die "$hba tidak ada; cluster PostgreSQL 18/main belum dibuat"
+
+	install -d -m 0755 "$PG_ETC/conf.d"
+	put_file "$PG_ETC/conf.d/runova.conf" 0644 <<'EOF'
+# Managed by the Runova installer.
+listen_addresses = '*'
+EOF
+	conf_changed=$PUT_CHANGED
+
+	# Runova writes its rules here; the include goes last so the stock rules keep their place.
+	install -d -m 0770 "$hba_d"
+	chown "postgres:$SERVICE_USER" "$hba_d"
+	if [[ ! -e $hba_d/runova.conf ]]; then
+		cat >"$hba_d/runova.conf" <<EOF
+# Managed by Runova; changes are overwritten.
+host all all $RUNOVA_SUBNET scram-sha-256
+EOF
+		chown "postgres:$SERVICE_USER" "$hba_d/runova.conf"
+		chmod 0664 "$hba_d/runova.conf"
+	fi
+	if ! grep -Eq "^[[:space:]]*include_dir[[:space:]]+'pg_hba\.d'" "$hba"; then
+		printf "\n# Runova\ninclude_dir 'pg_hba.d'\n" >>"$hba"
+		hba_changed=1
+	fi
+
+	systemctl enable postgresql
+	if ((conf_changed)); then
+		systemctl restart postgresql
+	else
+		systemctl start postgresql
+		if ((hba_changed)); then
+			systemctl reload postgresql
+		fi
+	fi
+
+	wait_for 30 pg_query 'SELECT 1' || die "PostgreSQL tidak menjawab dalam 30 detik"
+	pg_script <<'EOF'
+DO $$
+BEGIN
+	IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'runova') THEN
+		CREATE ROLE runova LOGIN CREATEDB CREATEROLE;
+	ELSE
+		ALTER ROLE runova LOGIN CREATEDB CREATEROLE;
+	END IF;
+END
+$$;
+GRANT EXECUTE ON FUNCTION pg_reload_conf() TO runova;
+EOF
+}
+
+# pg_query SQL and pg_script run psql as the postgres user over the local socket.
+pg_query() {
+	(cd / && runuser -u postgres -- psql -X -At -v ON_ERROR_STOP=1 -d postgres -c "$1")
+}
+
+pg_script() {
+	(cd / && runuser -u postgres -- psql -X -q -v ON_ERROR_STOP=1 -d postgres -f -)
+}
+
+# sshd_ports prints every TCP port sshd listens on, one per line (22 if none is found).
+sshd_ports() {
+	local ports
+	ports=$(
+		{
+			sshd -T 2>/dev/null | awk '$1 == "port" { print $2 }' || true
+			ss -H -ltnp 2>/dev/null | awk '/"sshd"/ { n = split($4, a, ":"); print a[n] }' || true
+			# With socket activation the port comes from ssh.socket, not from sshd_config.
+			systemctl show ssh.socket -p Listen 2>/dev/null | grep -oE ':[0-9]+ \(Stream\)' | tr -dc '0-9\n' || true
+		} | sort -un
+	)
+	printf '%s\n' "${ports:-22}"
+}
+
+step_firewall() {
+	local p status
+	for p in $(sshd_ports); do
+		ufw allow "$p/tcp"
+	done
+	ufw allow 80/tcp
+	ufw allow 443/tcp
+	ufw allow 20000:20999/tcp
+	ufw allow 5432/tcp
+	if [[ -n $PORT ]]; then
+		ufw allow "$PORT/tcp"
+	fi
+	status=$(ufw status)
+	if [[ $status == *"Status: inactive"* ]]; then
+		log "Mengaktifkan ufw (SSH sudah diizinkan)"
+		ufw --force enable
+	fi
+}
+
+step_panel() {
+	local args=() rc=0
+	if ((!PANEL_EXPLICIT)); then
+		# Without --domain/--port a rerun keeps the address chosen at the first install.
+		as_runova admin exists || rc=$?
+		case $rc in
+		0) log "Alamat panel tidak diubah" ;;
+		1) PORT=$DEFAULT_PORT ;;
+		*) die "Tidak bisa membaca database Runova (kode $rc)" ;;
+		esac
+	fi
+	if [[ -n $DOMAIN ]]; then
+		args=(--domain "$DOMAIN")
+	elif [[ -n $PORT ]]; then
+		args=(--port "$PORT")
+	fi
+	if [[ -n $PUBLIC_IP ]]; then
+		args+=(--public-ip "$PUBLIC_IP")
+	fi
+	if ((${#args[@]} > 0)); then
+		as_runova panel set "${args[@]}"
+	fi
+}
+
+# step_admin creates the first admin before the service starts, so that the
+# service's start-up reconciliation gives that admin a PostgreSQL role.
+step_admin() {
+	local rc=0 out
+	as_runova admin exists || rc=$?
+	case $rc in
+	0)
+		log "Admin sudah ada"
+		return 0
+		;;
+	1) ;;
+	*) die "Tidak bisa membaca database Runova (kode $rc)" ;;
+	esac
+	out=$(as_runova admin create admin) || die "Gagal membuat admin"
+	ADMIN_PASSWORD=$(printf '%s\n' "$out" | sed -n 's/^Password: //p')
+	[[ -n $ADMIN_PASSWORD ]] || die "Admin dibuat tetapi password tidak terbaca dari keluaran runova"
+}
+
+panel_listen() {
+	local listen
+	listen=$(sed -n 's/^RUNOVA_LISTEN=//p' "$ENV_FILE" 2>/dev/null | tail -n 1)
+	listen=${listen:-$DEFAULT_LISTEN}
+	if [[ $listen == :* ]]; then
+		listen=127.0.0.1$listen
+	fi
+	printf '%s\n' "$listen"
+}
+
+step_service() {
+	[[ -f $SRC_DIR/runova.service ]] || die "$SRC_DIR/runova.service tidak ditemukan"
+	install -d -m 0755 "$(dirname "$UNIT")"
+	put_file "$UNIT" 0644 <"$SRC_DIR/runova.service"
+	systemctl daemon-reload
+	systemctl enable runova
+	# Restart, not start: a running service must pick up the new binary.
+	systemctl restart runova
+	wait_for 30 curl -s -o /dev/null "http://$(panel_listen)/api/me" ||
+		die "Layanan runova tidak menjawab dalam 30 detik. Lihat: journalctl -u runova -n 50"
+}
+
+step_verify() {
+	as_runova check || die "Pemeriksaan runova gagal (baris 'fail' di atas). Lihat: journalctl -u runova -n 50"
+}
+
+run_steps() {
+	step_packages
+	step_user_dirs
+	step_binary
+	step_secret
+	step_env_file
+	step_docker_daemon
+	step_caddy
+	step_postgres
+	step_panel
+	step_admin
+	step_firewall
+	step_service
+	step_verify
+}
+
+detect_ip() {
+	ip -4 -o route get 1.1.1.1 2>/dev/null | awk '{ for (i = 1; i < NF; i++) if ($i == "src") { print $(i + 1); exit } }' || true
+}
+
+is_private_ip() {
+	[[ $1 =~ ^(10\.|127\.|169\.254\.|192\.168\.|172\.(1[6-9]|2[0-9]|3[01])\.|100\.(6[4-9]|[7-9][0-9]|1[01][0-9]|12[0-7])\.) ]]
+}
+
+summary() {
+	local ip public=0 host
+	ip=${PUBLIC_IP:-$(detect_ip)}
+	if [[ -n $PUBLIC_IP ]] || { [[ -n $ip ]] && ! is_private_ip "$ip"; }; then
+		public=1
+	fi
+
+	printf '\nRunova %s siap.\n' "${VERSION:-}"
+	if [[ -n $ADMIN_PASSWORD ]]; then
+		if [[ -n $DOMAIN ]]; then
+			printf '\nAlamat panel : https://%s\n' "$DOMAIN"
+			printf 'Arahkan DNS %s ke IP server ini; Caddy menerbitkan sertifikat HTTPS sendiri.\n' "$DOMAIN"
+		else
+			host=${ip:-<IP server>}
+			printf '\nAlamat panel : https://%s:%s\n' "$host" "$PORT"
+			printf 'Sertifikat dibuat Caddy sendiri, jadi peramban memberi peringatan; lanjutkan saja.\n'
+		fi
+		printf 'Username     : admin\n'
+		printf 'Password     : %s\n' "$ADMIN_PASSWORD"
+		printf '\nPassword ini hanya ditampilkan sekali. Bila hilang: sudo -u runova env RUNOVA_DATA=/var/lib/runova runova admin reset-password admin\n'
+	else
+		printf 'Runova diperbarui. Data, kunci, admin, dan alamat panel tidak diubah.\n'
+	fi
+	if ((!public)); then
+		printf '\nServer ini tampaknya tidak punya IP publik (IP: %s). Panel hanya terjangkau dari jaringan yang sama.\n' "${ip:-tidak terdeteksi}"
+		printf 'Untuk memberi domain ke aplikasi tanpa IP publik, pakai Cloudflare Tunnel (lihat README).\n'
+		printf 'Bila server punya IP publik lewat NAT, jalankan ulang dengan --public-ip <ip>.\n'
+	fi
+}
+
+INSTALL_DONE=0
+
+on_exit() {
+	local status=$?
+	if ((status != 0 && !INSTALL_DONE)); then
+		printf '\nPemasangan berhenti sebelum selesai. Perbaiki masalah di atas lalu jalankan ulang perintah yang sama; langkah yang sudah selesai dilewati.\n' >&2
+	fi
+}
+
+main() {
+	parse_args "$@"
+	((EUID == 0)) || die "Jalankan sebagai root: sudo ./install.sh"
+	check_os
+	confirm_plan
+	trap on_exit EXIT
+	run_steps
+	INSTALL_DONE=1
+	summary
+}
+
+# `source install.sh --lib` defines the functions and runs nothing (for the tests).
+if [[ ${1:-} == --lib ]]; then
+	# shellcheck disable=SC2317
+	return 0 2>/dev/null || exit 0
+fi
+set -euo pipefail
+main "$@"

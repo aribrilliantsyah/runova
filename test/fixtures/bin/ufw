@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+echo "ufw $*" >> "$CALLS"
+if [[ $1 == status ]]; then
+  if [[ -e "$RUNOVA_ROOT/.ufw-active" ]]; then echo "Status: active"; else echo "Status: inactive"; fi
+fi

@@ -17,7 +17,7 @@ dist="$root/dist"
 stage="$dist/stage/$name"
 archive="$name.tar.gz"
 
-rm -rf "$dist/stage" "$dist/$archive" "$dist/SHA256SUMS"
+rm -rf "${dist:?}/stage" "${dist:?}/$archive" "${dist:?}/SHA256SUMS"
 mkdir -p "$stage"
 
 CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath \
