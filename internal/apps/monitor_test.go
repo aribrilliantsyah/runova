@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"runova/internal/apps"
 	"runova/internal/docker"
 	"runova/internal/docker/dockertest"
 	"runova/internal/store"
@@ -363,9 +364,14 @@ func TestStopEchoDoesNotSwallowLaterCrash(t *testing.T) {
 	otherCID := activeContainer(t, e, other)
 	startMonitor(t, e)
 
-	if err := e.svc.Stop(ctx, u, app.ID); err != nil {
-		t.Fatal(err)
-	}
+	// Monitor reconciles right after subscribing and holds the app's lock meanwhile.
+	waitFor(t, "stop accepted", func() bool {
+		err := e.svc.Stop(ctx, u, app.ID)
+		if err != nil && !errors.Is(err, apps.ErrBusy) {
+			t.Fatal(err)
+		}
+		return err == nil
+	})
 	die(t, e, app, cid)
 	// Events are handled in order: once the other app's clean exit has been
 	// applied, the echo of the stop before it has been handled too.
