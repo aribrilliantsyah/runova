@@ -3,3 +3,4 @@
 /dist/
 *.sqlite*
 .brief-*.md
+test/e2e/.cache/

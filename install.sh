@@ -371,8 +371,9 @@ EOF
 		chown "postgres:$SERVICE_USER" "$hba_d/runova.conf"
 		chmod 0664 "$hba_d/runova.conf"
 	fi
-	if ! grep -Eq "^[[:space:]]*include_dir[[:space:]]+'pg_hba\.d'" "$hba"; then
-		printf "\n# Runova\ninclude_dir 'pg_hba.d'\n" >>"$hba"
+	# pg_hba.conf has no single-quote syntax (unlike postgresql.conf): quotes would become part of the folder name.
+	if ! grep -Eq '^[[:space:]]*include_dir[[:space:]]+"?pg_hba\.d"?[[:space:]]*$' "$hba"; then
+		printf '\n# Runova\ninclude_dir pg_hba.d\n' >>"$hba"
 		hba_changed=1
 	fi
 

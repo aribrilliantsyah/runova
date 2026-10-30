@@ -147,7 +147,8 @@ line_of() { grep -n -m1 -- "$1" "$CALLS" | cut -d: -f1; }
 @test "pg_hba include added once" {
 	step_postgres
 	step_postgres
-	[ "$(grep -c "include_dir 'pg_hba.d'" "$RUNOVA_ROOT/etc/postgresql/18/main/pg_hba.conf")" -eq 1 ]
+	[ "$(grep -c "^include_dir pg_hba.d$" "$RUNOVA_ROOT/etc/postgresql/18/main/pg_hba.conf")" -eq 1 ]
+	! grep -q "include_dir '" "$RUNOVA_ROOT/etc/postgresql/18/main/pg_hba.conf"
 }
 
 @test "postgres listens on all interfaces, role and grant are created" {
