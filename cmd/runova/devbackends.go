@@ -32,24 +32,44 @@ var productionData = "/var/lib/runova"
 // errFakeOnProduction is returned when RUNOVA_FAKE_BACKENDS=1 meets the production data directory.
 var errFakeOnProduction = errors.New("RUNOVA_FAKE_BACKENDS=1 ditolak untuk RUNOVA_DATA=" + productionData)
 
-// checkFakeBackends refuses fake backends on the production data directory. It compares the
+// onProductionData reports whether dir is the production data directory. It compares the
 // directories themselves (os.SameFile), so a relative path, a symlink or a bind of the
 // production directory is caught as well as the plain spelling.
-func checkFakeBackends(cfg config.Config) error {
-	if !cfg.FakeBackends {
-		return nil
-	}
-	if filepath.Clean(cfg.DataDir) == filepath.Clean(productionData) {
-		return errFakeOnProduction
+func onProductionData(dir string) bool {
+	if filepath.Clean(dir) == filepath.Clean(productionData) {
+		return true
 	}
 	prod, err := os.Stat(productionData)
 	if err != nil {
-		return nil // no production directory on this machine, nothing to protect
+		return false // no production directory on this machine, nothing to protect
 	}
-	if dir, err := os.Stat(cfg.DataDir); err == nil && os.SameFile(prod, dir) {
+	d, err := os.Stat(dir)
+	return err == nil && os.SameFile(prod, d)
+}
+
+// checkFakeBackends refuses fake backends on the production data directory.
+func checkFakeBackends(cfg config.Config) error {
+	if cfg.FakeBackends && onProductionData(cfg.DataDir) {
 		return errFakeOnProduction
 	}
 	return nil
+}
+
+// errDevOnProduction is returned when RUNOVA_DEV_CHMOD=1 meets the production data directory.
+var errDevOnProduction = errors.New("RUNOVA_DEV_CHMOD=1 ditolak untuk RUNOVA_DATA=" + productionData)
+
+// checkDevMode refuses RUNOVA_DEV_CHMOD on the production data directory.
+func checkDevMode(cfg config.Config) error {
+	if cfg.DevChmod && onProductionData(cfg.DataDir) {
+		return errDevOnProduction
+	}
+	return nil
+}
+
+// devChmod makes app data folders world-writable instead of handing them to the
+// container UID, for a development process that is not root and so lacks CAP_CHOWN.
+func devChmod(svc *apps.Service) {
+	svc.Chown = func(path string, _ int) error { return os.Chmod(path, 0o777) }
 }
 
 func ok(detail string) api.Check {

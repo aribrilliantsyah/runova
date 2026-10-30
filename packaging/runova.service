@@ -1,0 +1,23 @@
+[Unit]
+Description=Runova panel
+After=docker.service caddy.service postgresql.service
+Wants=docker.service caddy.service postgresql.service
+
+[Service]
+User=runova
+Group=runova
+SupplementaryGroups=docker
+EnvironmentFile=/etc/runova/runova.env
+ExecStart=/usr/local/bin/runova serve
+Restart=on-failure
+RestartSec=3
+AmbientCapabilities=CAP_CHOWN CAP_FOWNER CAP_DAC_OVERRIDE
+CapabilityBoundingSet=CAP_CHOWN CAP_FOWNER CAP_DAC_OVERRIDE
+NoNewPrivileges=yes
+ProtectSystem=strict
+ReadWritePaths=/var/lib/runova /etc/postgresql/18/main/pg_hba.d
+ProtectHome=yes
+PrivateTmp=yes
+
+[Install]
+WantedBy=multi-user.target

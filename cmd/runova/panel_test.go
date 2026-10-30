@@ -98,3 +98,31 @@ func TestPanelSetRefusesDomainOfAnApp(t *testing.T) {
 		t.Fatalf("set an app's domain: %+v", r)
 	}
 }
+
+func TestPanelSetPublicIP(t *testing.T) {
+	env := map[string]string{"RUNOVA_DATA": t.TempDir()}
+	if r := runIn(t, env, "panel", "set", "--port", "8443"); r.code != 0 {
+		t.Fatalf("set port: %+v", r)
+	}
+	if r := runIn(t, env, "panel", "set", "--public-ip", "203.0.113.5"); r.code != 0 {
+		t.Fatalf("set public ip alone: %+v", r)
+	}
+	if v := panelSettings(t, env); v.PublicIP != "203.0.113.5" || v.PanelPort != 8443 {
+		t.Fatalf("public ip %q port %d; the address option must survive a public-ip-only change", v.PublicIP, v.PanelPort)
+	}
+	if r := runIn(t, env, "panel", "set", "--domain", "panel.a.co", "--public-ip", "2001:db8::1"); r.code != 0 {
+		t.Fatalf("set domain with public ip: %+v", r)
+	}
+	if v := panelSettings(t, env); v.PublicIP != "2001:db8::1" || v.PanelDomain != "panel.a.co" || v.PanelPort != 0 {
+		t.Fatalf("settings = %+v", v)
+	}
+	if r := runIn(t, env, "panel", "set", "--public-ip", "abc"); r.code != 1 || r.stderr == "" {
+		t.Fatalf("invalid ip: %+v", r)
+	}
+	if r := runIn(t, env, "panel", "set", "--port", "8443", "--public-ip", "abc"); r.code != 1 {
+		t.Fatalf("invalid ip with port: %+v", r)
+	}
+	if v := panelSettings(t, env); v.PublicIP != "2001:db8::1" || v.PanelDomain != "panel.a.co" {
+		t.Fatalf("a rejected command changed the settings: %+v", v)
+	}
+}

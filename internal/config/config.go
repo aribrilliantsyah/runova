@@ -21,6 +21,9 @@ type Config struct {
 	PGHBAPath string
 	// FakeBackends replaces Docker, Caddy and PostgreSQL with in-memory fakes (development and UI tests only).
 	FakeBackends bool
+	// DevChmod opens app data folders with chmod 0777 instead of chown, for a development process
+	// that is not root (local end-to-end tests only; refused for the production data directory).
+	DevChmod bool
 }
 
 // Load reads configuration through getenv, falling back to the defaults.
@@ -40,6 +43,7 @@ func Load(getenv func(string) string) Config {
 		PGDSN:         get("RUNOVA_PG_DSN", "host=/var/run/postgresql user=runova dbname=postgres"),
 		PGHBAPath:     get("RUNOVA_PG_HBA", "/etc/postgresql/18/main/pg_hba.d/runova.conf"),
 		FakeBackends:  getenv("RUNOVA_FAKE_BACKENDS") == "1",
+		DevChmod:      getenv("RUNOVA_DEV_CHMOD") == "1",
 	}
 }
 
