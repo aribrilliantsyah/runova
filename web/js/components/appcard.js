@@ -1,0 +1,34 @@
+import { h, icon, fmtTime, fmtMB, pct, bar } from "/assets/js/dom.js";
+import { kindLogo, runtimeLabel, statusOf } from "/assets/js/kinds.js";
+
+/** appCard(app, summary, publicIP) → the clickable card of the app list. */
+export function appCard(app, summary, publicIP) {
+  const [cls, label] = statusOf(app.status);
+  const logo = h("span", { class: "lgbox" }, kindLogo(app.kind));
+  const dom = summary?.domains?.[0];
+  const extra = (summary?.domains?.length || 0) - 1;
+  const domainRow = dom
+    ? h("div", {}, icon("lock"), h("span", { class: "mono" }, dom.host), extra > 0 ? h("span", { class: "faint" }, `+${extra}`) : null)
+    : h("div", {}, icon("globe"), h("span", {}, "Belum ada domain"));
+  const ipRow = app.ip_access
+    ? h("div", {}, icon("network"), h("span", { class: "mono" }, `${publicIP || location.hostname}:${app.ip_port}`))
+    : h("div", {}, icon("network"), h("span", {}, "Akses IP ditutup"));
+  const settled = app.status === "running";
+  const foot = settled
+    ? [h("span", {}, `${fmtMB(app.memory_mb)} · ${app.cpu_milli / 1000} core`)]
+    : [h("span", { class: `chip ${cls}` }, label)];
+  const when = summary?.deployed_at ? fmtTime(summary.deployed_at) : "belum pernah";
+  return h(
+    "a",
+    { class: "acard", href: `#/apps/${app.id}`, "aria-label": `${app.name}, ${label}` },
+    h(
+      "div",
+      { class: "h" },
+      logo,
+      h("div", {}, h("b", {}, app.name), h("div", { class: "sub" }, runtimeLabel(app))),
+      h("span", { class: `dot ${cls}`, title: label }),
+    ),
+    h("div", { class: "ep" }, domainRow, ipRow),
+    h("div", { class: "ft" }, ...foot, h("span", { style: { "margin-left": "auto" } }, when)),
+  );
+}

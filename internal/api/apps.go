@@ -115,10 +115,16 @@ func (s *server) listApps(w http.ResponseWriter, r *http.Request) {
 		serverError(w, r, err)
 		return
 	}
+	summary, err := s.summaries(r.Context(), list)
+	if err != nil {
+		serverError(w, r, err)
+		return
+	}
 	writeJSON(w, http.StatusOK, struct {
-		Apps  []store.App `json:"apps"`
-		Usage usageBody   `json:"usage"`
-	}{list, usageBody{used.Apps, used.MemoryMB, used.CPUMilli, u.Quota}})
+		Apps    []store.App          `json:"apps"`
+		Usage   usageBody            `json:"usage"`
+		Summary map[int64]appSummary `json:"summary"`
+	}{list, usageBody{used.Apps, used.MemoryMB, used.CPUMilli, u.Quota}, summary})
 }
 
 func (s *server) createApp(w http.ResponseWriter, r *http.Request) {
