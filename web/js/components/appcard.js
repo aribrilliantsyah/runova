@@ -1,10 +1,10 @@
 import { h, icon, fmtTime, fmtMB, fmtCPU } from "/assets/js/dom.js";
-import { kindLogo, runtimeLabel, statusOf } from "/assets/js/kinds.js";
+import { kindLogo, runtimeSub, statusOf } from "/assets/js/kinds.js";
 
 /** appCard(app, summary, publicIP) → the clickable card of the app list. */
 export function appCard(app, summary, publicIP) {
   const [cls, label] = statusOf(app.status);
-  const logo = h("span", { class: "lgbox" }, kindLogo(app.kind));
+  const logo = h("span", { class: "lgbox" }, kindLogo(app.kind, summary?.language));
   const dom = summary?.domains?.[0];
   const extra = (summary?.domains?.length || 0) - 1;
   const domainRow = dom
@@ -25,7 +25,7 @@ export function appCard(app, summary, publicIP) {
       "div",
       { class: "h" },
       logo,
-      h("div", {}, h("b", {}, app.name), h("div", { class: "sub" }, runtimeLabel(app))),
+      h("div", {}, h("b", {}, app.name), h("div", { class: "sub" }, runtimeSub(app, summary?.language))),
       h("span", { class: `dot ${cls}`, title: label }),
     ),
     h("div", { class: "ep" }, domainRow, ipRow),

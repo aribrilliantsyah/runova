@@ -121,7 +121,7 @@ export async function startRunova({ env = {} } = {}) {
 }
 
 /** A sample Spring-style JAR (Java 17 bytecode) that needs JWT_SECRET, written to dir. */
-export function buildSampleJar(dir, { name = "billing-api-2.4.1.jar", release = 17, extraProps = "" } = {}) {
+export function buildSampleJar(dir, { name = "billing-api-2.4.1.jar", release = 17, extraProps = "", extraFiles = {} } = {}) {
   const work = fs.mkdtempSync(path.join(dir, "jar-"));
   fs.mkdirSync(path.join(work, "src/com/perusahaan/billing"), { recursive: true });
   fs.writeFileSync(
@@ -134,6 +134,10 @@ export function buildSampleJar(dir, { name = "billing-api-2.4.1.jar", release = 
     path.join(work, "out/application.properties"),
     `server.port=8080\njwt.secret=\${JWT_SECRET}\ndb.url=\${DB_URL:jdbc:postgresql://localhost/app}\ndb.password=\${DB_PASSWORD}\n${extraProps}`,
   );
+  for (const [rel, content] of Object.entries(extraFiles)) {
+    fs.mkdirSync(path.dirname(path.join(work, "out", rel)), { recursive: true });
+    fs.writeFileSync(path.join(work, "out", rel), content);
+  }
   fs.writeFileSync(path.join(work, "manifest.txt"), "Main-Class: com.perusahaan.billing.BillingApplication\n");
   const jar = path.join(dir, name);
   execFileSync("jar", ["cfm", jar, "manifest.txt", "-C", "out", "."], { cwd: work });
@@ -145,6 +149,33 @@ export function buildSampleJar(dir, { name = "billing-api-2.4.1.jar", release = 
 export function buildStaticBinary(dir, name = "hello") {
   const out = path.join(dir, name);
   execFileSync("go", ["build", "-o", out, "./testdata/hello"], { cwd: repo, env: { ...process.env, CGO_ENABLED: "0", GOOS: "linux", GOARCH: "amd64" }, stdio: "inherit" });
+  return out;
+}
+
+/**
+ * A minimal static x86-64 ELF (one PT_LOAD, no interpreter, no language of its own) followed by
+ * the given NUL-terminated strings: stands in for binaries of languages that cannot be built here.
+ */
+export function buildMarkedBinary(dir, name, ...markers) {
+  const head = Buffer.alloc(64 + 56);
+  head.write("\x7fELF", 0, "latin1");
+  head[4] = 2;
+  head[5] = 1;
+  head[6] = 1;
+  head.writeUInt16LE(2, 16);
+  head.writeUInt16LE(62, 18);
+  head.writeUInt32LE(1, 20);
+  head.writeBigUInt64LE(64n, 32);
+  head.writeUInt16LE(64, 52);
+  head.writeUInt16LE(56, 54);
+  head.writeUInt16LE(1, 56);
+  head.writeUInt32LE(1, 64);
+  head.writeUInt32LE(4, 68);
+  const body = Buffer.concat(markers.map((m) => Buffer.from(`${m}\0`, "latin1")));
+  head.writeBigUInt64LE(BigInt(head.length + body.length), 96);
+  head.writeBigUInt64LE(BigInt(head.length + body.length), 104);
+  const out = path.join(dir, name);
+  fs.writeFileSync(out, Buffer.concat([head, body]), { mode: 0o755 });
   return out;
 }
 

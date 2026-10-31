@@ -46,7 +46,8 @@
 .acard:hover{border-color:var(--line-2);background:var(--raised)}
 .acard .h{display:flex;align-items:center;gap:10px}
 .lgbox{width:28px;height:28px;border-radius:7px;border:1px solid var(--line);display:grid;place-items:center;background:var(--raised);flex:none}
-.lgbox img{width:18px;height:18px}
+.lgbox img{width:18px;height:18px;object-fit:contain}
+.lgbox .neutral{width:16px;height:16px;color:var(--muted)}
 .acard b{font-weight:600;font-size:13.5px}
 .acard .sub{font-size:12px;color:var(--muted)}
 .acard .h .dot{margin-left:auto}
@@ -59,8 +60,9 @@
 
 /* App detail */
 .dhead{display:flex;align-items:center;gap:12px}
-.dhead .lgbox{width:34px;height:34px;border-radius:8px}
-.dhead .lgbox img{width:20px;height:20px}
+.dhead .lgbox,.lgbox.lg{width:34px;height:34px;border-radius:8px}
+.dhead .lgbox img,.lgbox.lg img{width:22px;height:22px}
+.dhead .lgbox .neutral,.lgbox.lg .neutral{width:18px;height:18px}
 .links{display:flex;gap:6px;flex-wrap:wrap;padding:12px 22px 0}
 .link{display:inline-flex;align-items:center;gap:6px;height:26px;padding:0 9px;border:1px solid var(--line);border-radius:7px;font:400 12px var(--mono);color:var(--text);text-decoration:none;background:var(--raised)}
 .link .lucide{width:13px;height:13px;color:var(--faint)}

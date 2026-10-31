@@ -14,7 +14,7 @@
   .app[data-view=app] .mback,.app[data-view=new] .mback{display:grid}
   .crumb > *:not(:last-child){display:none}
   .crumb a{font-weight:600;font-size:15px;padding:0 4px}
-  .crumb svg.lucide{display:none}
+  .crumb svg.lucide:not(.neutral){display:none}
   .sheet{border:0;border-radius:0}
 
   /* Bottom navigation */

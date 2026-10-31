@@ -6,6 +6,7 @@ arrow-right
 ban
 bell
 binary
+box
 boxes
 check
 chevron-down

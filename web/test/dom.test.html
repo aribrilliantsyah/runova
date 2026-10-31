@@ -7,6 +7,7 @@ import { test, assert, eq, run } from "/test/harness.js";
 import { h, icon, fmtBytes, fmtMB, fmtCPU, fmtTime, pct } from "/assets/js/dom.js";
 import { parseDotenv, suggestName, appNameError, envError, uploadError, memoryChoices } from "/assets/js/validate.js";
 import { splitHost } from "/assets/js/components/guide.js";
+import { kindLogo, runtimeSub } from "/assets/js/kinds.js";
 
 test("h escapes text", () => {
   const el = h("div", {}, "<img src=x onerror=alert(1)>");
@@ -117,6 +118,38 @@ test("splitHost handles second-level suffixes", () => {
   eq(splitHost("billing.perusahaan.co.id"), { sub: "billing", dom: "perusahaan.co.id" });
   eq(splitHost("a.b.example.com"), { sub: "a.b", dom: "example.com" });
   eq(splitHost("example.com"), { sub: "@", dom: "example.com" });
+});
+
+test("kindLogo shows the language logo, inverted in dark mode only where it is black", () => {
+  const go = kindLogo("static", "go");
+  eq(go.tagName, "IMG");
+  assert(go.getAttribute("src").endsWith("/devicon/go-original.svg"), go.getAttribute("src"));
+  eq(go.className, "");
+  const rust = kindLogo("glibc", "rust");
+  assert(rust.getAttribute("src").endsWith("/devicon/rust-original.svg"));
+  eq(rust.className, "inv");
+  assert(kindLogo("static", "cpp").getAttribute("src").endsWith("/devicon/cplusplus-original.svg"));
+  assert(kindLogo("static", "dotnet").getAttribute("src").endsWith("/devicon/dotnetcore-original.svg"));
+});
+
+test("kindLogo: a JAR is Java by default, a binary of unknown language is never a penguin", () => {
+  assert(kindLogo("jar", "").getAttribute("src").endsWith("/devicon/java-original.svg"));
+  assert(kindLogo("jar", undefined).getAttribute("src").endsWith("/devicon/java-original.svg"));
+  assert(kindLogo("jar", "kotlin").getAttribute("src").endsWith("/devicon/kotlin-original.svg"));
+  const stat = kindLogo("static", "");
+  eq(stat.tagName.toLowerCase(), "svg");
+  assert(stat.querySelector("use").getAttribute("href").endsWith("#binary"));
+  assert(kindLogo("glibc", "").querySelector("use").getAttribute("href").endsWith("#box"));
+  assert(kindLogo("static", "cobol").querySelector("use") !== null, "an unknown language name must fall back to the icon");
+});
+
+test("runtimeSub puts the language before the runtime", () => {
+  eq(runtimeSub({ kind: "static" }, "go"), "Go · Binary statis");
+  eq(runtimeSub({ kind: "glibc" }, "cpp"), "C++ · Binary glibc");
+  eq(runtimeSub({ kind: "jar", java_version: 21 }, "kotlin"), "Kotlin · Java 21");
+  eq(runtimeSub({ kind: "jar", java_version: 21 }, "java"), "Java 21");
+  eq(runtimeSub({ kind: "jar", java_version: 17 }, ""), "Java 17");
+  eq(runtimeSub({ kind: "static" }, ""), "Binary statis");
 });
 
 run();
