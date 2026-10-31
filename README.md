@@ -110,6 +110,12 @@ sudo ./install.sh
 
 Installer idempoten: langkah yang sudah beres dilewati, binary dan unit diganti, layanan di-restart. Data, kunci, admin, aplikasi, dan alamat panel tidak disentuh, dan tidak ada password baru dicetak. Beri `--domain`/`--port` hanya bila ingin mengganti alamat panel.
 
+Skema database ikut diperbarui otomatis saat Runova dibuka. Sebelum migrasi pertama yang tertunda, Runova menyalin database ke `/var/lib/runova/runova.db.bak-v<versi lama>-<waktu unix>` (mode 0600; 3 cadangan terbaru disimpan) dan mencatat path-nya di log. Bila migrasi gagal, perubahan dibatalkan dan Runova tidak start. Database dari versi Runova yang lebih baru ditolak tanpa disentuh, jadi mundur ke binary lama harus disertai pemulihan dari cadangan. `runova db version` mencetak versi skema database dan versi tertinggi yang dikenal binary:
+
+```bash
+sudo -u runova env RUNOVA_DATA=/var/lib/runova runova db version
+```
+
 ## Uninstall manual
 
 Belum ada perintah uninstall. Langkah manual (menghapus **semua** data Runova, termasuk aplikasi dan database pengguna):

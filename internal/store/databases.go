@@ -2,50 +2,12 @@ package store
 
 import (
 	"context"
-	"database/sql"
 	"errors"
 	"fmt"
 
 	"modernc.org/sqlite"
 	sqlite3 "modernc.org/sqlite/lib"
 )
-
-// databasesSchema is applied after the base schema. The columns it adds to
-// existing tables are added with ALTER TABLE so databases created by earlier
-// versions keep working.
-const databasesSchema = `
-CREATE TABLE IF NOT EXISTS databases(
-	id INTEGER PRIMARY KEY,
-	user_id INTEGER NOT NULL REFERENCES users ON DELETE CASCADE,
-	name TEXT NOT NULL UNIQUE,
-	created_at INTEGER NOT NULL
-);
-CREATE INDEX IF NOT EXISTS databases_user ON databases(user_id);
-`
-
-var databasesColumns = []struct{ table, column, ddl string }{
-	{"users", "pg_password", "TEXT NOT NULL DEFAULT ''"},
-	{"apps", "database_id", "INTEGER NULL REFERENCES databases ON DELETE RESTRICT"},
-}
-
-func migrateDatabases(db *sql.DB) error {
-	if _, err := db.Exec(databasesSchema); err != nil {
-		return fmt.Errorf("init databases schema: %w", err)
-	}
-	for _, c := range databasesColumns {
-		var n int
-		if err := db.QueryRow(`SELECT count(*) FROM pragma_table_info(?) WHERE name = ?`, c.table, c.column).Scan(&n); err != nil {
-			return fmt.Errorf("inspect %s: %w", c.table, err)
-		}
-		if n > 0 {
-			continue
-		}
-		if _, err := db.Exec(`ALTER TABLE ` + c.table + ` ADD COLUMN ` + c.column + ` ` + c.ddl); err != nil {
-			return fmt.Errorf("add %s.%s: %w", c.table, c.column, err)
-		}
-	}
-	return nil
-}
 
 func isForeignKey(err error) bool {
 	var se *sqlite.Error
