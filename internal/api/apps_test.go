@@ -89,7 +89,18 @@ func newAppEnv(t *testing.T, idle time.Duration) *appEnv {
 // createApp uploads a static binary and creates the app through the API.
 func (c *client) createApp(name string, extra obj) (appID int64, body obj) {
 	c.e.t.Helper()
-	up := c.upload(name, staticELF())
+	return c.createAppWith(name, staticELF(), extra)
+}
+
+// createAppFrom is createApp with the given binary instead of the bare ELF.
+func (c *client) createAppFrom(name string, binary []byte) (appID int64, body obj) {
+	c.e.t.Helper()
+	return c.createAppWith(name, binary, nil)
+}
+
+func (c *client) createAppWith(name string, binary []byte, extra obj) (appID int64, body obj) {
+	c.e.t.Helper()
+	up := c.upload(name, binary)
 	if up.status != 201 {
 		c.e.t.Fatalf("upload: %d %s", up.status, up.body)
 	}
