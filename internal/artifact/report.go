@@ -46,6 +46,9 @@ type Report struct {
 	PortSource string   `json:"port_source"`
 	Env        []EnvVar `json:"env"`
 	Problems   []string `json:"problems"`
+	// Language is the programming language the artifact was written in
+	// (the Lang* constants); "" when it could not be told.
+	Language string `json:"language"`
 }
 
 // OK reports whether the artifact has no problem blocking a deploy.

@@ -139,6 +139,12 @@ func inspectZip(zr *zip.Reader, rep *Report) error {
 		byName[f.Name] = f
 	}
 
+	names := make([]string, len(zr.File))
+	for i, f := range zr.File {
+		names[i] = f.Name
+	}
+	rep.Language = jarLanguage(names)
+
 	mainClass, err := manifestMainClass(byName[manifestPath])
 	if err != nil {
 		return err

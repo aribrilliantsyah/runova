@@ -5,6 +5,7 @@ import (
 	"debug/elf"
 	"fmt"
 	"io"
+	"math"
 	"os"
 	"strings"
 )
@@ -92,6 +93,9 @@ func InspectBinary(path string) (Report, error) {
 		return problemReport(fmt.Sprintf("Binary dinamis dengan interpreter %s tidak didukung; build statis atau dengan glibc", interp)), nil
 	}
 
+	if rep.Language, err = binaryLanguage(ef, io.NewSectionReader(f, 0, math.MaxInt64)); err != nil {
+		return Report{}, err
+	}
 	if _, err := f.Seek(0, io.SeekStart); err != nil {
 		return Report{}, err
 	}
