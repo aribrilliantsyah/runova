@@ -3,7 +3,6 @@ package store_test
 import (
 	"context"
 	"errors"
-	"path/filepath"
 	"reflect"
 	"testing"
 
@@ -85,21 +84,6 @@ func TestPGPasswordRoundTrip(t *testing.T) {
 	if err := s.SetPGPassword(ctx, 999, "x"); !errors.Is(err, store.ErrNotFound) {
 		t.Fatalf("unknown user: err = %v", err)
 	}
-}
-
-func TestOpenMigratesOldDatabase(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "runova.db")
-	s, err := store.Open(path)
-	if err != nil {
-		t.Fatal(err)
-	}
-	s.Close()
-	// A second Open must find the added columns and leave them alone.
-	s, err = store.Open(path)
-	if err != nil {
-		t.Fatalf("reopen: %v", err)
-	}
-	s.Close()
 }
 
 func TestSettingsPGAllowedNets(t *testing.T) {

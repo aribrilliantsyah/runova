@@ -32,6 +32,7 @@ const usage = `Penggunaan: runova <perintah>
   admin create <username>        buat admin dengan password acak
   admin reset-password <user>    buat password acak baru
   admin exists                   keluar 0 bila sudah ada admin, 1 bila belum
+  db version                     cetak versi skema database dan versi tertinggi binary ini
   keygen                         buat kunci enkripsi rahasia
   panel set --domain <domain>    alamat panel di domain (HTTPS otomatis)
   panel set --port <port>        alamat panel di IP:port (HTTPS)
@@ -61,6 +62,8 @@ func run(args []string, getenv func(string) string, stdout, stderr io.Writer) in
 		return check(cfg, stdout)
 	case "admin":
 		return admin(cfg, args[1:], stdout, stderr)
+	case "db":
+		return dbCmd(cfg, args[1:], stdout, stderr)
 	case "panel":
 		return panel(cfg, args[1:], stdout, stderr)
 	case "keygen":
