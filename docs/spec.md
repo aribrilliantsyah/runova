@@ -156,7 +156,7 @@ Menjalankan ulang installer aman (idempoten): langkah yang sudah beres dilewati,
 
 ## 11. Urutan pembangunan
 
-Setiap bagian punya rencana sendiri di `docs/superpowers/plans/` dan bisa diuji sendiri. Sampai rilis pertama belum ada instalasi nyata, jadi perubahan skema SQLite langsung mengubah `schema` (tanpa migrasi); DB lokal pengembangan cukup dihapus.
+Setiap bagian punya rencana sendiri di `docs/superpowers/plans/` dan bisa diuji sendiri. Skema SQLite berversi lewat migrasi (`internal/store/migrations/NNNN_nama.sql`, versi di `PRAGMA user_version`): setiap perubahan skema = file migrasi baru, dan migrasi yang sudah dirilis tidak pernah diubah. Cara menulisnya ada di `docs/superpowers/notes/db-migrations.md`.
 
 | # | Bagian | Rencana |
 |---|---|---|
