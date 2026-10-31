@@ -10,7 +10,7 @@
 </p>
 
 <p align="center">
-  <b>Status: lengkap secara fungsi, belum diuji di server sungguhan.</b> Binary <code>runova</code> membawa API JSON dan panel web tertanam; installer, skrip rilis, dan uji end-to-end lokal sudah ada. Installer <b>belum diuji di Ubuntu Server 26.04 sungguhan</b> (lihat <a href="#status-pengujian">Status pengujian</a>).
+  <b>Status: lengkap secara fungsi; installer terbukti di Ubuntu 26.04 dengan systemd di container, belum di server atau VM sungguhan.</b> Binary <code>runova</code> membawa API JSON dan panel web tertanam; installer, skrip deploy, skrip rilis, dan uji sistem sudah ada (lihat <a href="#status-pengujian">Status pengujian</a> untuk yang terbukti dan yang belum).
   <a href="preview-dashboard.html">Preview tampilan</a> (buka file itu di browser) adalah acuan desainnya.
 </p>
 
@@ -79,18 +79,18 @@ Runova memasang **PostgreSQL 18** di server yang sama (paket resmi Ubuntu 26.04)
 
 ## Instalasi
 
-Syarat: Ubuntu Server 26.04 LTS (amd64) polos, akses root, dan koneksi internet ke repositori apt Ubuntu. Installer memasang `docker.io`, `caddy`, `postgresql-18`, `ufw`, `jq`, dan `curl` dari apt resmi Ubuntu; tidak ada repositori pihak ketiga.
+Syarat: Ubuntu Server 26.04 LTS (amd64) polos, user dengan `sudo`, dan koneksi internet ke repositori apt Ubuntu. Installer memasang `docker.io`, `caddy`, `postgresql-18`, `ufw`, `jq`, dan `curl` dari apt resmi Ubuntu; tidak ada repositori pihak ketiga.
+
+Panduan lengkap untuk admin server (spesifikasi, firewall cloud, DNS, cadangan, pemecahan masalah) ada di **[docs/install-ubuntu.md](docs/install-ubuntu.md)**. Ringkasnya, dari checkout source ini di mesin Anda:
 
 ```bash
-# unduh arsip rilis dan SHA256SUMS dari halaman rilis, lalu:
-sha256sum -c SHA256SUMS --ignore-missing
-tar xzf runova-0.1.0-linux-amd64.tar.gz
-cd runova-0.1.0-linux-amd64
-sudo ./install.sh --domain panel.contoh.id    # panel di https://panel.contoh.id
-sudo ./install.sh --port 8443                 # atau panel di https://<IP server>:8443
+scripts/deploy.sh admin@IP-SERVER --domain panel.contoh.id   # panel di https://panel.contoh.id
+scripts/deploy.sh admin@IP-SERVER --port 8443                # atau panel di https://<IP server>:8443
 ```
 
-Opsi: `--domain <host>` atau `--port <n>` (tidak bisa bersamaan; tanpa keduanya bawaannya `--port 8443`), `--public-ip <ip>` (disimpan ke setelan; untuk server di belakang NAT), `--yes` (tanpa tanya, untuk instalasi tanpa terminal). Untuk `--domain`, arahkan DNS domain itu ke server dulu.
+`scripts/deploy.sh` membangun rilis, menyalinnya ke server lewat `scp`, memeriksa checksum, menjalankan `sudo ./install.sh` di server, dan menghapus berkas sementara. Pembangunan memakai Go. Opsi: `--version`, `-p/--ssh-port`, `-i/--identity`, dan `RUNOVA_SSH_OPTS` untuk opsi SSH lain; sisanya diteruskan ke `install.sh`. Tanpa skrip itu, bangun arsip dengan `scripts/release.sh <versi>`, salin `dist/` ke server, lalu `tar xzf` dan `sudo ./install.sh` (lihat panduan). Pemasangan satu baris lewat `curl | bash` menyusul saat Runova punya halaman rilis.
+
+Opsi `install.sh`: `--domain <host>` atau `--port <n>` (tidak bisa bersamaan; tanpa keduanya bawaannya `--port 8443`), `--public-ip <ip>` (disimpan ke setelan; untuk server di belakang NAT), `--skip-firewall` (jangan menyentuh `ufw`), `--yes` (tanpa tanya, untuk instalasi tanpa terminal). Untuk `--domain`, arahkan DNS domain itu ke server dulu.
 
 Di akhir, installer mencetak alamat panel, username `admin`, dan password acak **sekali saja**. Bila hilang: `sudo -u runova env RUNOVA_DATA=/var/lib/runova runova admin reset-password admin`.
 
@@ -135,7 +135,7 @@ Caddyfile (`{ admin localhost:2019 }`), `daemon.json`, aturan `ufw`, dan paket a
 
 ## Status pengujian
 
-Jujur: **installer belum diuji di Ubuntu Server 26.04 sungguhan.** Yang sudah dijalankan: uji `bats` untuk logika installer (dengan stub), `shellcheck` bersih, nama paket dan berkas `docker-init`, `Caddyfile`, dan template PostgreSQL dicocokkan dengan paket Ubuntu 26.04 di container, dan alur produk diuji end-to-end di mesin pengembangan (Docker nyata, `caddy:2.6.2` — versi yang sama dengan paket Ubuntu 26.04 — dan `postgres:18`). Belum teruji: apt/systemd/ufw nyata, reboot server (unit memakai `Wants`/`After`, `Restart=on-failure`, dan Caddy `--resume`), aturan Docker-vs-ufw, dan sertifikat domain sungguhan. Coba di server percobaan dulu.
+Jujur soal apa yang terbukti. **Terbukti** (`test/system/run.sh`, diulang dengan satu perintah): `scripts/deploy.sh` memasang Runova lewat SSH ke Ubuntu 26.04 sungguhan berjalan dengan systemd sebagai PID 1 (container privileged, tanpa VM) dengan `apt-get install` nyata dari repositori Ubuntu (`docker.io` 29.1.3, `caddy` 2.6.2, `postgresql-18` 18.6, `ufw`), Docker-in-Docker, dan `ufw` aktif dengan aturannya. Di situ `runova check` ok semua, login API lewat Caddy berhasil, pengguna dan database dibuat di PostgreSQL apt, binary contoh berjalan di container dan terjangkau lewat port akses IP dari luar server, pemasangan kedua tidak mencetak password dan tidak mengubah kunci, data, atau aplikasi, dan `systemctl restart runova caddy postgresql` memulihkan panel dan aplikasi. Selain itu ada uji `bats` dengan stub dan `shellcheck` untuk semua skrip, serta alur produk end-to-end lengkap (`test/e2e`: deploy JAR dan binary, deploy tanpa jeda, isolasi antar-pengguna, backup dan restore) dengan Docker nyata, `caddy:2.6.2`, dan `postgres:18`. **Belum terbukti:** kernel dan boot server sungguhan (container memakai kernel mesin pengembang; `systemd-modules-load` gagal di container sehingga systemd melapor `degraded`), reboot server (unit memakai `Wants`/`After`, `Restart=on-failure`, dan Caddy `--resume`), pengaruh `ufw` terhadap aturan iptables Docker di kernel server, `ufw` di luar container, dan sertifikat publik untuk domain sungguhan (di container Caddy hanya menerbitkan sertifikat internal). Coba di server percobaan dulu.
 
 ## Menghubungkan domain
 
@@ -228,6 +228,12 @@ Tanpa VM. Installer diuji dengan `bats` dan `shellcheck` di Docker (stub menggan
 
 ```bash
 test/bats.sh
+```
+
+Uji sistem memasang Runova sungguhan di Ubuntu 26.04 dengan systemd sebagai PID 1 (container privileged; `apt-get`, `systemctl`, `ufw`, dan Docker-in-Docker nyata) lewat `scripts/deploy.sh`, lalu memeriksa `runova check`, login panel, pengguna dan database, deploy binary contoh lewat port akses IP, pemasangan ulang, dan restart layanan. Butuh Docker dan internet; sekitar 7 menit. Container dihapus di akhir (`KEEP=1` untuk menyimpannya):
+
+```bash
+test/system/run.sh
 ```
 
 Alur produk (login, pengguna, database, deploy binary dan JAR, deploy tanpa jeda, isolasi antar-pengguna, restart Runova, backup dan restore) diuji dengan Runova dari source, Docker nyata, `caddy:2.6.2` (versi paket Ubuntu 26.04; ganti lewat `CADDY_IMAGE`) dan `postgres:18` di container, tanpa root:

@@ -4,5 +4,5 @@ set -euo pipefail
 cd "$(dirname "${BASH_SOURCE[0]}")/.."
 
 docker build -q -t runova-bats -f test/Dockerfile.bats test >/dev/null
-docker run --rm -v "$PWD:/code" -w /code runova-bats test/install.bats
-docker run --rm -v "$PWD:/mnt" -w /mnt koalaman/shellcheck:stable install.sh scripts/release.sh test/bats.sh test/e2e/*.sh
+docker run --rm -v "$PWD:/code" -w /code runova-bats test/install.bats test/deploy.bats
+docker run --rm -v "$PWD:/mnt" -w /mnt koalaman/shellcheck:stable install.sh scripts/*.sh test/bats.sh test/e2e/*.sh test/system/*.sh

@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+# `git describe` answers $GIT_DESCRIBE, or fails when it is unset.
+[[ -n ${GIT_DESCRIBE:-} ]] || exit 128
+echo "$GIT_DESCRIBE"

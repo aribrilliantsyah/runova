@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+# Logs the call to $CALLS, answers the server probe with $SSH_PROBE and fails with $SSH_RC.
+echo "ssh $*" >>"$CALLS"
+[[ " $* " == *" -O exit "* ]] && exit 0
+cat >/dev/null
+if ((${SSH_RC:-0} != 0)); then
+	exit "$SSH_RC"
+fi
+printf '%s' "${SSH_PROBE:-}"
