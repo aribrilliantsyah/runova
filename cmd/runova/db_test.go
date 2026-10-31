@@ -1,6 +1,7 @@
 package main
 
 import (
+	"database/sql"
 	"os"
 	"strconv"
 	"strings"
@@ -33,6 +34,23 @@ func TestDBVersion(t *testing.T) {
 	want := "Skema database: " + strconv.Itoa(latest) + "\nSkema tertinggi binary ini: " + strconv.Itoa(latest) + "\n"
 	if r.code != 0 || r.stdout != want {
 		t.Fatalf("stdout = %q, want %q (code %d, stderr %q)", r.stdout, want, r.code, r.stderr)
+	}
+}
+
+func TestDBVersionOfPreMigrationDatabase(t *testing.T) {
+	env := map[string]string{"RUNOVA_DATA": t.TempDir()}
+	legacy, err := sql.Open("sqlite", config.Load(func(k string) string { return env[k] }).DBPath())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := legacy.Exec(`CREATE TABLE users(id INTEGER PRIMARY KEY)`); err != nil {
+		t.Fatal(err)
+	}
+	legacy.Close()
+
+	r := runIn(t, env, "db", "version")
+	if r.code != 0 || !strings.Contains(r.stdout, "Skema database: 0 (belum dimigrasi; dimigrasi saat Runova dibuka)\n") {
+		t.Fatalf("stdout = %q, code %d", r.stdout, r.code)
 	}
 }
 

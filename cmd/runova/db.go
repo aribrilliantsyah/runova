@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"io"
+	"os"
 
 	"runova/internal/config"
 	"runova/internal/store"
@@ -21,10 +22,13 @@ func dbCmd(cfg config.Config, args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintf(stderr, "Tidak bisa membaca versi skema: %v\n", err)
 		return 1
 	}
-	if current == 0 {
-		fmt.Fprintln(stdout, "Skema database: 0 (belum dibuat)")
-	} else {
+	switch _, statErr := os.Stat(cfg.DBPath()); {
+	case current > 0:
 		fmt.Fprintf(stdout, "Skema database: %d\n", current)
+	case statErr == nil:
+		fmt.Fprintln(stdout, "Skema database: 0 (belum dimigrasi; dimigrasi saat Runova dibuka)")
+	default:
+		fmt.Fprintln(stdout, "Skema database: 0 (belum dibuat)")
 	}
 	fmt.Fprintf(stdout, "Skema tertinggi binary ini: %d\n", latest)
 	return 0
