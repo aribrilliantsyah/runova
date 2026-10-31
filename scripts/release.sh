@@ -25,12 +25,13 @@ CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath \
 install -m 0755 install.sh "$stage/install.sh"
 install -m 0644 packaging/runova.service "$stage/runova.service"
 install -m 0644 LICENSE "$stage/LICENSE"
-(cd "$stage" && sha256sum runova install.sh runova.service LICENSE >SHA256SUMS)
+install -m 0644 NOTICE "$stage/NOTICE"
+(cd "$stage" && sha256sum runova install.sh runova.service LICENSE NOTICE >SHA256SUMS)
 
-# Only the five files are listed, so the archive has no directory entries.
+# Only the six files are listed, so the archive has no directory entries.
 (cd "$dist/stage" && tar --sort=name --owner=0 --group=0 --numeric-owner --mtime='@0' \
 	-czf "$dist/$archive" \
-	"$name/runova" "$name/install.sh" "$name/runova.service" "$name/LICENSE" "$name/SHA256SUMS")
+	"$name/runova" "$name/install.sh" "$name/runova.service" "$name/LICENSE" "$name/NOTICE" "$name/SHA256SUMS")
 rm -rf "$dist/stage"
 
 (cd "$dist" && sha256sum "$archive" >SHA256SUMS)

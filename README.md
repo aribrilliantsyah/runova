@@ -246,3 +246,7 @@ Membuat arsip rilis: `scripts/release.sh 0.1.0` menghasilkan `dist/runova-0.1.0-
 - Logo bahasa pemrograman: [Devicon](https://devicon.dev), lisensi MIT. Merek dagang milik pemiliknya masing-masing.
 - Font: [IBM Plex Sans dan IBM Plex Mono](https://www.ibm.com/plex/), SIL Open Font License.
 - Logo Runova: roket yang meluncur dengan jendela berupa slot rak server, digambar khusus untuk proyek ini. Master dan variannya di `docs/brand/`.
+
+## Lisensi
+
+Runova dirilis di bawah [Apache License 2.0](LICENSE). Lihat juga [`NOTICE`](NOTICE). Aset pihak ketiga di panel memakai lisensinya masing-masing (`web/vendor/licenses/`).

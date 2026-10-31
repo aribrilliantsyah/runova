@@ -15,7 +15,7 @@
 ## Global Constraints
 
 - Paket: `docker.io caddy postgresql-18 ufw` dari apt resmi Ubuntu; tanpa repo pihak ketiga.
-- Rilis: `runova-<versi>-linux-amd64.tar.gz` berisi `runova`, `install.sh`, `runova.service`, `LICENSE`, `SHA256SUMS`. Versi disuntik lewat `-ldflags "-X main.version=<versi>"`; `runova version` mencetaknya.
+- Rilis: `runova-<versi>-linux-amd64.tar.gz` berisi `runova`, `install.sh`, `runova.service`, `LICENSE` (Apache-2.0), `NOTICE`, `SHA256SUMS`. Versi disuntik lewat `-ldflags "-X main.version=<versi>"`; `runova version` mencetaknya.
 - Opsi: `--domain <host>` atau `--port <n>` (bawaan `--port 8443` bila tidak ada keduanya), `--yes` (tanpa tanya), `--public-ip <ip>` (opsional, disimpan ke setelan).
 - Unit systemd `runova.service`: `User=runova`, `Group=runova`, `SupplementaryGroups=docker`, `EnvironmentFile=/etc/runova/runova.env`, `ExecStart=/usr/local/bin/runova serve`, `AmbientCapabilities=CAP_CHOWN CAP_FOWNER CAP_DAC_OVERRIDE`, `CapabilityBoundingSet=` sama, `NoNewPrivileges=yes`, `ProtectSystem=strict`, `ReadWritePaths=/var/lib/runova /etc/postgresql/18/main/pg_hba.d`, `ProtectHome=yes`, `PrivateTmp=yes`, `Restart=on-failure`, `After=docker.service caddy.service postgresql.service`, `Wants=` yang sama.
 - Caddy: `/etc/caddy/Caddyfile` diganti `{ admin localhost:2019 }` hanya bila file masih bawaan paket (cek checksum dari `dpkg-query`/`/var/lib/dpkg/info/caddy.md5sums`); bila sudah diubah admin → berhenti dengan pesan, kecuali `--yes`, yang menyalin cadangan `.runova-backup` dulu. `caddy.service` memakai `--resume` agar konfigurasi API bertahan restart (drop-in `/etc/systemd/system/caddy.service.d/runova.conf`).
@@ -55,7 +55,7 @@ func TestServiceUnit(t *testing.T) { /* packaging/runova.service has Restart=on-
 func TestPanelSetPublicIP(t *testing.T) { /* "--public-ip 203.0.113.5" stored; "abc" → exit 1 */ }
 ```
 
-- [ ] **Step 2:** FAIL. **Step 3:** implementasi. **Step 4:** `go test ./cmd/runova` PASS; `scripts/release.sh 0.1.0` menghasilkan arsip, `tar tzf` berisi 5 file, `sha256sum -c` lulus.
+- [ ] **Step 2:** FAIL. **Step 3:** implementasi. **Step 4:** `go test ./cmd/runova` PASS; `scripts/release.sh 0.1.0` menghasilkan arsip, `tar tzf` berisi 6 file, `sha256sum -c` lulus.
 - [ ] **Step 5: Commit** `git commit -m "release packaging, version and check commands"`
 
 ---
