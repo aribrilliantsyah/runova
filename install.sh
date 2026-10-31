@@ -39,6 +39,7 @@ ASSUME_YES=0
 PANEL_EXPLICIT=0
 ADMIN_PASSWORD=""
 VERSION=""
+SKIP_FIREWALL=0
 PUT_CHANGED=0
 
 log() { printf '==> %s\n' "$*"; }
@@ -56,6 +57,7 @@ Penggunaan: sudo ./install.sh [opsi]
   --port <n>         panel di https://<IP server>:<n> (bawaan bila tanpa opsi: 8443)
   --public-ip <ip>   IP publik server, disimpan ke setelan Runova
   --yes, -y          jangan bertanya (untuk instalasi tanpa terminal)
+  --skip-firewall    jangan menyentuh ufw (untuk server yang firewall-nya diatur di tempat lain)
   --help, -h         tampilkan bantuan ini
 
 --domain dan --port tidak bisa dipakai bersamaan. Tanpa keduanya pada
@@ -109,7 +111,7 @@ set_option() {
 }
 
 parse_args() {
-	DOMAIN="" PORT="" PUBLIC_IP="" ASSUME_YES=0 PANEL_EXPLICIT=0
+	DOMAIN="" PORT="" PUBLIC_IP="" ASSUME_YES=0 PANEL_EXPLICIT=0 SKIP_FIREWALL=0
 	while (($# > 0)); do
 		case "$1" in
 		--domain | --port | --public-ip)
@@ -123,6 +125,10 @@ parse_args() {
 			;;
 		--yes | -y)
 			ASSUME_YES=1
+			shift
+			;;
+		--skip-firewall)
+			SKIP_FIREWALL=1
 			shift
 			;;
 		-h | --help)
@@ -427,6 +433,10 @@ sshd_ports() {
 
 step_firewall() {
 	local p status
+	if ((SKIP_FIREWALL)); then
+		log "ufw dilewati (--skip-firewall); buka sendiri port SSH, 80, 443, 20000-20999, 5432 (opsional), dan port panel"
+		return 0
+	fi
 	for p in $(sshd_ports); do
 		ufw allow "$p/tcp"
 	done
