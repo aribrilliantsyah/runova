@@ -13,8 +13,9 @@ type listSummary struct {
 			Host   string `json:"host"`
 			Status string `json:"status"`
 		} `json:"domains"`
-		Version    int   `json:"version"`
-		DeployedAt int64 `json:"deployed_at"`
+		Version    int    `json:"version"`
+		DeployedAt int64  `json:"deployed_at"`
+		Language   string `json:"language"`
 	} `json:"summary"`
 }
 
@@ -60,5 +61,38 @@ func TestListAppsSummary(t *testing.T) {
 	}
 	if strings.Contains(string(r.body), "private.example.com") {
 		t.Errorf("response leaks another user's domain")
+	}
+}
+
+func TestAppLanguageInSummaryAndDetail(t *testing.T) {
+	e := newAppEnv(t, 0)
+	e.addUser("budi", "budi-password-1", "user")
+	c := e.login("budi", "budi-password-1")
+
+	goApp, _ := c.createAppFrom("gateway", append(staticELF(), "\xff Go buildinf:"...))
+	plain, _ := c.createApp("mystery", nil)
+	jar := c.createJarApp("billing")
+	for _, id := range []int64{goApp, plain, jar} {
+		c.waitStatus(id, "running")
+	}
+
+	var list listSummary
+	c.do("GET", "/api/apps", nil).into(t, &list)
+	for id, want := range map[int64]string{goApp: "go", plain: "", jar: "java"} {
+		if got := list.Summary[strconv.FormatInt(id, 10)].Language; got != want {
+			t.Errorf("summary language of app %d = %q, want %q", id, got, want)
+		}
+	}
+
+	var detail struct {
+		Deployment struct {
+			Report struct {
+				Language string `json:"language"`
+			} `json:"report"`
+		} `json:"deployment"`
+	}
+	c.do("GET", appPath(goApp, ""), nil).into(t, &detail)
+	if detail.Deployment.Report.Language != "go" {
+		t.Errorf("detail report language = %q, want go", detail.Deployment.Report.Language)
 	}
 }

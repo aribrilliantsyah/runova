@@ -3,7 +3,7 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { chromium, startRunova, buildSampleJar, buildStaticBinary, login, repo, check } from "./lib.mjs";
+import { chromium, startRunova, buildSampleJar, buildStaticBinary, buildMarkedBinary, login, repo, check } from "./lib.mjs";
 
 const out = path.join(repo, "docs/screenshots");
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "shots-"));
@@ -33,6 +33,9 @@ try {
 
   const jar = buildSampleJar(tmp, { name: "billing-api-2.4.1.jar" });
   const bin = buildStaticBinary(tmp, "auth-gateway");
+  const rustBin = buildMarkedBinary(tmp, "report-worker", "rustc version 1.90.0 (1159e78c4 2025-09-14)");
+  const unknownBin = buildMarkedBinary(tmp, "notif-relay", "built by something unrecognisable");
+  const kotlinJar = buildSampleJar(tmp, { name: "legacy-hr.jar", extraFiles: { "kotlin/Unit.class": "x" } });
   const db1 = (await call("POST", "/api/databases", { suffix: "billing" }, cookie)).body;
   await call("POST", "/api/databases", { suffix: "auth" }, cookie);
 
@@ -47,9 +50,9 @@ try {
     env: [{ name: "JWT_SECRET", value: "x", secret: true }, { name: "DB_PASSWORD", value: "x", secret: true }, { name: "SPRING_PROFILES_ACTIVE", value: "prod", secret: false }],
   });
   const gateway = await make(bin, "auth-gateway", { name: "auth-gateway", memory_mb: 128, cpu_milli: 250, ip_access: false, env: [] });
-  const worker = await make(bin, "report-worker", { name: "report-worker", memory_mb: 256, cpu_milli: 250, ip_access: true, env: [] });
-  const legacy = await make(jar, "legacy-hr.jar", { name: "legacy-hr", java_version: 17, memory_mb: 256, cpu_milli: 250, ip_access: false, env: [{ name: "JWT_SECRET", value: "x", secret: true }, { name: "DB_PASSWORD", value: "x", secret: true }] });
-  const notif = await make(bin, "notif-relay", { name: "notif-relay", memory_mb: 128, cpu_milli: 100, ip_access: false, env: [] });
+  const worker = await make(rustBin, "report-worker", { name: "report-worker", memory_mb: 256, cpu_milli: 250, ip_access: true, env: [] });
+  const legacy = await make(kotlinJar, "legacy-hr.jar", { name: "legacy-hr", java_version: 17, memory_mb: 256, cpu_milli: 250, ip_access: false, env: [{ name: "JWT_SECRET", value: "x", secret: true }, { name: "DB_PASSWORD", value: "x", secret: true }] });
+  const notif = await make(unknownBin, "notif-relay", { name: "notif-relay", memory_mb: 128, cpu_milli: 100, ip_access: false, env: [] });
   await call("POST", `/api/apps/${billing}/domains`, { host: "billing.perusahaan.co.id" }, cookie);
   await call("POST", `/api/apps/${gateway}/domains`, { host: "sso.perusahaan.co.id" }, cookie);
   await call("POST", `/api/apps/${legacy}/domains`, { host: "hr-lama.perusahaan.co.id" }, cookie);

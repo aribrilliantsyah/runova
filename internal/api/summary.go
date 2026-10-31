@@ -17,6 +17,8 @@ type appSummary struct {
 	Domains    []domainBrief `json:"domains"`
 	Version    int           `json:"version"`
 	DeployedAt int64         `json:"deployed_at"`
+	// Language is that of the active deployment's artifact; "" when unknown.
+	Language string `json:"language"`
 }
 
 // summaries describes the given apps, keyed by app ID.
@@ -49,6 +51,7 @@ func (s *server) summaries(ctx context.Context, list []store.App) (map[int64]app
 		sum := out[a.ID]
 		sum.Version = d.Number
 		sum.DeployedAt = max(d.FinishedAt, d.CreatedAt)
+		sum.Language = d.Report.Language
 		out[a.ID] = sum
 	}
 	return out, nil

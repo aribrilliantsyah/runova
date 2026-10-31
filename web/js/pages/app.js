@@ -2,7 +2,7 @@ import * as api from "/assets/js/api.js";
 import { h, icon, poll, fill } from "/assets/js/dom.js";
 import { ctx } from "/assets/js/ctx.js";
 import * as session from "/assets/js/session.js";
-import { kindLogo, runtimeLabel, statusOf } from "/assets/js/kinds.js";
+import { kindLogo, runtimeLabel, runtimeSub, statusOf } from "/assets/js/kinds.js";
 import { renderGeneral } from "/assets/js/pages/app/general.js";
 import { renderDeployments } from "/assets/js/pages/app/deployments.js";
 import { renderDomains } from "/assets/js/pages/app/domains.js";
@@ -85,9 +85,10 @@ export async function renderApp(root, params) {
   function paintHeader() {
     const { app, deployment, owner } = page.state;
     const [cls, label] = statusOf(app.status);
-    logoBox.replaceChildren(kindLogo(app.kind));
+    const language = deployment?.report?.language;
+    logoBox.replaceChildren(kindLogo(app.kind, language));
     fill(title, app.name, " ", h("span", { class: `chip ${cls}` }, h("span", { class: `dot ${cls}` }), page.state.busy && app.status !== "deploying" ? "Sedang diproses" : label));
-    subline.textContent = deployment ? `v${deployment.number} · ${deployment.file_name} · ${runtimeLabel(app)}` : `${runtimeLabel(app)} · belum ada deployment aktif`;
+    subline.textContent = deployment ? `v${deployment.number} · ${deployment.file_name} · ${runtimeSub(app, language)}` : `${runtimeLabel(app)} · belum ada deployment aktif`;
     if (!page.mine) subline.textContent += ` · milik ${owner}`;
     const host = info.public_ip || location.hostname;
     fill(links,
@@ -100,7 +101,7 @@ export async function renderApp(root, params) {
         icon("external-link"),
       ),
     );
-    ctx.shell.setCrumb([["boxes", "Aplikasi", "/apps"], [kindLogo(app.kind), app.name, `/apps/${id}`]]);
+    ctx.shell.setCrumb([["boxes", "Aplikasi", "/apps"], [kindLogo(app.kind, language), app.name, `/apps/${id}`]]);
   }
   page.setDomains = (list) => {
     domainsCache = list;

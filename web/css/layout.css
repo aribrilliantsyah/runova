@@ -48,7 +48,7 @@
 .crumb a:hover{background:var(--hover)}
 .crumb .lucide{color:var(--faint)}
 .crumb .sl{color:var(--line-2);margin:0 2px}
-.crumb img{width:16px;height:16px}
+.crumb img{width:16px;height:16px;object-fit:contain}
 .top .right{margin-left:auto;display:flex;align-items:center;gap:6px}
 .sheet{flex:1;min-height:0;background:var(--panel);border:1px solid var(--line);border-radius:var(--r-lg);overflow:auto}
 .sheet:focus{outline:none}

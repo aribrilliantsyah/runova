@@ -154,11 +154,15 @@ try {
   const up2 = await (await fetch(`${srv.url}/api/uploads`, { method: "POST", headers: { cookie }, body: f2 })).json();
   const c2 = await api("POST", "/api/apps", { upload_id: up2.id, name: "hello-static", memory_mb: 128, cpu_milli: 100, ip_access: false, env: [] }, cookie);
   check(c2.status === 201, `create static ${c2.status}`);
+  check(up2.report.language === "go", `upload language ${up2.report.language}`);
   await page.goto(`${srv.url}/#/apps/${c2.body.app.id}`);
   await page.waitForSelector("button:has-text('Terminal')");
   const t = page.locator("button:has-text('Terminal')");
   check(await t.isDisabled(), "terminal should be disabled for a static binary");
   check(((await t.getAttribute("title")) || "").includes("distroless"), `reason: ${await t.getAttribute("title")}`);
+  check((await page.locator(".dhead .lgbox img").getAttribute("src")).includes("go-original"), "header shows the Go logo");
+  check((await page.locator(".crumb img").getAttribute("src")).includes("go-original"), "breadcrumb shows the Go logo");
+  check(((await page.locator(".dhead .mono").textContent()) || "").includes("Go · Binary statis"), "subtitle names the language");
 } finally {
   await browser.close();
   const logs = srv.logs();

@@ -1,15 +1,50 @@
 // What an app's kind looks like: language logo, runtime label, base image, status.
-import { h } from "/assets/js/dom.js";
+import { h, icon } from "/assets/js/dom.js";
 
 // Full literal paths: the server rewrites them to hashed URLs when it serves the panel.
 const LOGOS = {
-  jar: "/assets/vendor/devicon/java-original.svg",
-  native: "/assets/vendor/devicon/linux-original.svg",
+  java: "/assets/vendor/devicon/java-original.svg",
+  kotlin: "/assets/vendor/devicon/kotlin-original.svg",
+  scala: "/assets/vendor/devicon/scala-original.svg",
+  groovy: "/assets/vendor/devicon/groovy-original.svg",
+  clojure: "/assets/vendor/devicon/clojure-original.svg",
+  go: "/assets/vendor/devicon/go-original.svg",
+  rust: "/assets/vendor/devicon/rust-original.svg",
+  zig: "/assets/vendor/devicon/zig-original.svg",
+  cpp: "/assets/vendor/devicon/cplusplus-original.svg",
+  c: "/assets/vendor/devicon/c-original.svg",
+  dotnet: "/assets/vendor/devicon/dotnetcore-original.svg",
   postgres: "/assets/vendor/devicon/postgresql-original.svg",
 };
 
-export function kindLogo(kind) {
-  return h("img", { src: kind === "jar" ? LOGOS.jar : LOGOS.native, alt: "" });
+/** Display names of the languages the server reports (artifact.Report.Language). */
+const LANGUAGE_NAMES = {
+  java: "Java",
+  kotlin: "Kotlin",
+  scala: "Scala",
+  groovy: "Groovy",
+  clojure: "Clojure",
+  go: "Go",
+  rust: "Rust",
+  zig: "Zig",
+  cpp: "C++",
+  c: "C",
+  dotnet: ".NET",
+};
+
+/** Logos that are black on transparent and need inverting in the dark theme. */
+const MONOCHROME = new Set(["rust"]);
+
+/**
+ * kindLogo(kind, language) → the app's language logo. A JAR without a known language is Java;
+ * a binary without one gets a neutral icon (muted, so it does not pass for a broken logo).
+ */
+export function kindLogo(kind, language) {
+  const lang = language || (kind === "jar" ? "java" : "");
+  if (LOGOS[lang] && LANGUAGE_NAMES[lang]) {
+    return h("img", { src: LOGOS[lang], alt: "", class: MONOCHROME.has(lang) ? "inv" : "" });
+  }
+  return icon(kind === "glibc" ? "box" : "binary", "neutral");
 }
 
 export const pgLogo = () => h("img", { src: LOGOS.postgres, alt: "" });
@@ -17,6 +52,13 @@ export const pgLogo = () => h("img", { src: LOGOS.postgres, alt: "" });
 export function runtimeLabel(app) {
   if (app.kind === "jar") return `Java ${app.java_version ?? ""}`.trim();
   return app.kind === "static" ? "Binary statis" : "Binary glibc";
+}
+
+/** runtimeSub(app, language) → the card subtitle: "Go · Binary statis", "Kotlin · Java 21", "Java 21". */
+export function runtimeSub(app, language) {
+  const runtime = runtimeLabel(app);
+  const name = LANGUAGE_NAMES[language];
+  return name && !(app.kind === "jar" && language === "java") ? `${name} · ${runtime}` : runtime;
 }
 
 export function runtimeImage(app) {

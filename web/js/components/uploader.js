@@ -100,7 +100,7 @@ export function uploader({ limitMB, onDone, onClear }) {
       h(
         "div",
         { class: "fileok" },
-        h("span", { class: "lgbox", style: { width: "34px", height: "34px" } }, kindLogo(rep.kind || "static")),
+        h("span", { class: "lgbox lg" }, kindLogo(rep.kind || "static", rep.language)),
         h("div", {}, h("b", { class: "mono" }, rep.file_name || file.name), h("div", { class: "muted", style: { "font-size": "12px" } }, `${fmtBytes(rep.size || file.size)} · selesai diunggah`)),
         h("div", { class: "r" }, replace),
       ),
