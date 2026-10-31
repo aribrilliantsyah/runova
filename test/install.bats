@@ -112,6 +112,21 @@ line_of() { grep -n -m1 -- "$1" "$CALLS" | cut -d: -f1; }
 	grep -q "ufw allow 9443/tcp" "$CALLS"
 }
 
+@test "--skip-firewall leaves ufw alone" {
+	parse_args --yes --skip-firewall
+	run step_firewall
+	[ "$status" -eq 0 ]
+	[[ "$output" == *"--skip-firewall"* ]]
+	! grep -q ufw "$CALLS"
+}
+
+@test "ufw is used again when --skip-firewall is not given" {
+	parse_args --yes --skip-firewall
+	parse_args --yes
+	step_firewall
+	grep -q "ufw allow 80/tcp" "$CALLS"
+}
+
 @test "daemon.json merged" {
 	mkdir -p "$RUNOVA_ROOT/etc/docker"
 	echo '{"log-driver":"local"}' >"$RUNOVA_ROOT/etc/docker/daemon.json"
