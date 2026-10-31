@@ -51,7 +51,11 @@ func check(cfg config.Config, stdout io.Writer) int {
 			code = 1
 			continue
 		}
-		fmt.Fprintf(stdout, "ok %s %s\n", p.name, oneLine(detail))
+		if d := oneLine(detail); d != "" {
+			fmt.Fprintf(stdout, "ok %s %s\n", p.name, d)
+		} else {
+			fmt.Fprintf(stdout, "ok %s\n", p.name)
+		}
 	}
 	return code
 }
