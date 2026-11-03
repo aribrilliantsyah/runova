@@ -18,7 +18,7 @@ import (
 	"runova/internal/caddy"
 )
 
-const caddyImage = "caddy:2"
+const caddyImage = "caddy:2.6.2"
 
 func freePort(t *testing.T) int {
 	t.Helper()
@@ -47,7 +47,7 @@ type testCaddy struct {
 }
 
 // startCaddy returns the Caddy named by RUNOVA_CADDY_TEST_ADMIN (an admin URL),
-// or starts the caddy:2 image on the host network with its admin API on a
+// or starts the pinned caddyImage on the host network with its admin API on a
 // random port. The container is removed when the test ends.
 func startCaddy(t *testing.T) testCaddy {
 	t.Helper()
@@ -144,7 +144,7 @@ func TestCaddyIntegration(t *testing.T) {
 	url := fmt.Sprintf("http://127.0.0.1:%d/", ipPort)
 	waitGet(t, url, `app xff="127.0.0.1"`)
 
-	t.Run("configuration Caddy cannot start is rejected and the old one keeps serving", func(t *testing.T) {
+	t.Run("port held by another process is refused before Caddy loads and the old configuration keeps serving", func(t *testing.T) {
 		taken, err := net.Listen("tcp", ":0")
 		if err != nil {
 			t.Fatal(err)
@@ -156,14 +156,14 @@ func TestCaddyIntegration(t *testing.T) {
 			Client: s.Client,
 			State:  func(context.Context) (caddy.State, error) { return bad, nil },
 		}).Apply(context.Background())
-		if err == nil {
-			t.Fatal("Caddy accepted a listener on a port that is in use")
+		if err == nil || !strings.Contains(err.Error(), "sudah dipakai") {
+			t.Fatalf("Apply = %v, want a refusal naming the busy port", err)
 		}
-		t.Logf("rejection: %v", err)
+		t.Logf("refusal: %v", err)
 		waitGet(t, url, `app xff="127.0.0.1"`)
 	})
 
-	t.Run("removing the listener closes the port", func(t *testing.T) {
+	t.Run("after a refused change, removing the listener still closes the port", func(t *testing.T) {
 		off := state
 		off.IPListeners = nil
 		if err := (&caddy.Syncer{Client: s.Client, State: func(context.Context) (caddy.State, error) { return off, nil }}).Apply(context.Background()); err != nil {

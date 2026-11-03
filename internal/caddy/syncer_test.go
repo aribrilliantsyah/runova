@@ -5,8 +5,10 @@ import (
 	"crypto/x509"
 	"errors"
 	"io"
+	"net"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -123,6 +125,76 @@ func TestSyncerReloadsWhenRunovaServerMissing(t *testing.T) {
 	t.Cleanup(func() { cancel(); <-done })
 
 	waitFor(t, "load over foreign config", func() bool { return loader.loadCount() >= 1 })
+}
+
+func listenConfig(ports ...string) []byte {
+	servers := ""
+	for i, p := range ports {
+		if i > 0 {
+			servers += ","
+		}
+		servers += `"s` + p + `":{"listen":[":` + p + `"]}`
+	}
+	return []byte(`{"apps":{"http":{"servers":{` + servers + `}}}}`)
+}
+
+func TestApplyRefusesPortInUseWithoutLoading(t *testing.T) {
+	loader := &fakeLoader{config: listenConfig("20001")}
+	var checked []int
+	s := &caddy.Syncer{
+		Client: loader,
+		State: staticState(caddy.State{
+			IPListeners: []caddy.IPListener{{Port: 20001, Upstream: "127.0.0.1:1"}, {Port: 20002, Upstream: "127.0.0.1:2"}},
+			PanelIPPort: 8443, PanelUpstream: "127.0.0.1:7070",
+		}),
+		PortFree: func(port int) error {
+			checked = append(checked, port)
+			if port == 20002 {
+				return errors.New("taken")
+			}
+			return nil
+		},
+	}
+	err := s.Apply(context.Background())
+	if err == nil || !strings.Contains(err.Error(), "20002") {
+		t.Fatalf("Apply = %v, want an error naming the busy port", err)
+	}
+	if loader.loadCount() != 0 {
+		t.Error("Caddy was asked to load a configuration whose port is taken")
+	}
+	if !slices.Equal(checked, []int{8443, 20002}) {
+		t.Errorf("checked ports %v, want only the ones Caddy does not hold yet: [8443 20002]", checked)
+	}
+}
+
+func TestApplyLoadsWhenPortsAreFree(t *testing.T) {
+	loader := &fakeLoader{}
+	s := &caddy.Syncer{
+		Client:   loader,
+		State:    staticState(caddy.State{IPListeners: []caddy.IPListener{{Port: 20001, Upstream: "127.0.0.1:1"}}}),
+		PortFree: func(int) error { return nil },
+	}
+	if err := s.Apply(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if loader.loadCount() != 1 {
+		t.Errorf("loads = %d, want 1", loader.loadCount())
+	}
+}
+
+func TestPortFree(t *testing.T) {
+	ln, err := net.Listen("tcp", ":0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	port := ln.Addr().(*net.TCPAddr).Port
+	if err := caddy.PortFree(port); err == nil {
+		t.Errorf("port %d is held but reported free", port)
+	}
+	ln.Close()
+	if err := caddy.PortFree(port); err != nil {
+		t.Errorf("port %d was released but reported busy: %v", port, err)
+	}
 }
 
 func TestApplySerialized(t *testing.T) {
