@@ -4,6 +4,10 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net"
+	"slices"
+	"strconv"
+	"strings"
 	"sync"
 	"time"
 )
@@ -27,6 +31,8 @@ type Syncer struct {
 	Interval time.Duration
 	// OnError receives errors of the background loop; nil drops them.
 	OnError func(error)
+	// PortFree reports why a TCP port cannot be listened on, nil if it can; nil means the PortFree function.
+	PortFree func(port int) error
 
 	mu sync.Mutex
 }
@@ -48,7 +54,83 @@ func (s *Syncer) apply(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
+	if err := s.checkPorts(ctx, state); err != nil {
+		return err
+	}
 	return s.Client.Load(ctx, cfg)
+}
+
+// checkPorts refuses a state that needs a port some other process holds,
+// before Caddy is asked to load it. Caddy 2.6 (Ubuntu 26.04) keeps the
+// listeners of the old configuration when a load fails while starting, and
+// later loads no longer close them, so a refused load must never reach it.
+// Ports Caddy holds itself are not checked: its running configuration owns them.
+func (s *Syncer) checkPorts(ctx context.Context, state State) error {
+	ports := make([]int, 0, len(state.IPListeners)+1)
+	if state.PanelIPPort != 0 {
+		ports = append(ports, state.PanelIPPort)
+	}
+	for _, l := range state.IPListeners {
+		ports = append(ports, l.Port)
+	}
+	if len(ports) == 0 {
+		return nil
+	}
+	running, err := s.Client.Config(ctx)
+	if err != nil {
+		return err
+	}
+	held := listenPorts(running)
+	free := s.PortFree
+	if free == nil {
+		free = PortFree
+	}
+	slices.Sort(ports)
+	for _, port := range ports {
+		if held[port] {
+			continue
+		}
+		if err := free(port); err != nil {
+			return fmt.Errorf("port %d sudah dipakai proses lain: %w", port, err)
+		}
+	}
+	return nil
+}
+
+// PortFree reports whether port can be listened on the way Caddy does, on every address.
+func PortFree(port int) error {
+	ln, err := net.Listen("tcp", ":"+strconv.Itoa(port))
+	if err != nil {
+		return err
+	}
+	return ln.Close()
+}
+
+// listenPorts returns the ports of every ":port" address that servers in cfg listen on.
+func listenPorts(cfg []byte) map[int]bool {
+	var c struct {
+		Apps struct {
+			HTTP struct {
+				Servers map[string]struct {
+					Listen []string `json:"listen"`
+				} `json:"servers"`
+			} `json:"http"`
+		} `json:"apps"`
+	}
+	ports := map[int]bool{}
+	if json.Unmarshal(cfg, &c) != nil {
+		return ports
+	}
+	for _, srv := range c.Apps.HTTP.Servers {
+		for _, addr := range srv.Listen {
+			if _, p, ok := strings.Cut(addr, ":"); ok {
+				if n, err := strconv.Atoi(p); err == nil {
+					ports[n] = true
+				}
+			}
+		}
+	}
+	return ports
 }
 
 // Run loads the configuration, then every Interval reloads it if Caddy lost
