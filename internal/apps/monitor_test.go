@@ -7,13 +7,13 @@ import (
 	"testing"
 	"time"
 
-	"runova/internal/apps"
 	"runova/internal/docker"
 	"runova/internal/docker/dockertest"
 	"runova/internal/store"
 )
 
-// startMonitor runs Monitor until the test ends and waits until it subscribed.
+// startMonitor runs Monitor until the test ends and waits until it subscribed
+// and finished its start-up Reconcile, which holds every app's lock.
 func startMonitor(t *testing.T, e *testEnv) {
 	t.Helper()
 	ctx, cancel := context.WithCancel(context.Background())
@@ -24,6 +24,10 @@ func startMonitor(t *testing.T, e *testEnv) {
 	}()
 	t.Cleanup(func() { cancel(); <-done })
 	waitFor(t, "monitor subscription", func() bool { return e.engine.Subscribers() == 1 })
+	// Events are read only after Reconcile returns, so once a marker is
+	// drained from the buffered stream the start-up reconcile is over.
+	e.engine.Emit(docker.Event{ContainerID: "marker", Action: "exec_start", Labels: map[string]string{"runova.app": "0"}})
+	waitFor(t, "start-up reconcile", func() bool { return e.engine.Pending() == 0 })
 }
 
 func waitFor(t *testing.T, what string, cond func() bool) {
@@ -84,10 +88,14 @@ func TestCrashLoopMarksFailed(t *testing.T) {
 		t.Fatalf("stopped before the 6th die: %v", e.engine.Calls())
 	}
 	die(t, e, app, cid)
-	waitFor(t, "app failed", func() bool {
-		got, _ := e.store.App(ctx, app.ID)
-		return got.Status == store.AppFailed
+	// giveUp marks the app failed first, then stops it, then notifies: wait for the last step.
+	waitFor(t, "crash-loop notification", func() bool {
+		n, _ := e.store.UnreadCount(ctx, u.ID)
+		return n > 0
 	})
+	if got, _ := e.store.App(ctx, app.ID); got.Status != store.AppFailed {
+		t.Fatalf("status = %s, want failed", got.Status)
+	}
 
 	if stops := e.engine.CallsWithPrefix("stop "); len(stops) != 1 {
 		t.Fatalf("stop calls = %v, want exactly one", stops)
@@ -364,14 +372,9 @@ func TestStopEchoDoesNotSwallowLaterCrash(t *testing.T) {
 	otherCID := activeContainer(t, e, other)
 	startMonitor(t, e)
 
-	// Monitor reconciles right after subscribing and holds the app's lock meanwhile.
-	waitFor(t, "stop accepted", func() bool {
-		err := e.svc.Stop(ctx, u, app.ID)
-		if err != nil && !errors.Is(err, apps.ErrBusy) {
-			t.Fatal(err)
-		}
-		return err == nil
-	})
+	if err := e.svc.Stop(ctx, u, app.ID); err != nil {
+		t.Fatal(err)
+	}
 	die(t, e, app, cid)
 	// Events are handled in order: once the other app's clean exit has been
 	// applied, the echo of the stop before it has been handled too.

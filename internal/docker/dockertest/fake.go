@@ -377,6 +377,17 @@ func (f *Fake) Subscribers() int {
 	return len(f.subs)
 }
 
+// Pending reports how many emitted events wait unread in the open streams.
+func (f *Fake) Pending() int {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	n := 0
+	for _, s := range f.subs {
+		n += len(s.ch)
+	}
+	return n
+}
+
 // Emit sends an event to every open stream whose filter matches the event labels.
 func (f *Fake) Emit(ev docker.Event) {
 	f.mu.Lock()
