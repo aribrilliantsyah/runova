@@ -51,7 +51,8 @@ func (s *Service) revertApp(ctx context.Context, old store.App) {
 	}
 }
 
-// CaddyState reads what Caddy has to serve. An app is routed while it runs,
+// CaddyState reads what Caddy has to serve. Subdomains of a disabled hosting
+// domain are not routed. An app is routed while it runs,
 // or while a new deployment replaces the one that still serves; its upstream
 // is always the host port of the active deployment. panelUpstream is where
 // the panel listens, as an address Caddy can reach.
@@ -92,12 +93,38 @@ func CaddyState(ctx context.Context, st *store.Store, panelUpstream string) (cad
 			state.IPListeners = append(state.IPListeners, caddy.IPListener{Port: app.IPPort, Upstream: upstream[app.ID]})
 		}
 	}
+	off, err := disabledHostingOf(ctx, st)
+	if err != nil {
+		return caddy.State{}, err
+	}
 	for _, d := range domains {
+		if d.HostingDomainID != nil && off[*d.HostingDomainID] {
+			continue
+		}
 		if up, ok := upstream[d.AppID]; ok {
 			state.Sites = append(state.Sites, caddy.Site{Host: d.Host, Upstream: up})
 		}
 	}
 	return state, nil
+}
+
+// disabledHostingOf is the set of hosting domains the admin turned off.
+func disabledHostingOf(ctx context.Context, st *store.Store) (map[int64]bool, error) {
+	list, err := st.HostingDomains(ctx)
+	if err != nil {
+		return nil, err
+	}
+	off := map[int64]bool{}
+	for _, h := range list {
+		if !h.Enabled {
+			off[h.ID] = true
+		}
+	}
+	return off, nil
+}
+
+func (s *Service) disabledHosting(ctx context.Context) (map[int64]bool, error) {
+	return disabledHostingOf(ctx, s.Store)
 }
 
 // PanelUpstream turns the panel's listen address into one Caddy can dial.

@@ -29,11 +29,11 @@ func TestAddDomainNormalizesAndApplies(t *testing.T) {
 	ctx := context.Background()
 	e := newTestEnv(t)
 	fc := &fakeCaddy{}
-	u := e.addUser("budi", store.RoleUser, roomyQuota)
+	u := e.addUser("budi", store.RoleAdmin, roomyQuota)
 	app, _ := deployFirst(t, e, u, "billing")
 	e.svc.Caddy = fc
 
-	d, err := e.svc.AddDomain(ctx, u, app.ID, "App.Contoh.ID.")
+	d, err := e.svc.AddDomain(ctx, u, app.ID, apps.DomainInput{Host: "App.Contoh.ID."})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -64,13 +64,14 @@ func TestAddDomainRejections(t *testing.T) {
 	ctx := context.Background()
 	e := newTestEnv(t)
 	e.svc.Caddy = &fakeCaddy{}
-	a := e.addUser("andi", store.RoleUser, roomyQuota)
-	b := e.addUser("budi", store.RoleUser, roomyQuota)
+	a := e.addUser("andi", store.RoleAdmin, roomyQuota)
+	b := e.addUser("budi", store.RoleAdmin, roomyQuota)
+	c := e.addUser("citra", store.RoleUser, roomyQuota)
 	appA, _ := e.createStatic(a, "one")
 	appB, _ := e.createStatic(b, "two")
 	e.setSettings(func(s *store.Settings) { s.PanelDomain = "p.co" })
 
-	if _, err := e.svc.AddDomain(ctx, a, appA.ID, "x.co"); err != nil {
+	if _, err := e.svc.AddDomain(ctx, a, appA.ID, apps.DomainInput{Host: "x.co"}); err != nil {
 		t.Fatal(err)
 	}
 	for _, tc := range []struct {
@@ -86,9 +87,9 @@ func TestAddDomainRejections(t *testing.T) {
 		{"panel domain", b, appB.ID, "p.co", store.ErrConflict, "Domain sudah dipakai"},
 		{"IP address", b, appB.ID, "203.0.113.5", apps.ErrValidation, ""},
 		{"single label", b, appB.ID, "contoh", apps.ErrValidation, ""},
-		{"someone else's app", b, appA.ID, "y.co", apps.ErrAppNotFound, ""},
+		{"someone else's app", c, appA.ID, "y.co", apps.ErrAppNotFound, ""},
 	} {
-		_, err := e.svc.AddDomain(ctx, tc.user, tc.app, tc.host)
+		_, err := e.svc.AddDomain(ctx, tc.user, tc.app, apps.DomainInput{Host: tc.host})
 		if !errors.Is(err, tc.kind) || (tc.msg != "" && err.Error() != tc.msg) {
 			t.Errorf("%s: err = %v, want %v %q", tc.name, err, tc.kind, tc.msg)
 		}
@@ -102,14 +103,14 @@ func TestAddDomainLimit(t *testing.T) {
 	ctx := context.Background()
 	e := newTestEnv(t)
 	e.svc.Caddy = &fakeCaddy{}
-	u := e.addUser("budi", store.RoleUser, roomyQuota)
+	u := e.addUser("budi", store.RoleAdmin, roomyQuota)
 	app, _ := e.createStatic(u, "billing")
 	for _, h := range []string{"a.co", "b.co", "c.co", "d.co", "e.co"} {
-		if _, err := e.svc.AddDomain(ctx, u, app.ID, h); err != nil {
+		if _, err := e.svc.AddDomain(ctx, u, app.ID, apps.DomainInput{Host: h}); err != nil {
 			t.Fatal(err)
 		}
 	}
-	_, err := e.svc.AddDomain(ctx, u, app.ID, "f.co")
+	_, err := e.svc.AddDomain(ctx, u, app.ID, apps.DomainInput{Host: "f.co"})
 	if !errors.Is(err, apps.ErrValidation) || err.Error() != "Maksimal 5 domain per aplikasi" {
 		t.Fatalf("sixth domain: %v", err)
 	}
@@ -120,10 +121,10 @@ func TestAddDomainCaddyRejectsRollsBack(t *testing.T) {
 	e := newTestEnv(t)
 	fc := &fakeCaddy{err: errors.New("caddy POST /load: 400 bad upstream")}
 	e.svc.Caddy = fc
-	u := e.addUser("budi", store.RoleUser, roomyQuota)
+	u := e.addUser("budi", store.RoleAdmin, roomyQuota)
 	app, _ := e.createStatic(u, "billing")
 
-	_, err := e.svc.AddDomain(ctx, u, app.ID, "x.co")
+	_, err := e.svc.AddDomain(ctx, u, app.ID, apps.DomainInput{Host: "x.co"})
 	if !errors.Is(err, apps.ErrCaddy) || err.Error() != "Caddy menolak konfigurasi: caddy POST /load: 400 bad upstream" {
 		t.Fatalf("AddDomain = %v", err)
 	}
@@ -135,7 +136,7 @@ func TestAddDomainCaddyRejectsRollsBack(t *testing.T) {
 		t.Error("a rolled-back domain was logged as added")
 	}
 	fc.err = nil
-	if _, err := e.svc.AddDomain(ctx, u, app.ID, "x.co"); err != nil {
+	if _, err := e.svc.AddDomain(ctx, u, app.ID, apps.DomainInput{Host: "x.co"}); err != nil {
 		t.Fatalf("host not free after rollback: %v", err)
 	}
 }
@@ -144,7 +145,7 @@ func TestCheckDomainStatusTransitions(t *testing.T) {
 	ctx := context.Background()
 	e := newTestEnv(t)
 	e.svc.Caddy = &fakeCaddy{}
-	u := e.addUser("budi", store.RoleUser, roomyQuota)
+	u := e.addUser("budi", store.RoleAdmin, roomyQuota)
 	app, _ := e.createStatic(u, "billing")
 	ok, detail := false, "Sertifikat belum dipercaya"
 	e.svc.Probe = func(_ context.Context, host string) (bool, string) {
@@ -153,7 +154,7 @@ func TestCheckDomainStatusTransitions(t *testing.T) {
 		}
 		return ok, detail
 	}
-	d, _ := e.svc.AddDomain(ctx, u, app.ID, "x.co")
+	d, _ := e.svc.AddDomain(ctx, u, app.ID, apps.DomainInput{Host: "x.co"})
 
 	got, err := e.svc.CheckDomain(ctx, u, app.ID, d.ID)
 	if err != nil || got.Status != store.DomainPending || got.Detail != detail || got.CheckedAt == 0 {
@@ -196,7 +197,7 @@ func TestCheckDomainsProbesOnlyInactive(t *testing.T) {
 	ctx := context.Background()
 	e := newTestEnv(t)
 	e.svc.Caddy = &fakeCaddy{}
-	u := e.addUser("budi", store.RoleUser, roomyQuota)
+	u := e.addUser("budi", store.RoleAdmin, roomyQuota)
 	app, _ := e.createStatic(u, "billing")
 	probed := map[string]int{}
 	working := map[string]bool{"ok.co": true}
@@ -205,7 +206,7 @@ func TestCheckDomainsProbesOnlyInactive(t *testing.T) {
 		return working[host], "belum"
 	}
 	for _, h := range []string{"new.co", "ok.co"} {
-		if _, err := e.svc.AddDomain(ctx, u, app.ID, h); err != nil {
+		if _, err := e.svc.AddDomain(ctx, u, app.ID, apps.DomainInput{Host: h}); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -243,12 +244,12 @@ func TestCaddyState(t *testing.T) {
 	ctx := context.Background()
 	e := newTestEnv(t)
 	e.svc.Caddy = &fakeCaddy{}
-	u := e.addUser("budi", store.RoleUser, roomyQuota)
+	u := e.addUser("budi", store.RoleAdmin, roomyQuota)
 	running, d1 := deployFirst(t, e, u, "billing")
 	stopped, _ := deployFirst(t, e, u, "reports")
 	fresh, _ := e.createStatic(u, "fresh")
 	for app, host := range map[int64]string{running.ID: "run.co", stopped.ID: "stop.co", fresh.ID: "fresh.co"} {
-		if _, err := e.svc.AddDomain(ctx, u, app, host); err != nil {
+		if _, err := e.svc.AddDomain(ctx, u, app, apps.DomainInput{Host: host}); err != nil {
 			t.Fatal(err)
 		}
 	}
