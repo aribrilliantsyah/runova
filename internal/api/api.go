@@ -114,6 +114,9 @@ func New(cfg Config) http.Handler {
 	if s.apps != nil {
 		s.appRoutes(mux, user)
 	}
+	if s.apps != nil {
+		s.hostingRoutes(mux, user, admin)
+	}
 	if s.dbs != nil {
 		s.dbRoutes(mux, user, admin)
 	}

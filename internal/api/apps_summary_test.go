@@ -1,6 +1,7 @@
 package api_test
 
 import (
+	"context"
 	"strconv"
 	"strings"
 	"testing"
@@ -30,11 +31,10 @@ func TestListAppsSummary(t *testing.T) {
 	budi.waitStatus(id, "running")
 	other, _ := sari.createApp("secret-app", nil)
 	sari.waitStatus(other, "running")
-	if r := budi.do("POST", appPath(id, "/domains"), obj{"host": "billing.example.com"}); r.status != 201 {
-		t.Fatalf("add domain: %d %s", r.status, r.body)
-	}
-	if r := sari.do("POST", appPath(other, "/domains"), obj{"host": "private.example.com"}); r.status != 201 {
-		t.Fatalf("add domain: %d %s", r.status, r.body)
+	for appID, host := range map[int64]string{id: "billing.example.com", other: "private.example.com"} {
+		if _, err := e.store.AddDomain(context.Background(), appID, host, 1); err != nil {
+			t.Fatal(err)
+		}
 	}
 	spare, _ := budi.createApp("worker", nil)
 
