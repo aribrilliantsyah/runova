@@ -253,8 +253,8 @@ ALTER TABLE apps ADD COLUMN database_id INTEGER NULL REFERENCES databases ON DEL
 			if err := runMigrate(t, db, embeddedMigrations(), path); err != nil {
 				t.Fatal(err)
 			}
-			if v := version(t, db); v != 1 {
-				t.Fatalf("user_version = %d, want 1", v)
+			if v := version(t, db); v != 2 {
+				t.Fatalf("user_version = %d, want 2 (adopted as 1, then 0002 applied)", v)
 			}
 			if n := count(t, db, `SELECT count(*) FROM users WHERE username = 'budi'`); n != 1 {
 				t.Fatal("user lost")
@@ -267,8 +267,8 @@ ALTER TABLE apps ADD COLUMN database_id INTEGER NULL REFERENCES databases ON DEL
 			if n := count(t, db, `SELECT count(*) FROM sqlite_master WHERE name IN('databases','databases_user')`); n != 2 {
 				t.Error("databases table or index missing after adoption")
 			}
-			if b := backups(t, path); len(b) != 0 {
-				t.Fatalf("adoption made a backup: %v", b)
+			if b := backups(t, path); len(b) != 1 || !strings.Contains(b[0], ".bak-v1-") {
+				t.Fatalf("backups = %v, want one v1 backup taken before 0002 only", b)
 			}
 		})
 	}
@@ -437,5 +437,50 @@ func TestSchemaVersionOfMissingDatabaseDoesNotCreateIt(t *testing.T) {
 	}
 	if _, err := os.Stat(path); !os.IsNotExist(err) {
 		t.Fatalf("SchemaVersion created the database: %v", err)
+	}
+}
+
+func TestMigration0002KeepsVersion1Data(t *testing.T) {
+	db, path := rawDB(t)
+	init1, err := fs.ReadFile(embeddedMigrations(), "0001_init.sql")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := runMigrate(t, db, files(map[string]string{"0001_init.sql": string(init1)}), path); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec(`
+		INSERT INTO users(id, username, password_hash, role, quota_apps, quota_memory_mb, quota_cpu_milli, quota_databases, quota_pg_connections, created_at)
+			VALUES(1, 'budi', 'x', 'user', 3, 1024, 1000, 3, 20, 1);
+		INSERT INTO apps(id, user_id, name, kind, internal_port, ip_port, memory_mb, cpu_milli, status, created_at)
+			VALUES(1, 1, 'billing', 'static', 8080, 20000, 128, 100, 'running', 1);
+		INSERT INTO domains(app_id, host, status, created_at) VALUES(1, 'billing.budi.com', 'active', 5), (1, 'www.budi.com', 'pending', 6);
+	`); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := runMigrate(t, db, embeddedMigrations(), path); err != nil {
+		t.Fatal(err)
+	}
+	if v := version(t, db); v != 2 {
+		t.Fatalf("user_version = %d, want 2", v)
+	}
+	if n := count(t, db, `SELECT count(*) FROM domains WHERE app_id = 1 AND hosting_domain_id IS NULL AND label = '' AND host IN ('billing.budi.com', 'www.budi.com')`); n != 2 {
+		t.Fatalf("free domains kept = %d, want 2", n)
+	}
+	if n := count(t, db, `SELECT count(*) FROM apps`); n != 1 {
+		t.Fatalf("apps = %d, want 1", n)
+	}
+	if n := count(t, db, `SELECT count(*) FROM pragma_foreign_key_check`); n != 0 {
+		t.Fatalf("foreign_key_check reports %d violations", n)
+	}
+	if _, err := db.Exec(`INSERT INTO hosting_domains(name, created_at) VALUES('porto.ex.id', 1)`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec(`UPDATE domains SET hosting_domain_id = 1, label = 'billing' WHERE host = 'billing.budi.com'`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec(`DELETE FROM hosting_domains WHERE id = 1`); err == nil {
+		t.Fatal("deleting a hosting domain that subdomains use must fail (ON DELETE RESTRICT)")
 	}
 }

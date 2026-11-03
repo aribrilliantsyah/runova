@@ -24,7 +24,7 @@ Platform seperti Vercel atau Railway membangun aplikasi dari source code dan ber
 
 - **Unggah, bukan build.** Runova tidak menyentuh source code. Ia membaca file yang diunggah: jenisnya, versi Java minimal, port, dan environment yang dirujuk.
 - **Terpisah per pengguna.** Setiap aplikasi berjalan di container Docker sendiri dengan batas memori dan CPU. Pengguna tidak bisa melihat atau menyentuh aplikasi milik pengguna lain.
-- **Uji dulu lewat IP, lalu pasang domain.** Aplikasi bisa dibuka di `IP-server:port` untuk pengujian. Setelah admin jaringan mengarahkan DNS, Caddy menerbitkan sertifikat HTTPS sendiri dan akses IP bisa ditutup.
+- **Uji dulu lewat IP, lalu pasang alamat.** Aplikasi bisa dibuka di `IP-server:port` untuk pengujian. Admin mendaftarkan domain wildcard sekali, lalu setiap pengguna memberi aplikasinya alamat `nama.domain-terdaftar` tanpa mengurus DNS; Caddy menerbitkan sertifikat HTTPS sendiri dan akses IP bisa ditutup.
 
 ## Yang boleh dijalankan
 
@@ -159,7 +159,18 @@ Caddyfile (`{ admin localhost:2019 }`), `daemon.json`, aturan `ufw`, dan paket a
 
 Jujur soal apa yang terbukti. **Terbukti** (`test/system/run.sh`, diulang dengan satu perintah): `scripts/deploy.sh` memasang Runova lewat SSH ke Ubuntu 26.04 sungguhan berjalan dengan systemd sebagai PID 1 (container privileged, tanpa VM) dengan `apt-get install` nyata dari repositori Ubuntu (`docker.io` 29.1.3, `caddy` 2.6.2, `postgresql-18` 18.6, `ufw`), Docker-in-Docker, dan `ufw` aktif dengan aturannya. Di situ `runova check` ok semua, login API lewat Caddy berhasil, pengguna dan database dibuat di PostgreSQL apt, binary contoh berjalan di container dan terjangkau lewat port akses IP dari luar server, pemasangan kedua tidak mencetak password dan tidak mengubah kunci, data, atau aplikasi, dan `systemctl restart runova caddy postgresql` memulihkan panel dan aplikasi. Selain itu ada uji `bats` dengan stub dan `shellcheck` untuk semua skrip, serta alur produk end-to-end lengkap (`test/e2e`: deploy JAR dan binary, deploy tanpa jeda, isolasi antar-pengguna, backup dan restore) dengan Docker nyata, `caddy:2.6.2`, dan `postgres:18`. **Belum terbukti:** kernel dan boot server sungguhan (container memakai kernel mesin pengembang; `systemd-modules-load` gagal di container sehingga systemd melapor `degraded`), reboot server (unit memakai `Wants`/`After`, `Restart=on-failure`, dan Caddy `--resume`), pengaruh `ufw` terhadap aturan iptables Docker di kernel server, `ufw` di luar container, dan sertifikat publik untuk domain sungguhan (di container Caddy hanya menerbitkan sertifikat internal). Coba di server percobaan dulu.
 
-## Menghubungkan domain
+## Domain hosting bersama
+
+Admin membuka halaman **Server → Domain hosting** dan mendaftarkan domain wildcard, misalnya `porto.devkriyanesia.my.id`, lalu membuat satu record `A` `*.porto` ke IP server (proxy **DNS only**). Runova mengecek DNS-nya dan menampilkan hasilnya. Setelah itu setiap pengguna, admin maupun biasa, memilih domain itu di langkah 4 wizard atau tab Domain, mengetik nama (`cv-budi`), dan aplikasinya langsung beralamat `cv-budi.porto.devkriyanesia.my.id`.
+
+- Jumlah subdomain pengguna dibatasi kuota aplikasinya; batas per aplikasi tetap 5 alamat.
+- Nama 3–40 karakter (huruf kecil, angka, tanda hubung); `www`, `api`, `mail`, `admin`, `runova`, label panel, dan nama cadangan tambahan dari admin tidak bisa dipakai. Siapa cepat dia dapat.
+- Mematikan domain hosting mencabut semua subdomainnya dari Caddy dan memberi tahu pemiliknya; domain hanya bisa dihapus bila tidak ada subdomain yang memakainya.
+- Satu sertifikat Let's Encrypt diterbitkan per subdomain. Let's Encrypt membatasi 50 sertifikat baru per minggu per domain utama; kartu Domain hosting menampilkan perkiraan dan memperingatkan mendekati batas.
+- Domain milik sendiri (mis. `budi.com`) hanya bisa ditambahkan admin; domain seperti itu yang sudah dimiliki pengguna biasa tetap berjalan.
+- Proxy Cloudflare (awan oranye) dan Tunnel tidak didukung untuk subdomain tingkat dua.
+
+## Menghubungkan domain sendiri (admin)
 
 Saat domain diisi, Runova menampilkan panduan yang sudah terisi subdomain, domain, dan alamat server. Ada tiga cara, sesuai kondisi jaringan:
 

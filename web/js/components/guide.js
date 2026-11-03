@@ -22,9 +22,9 @@ function cp(value) {
   return b;
 }
 
-const kv = (label, value, copyable = true) =>
+export const kv = (label, value, copyable = true) =>
   h("div", {}, h("span", {}, label), h("code", {}, value), copyable ? cp(typeof value === "string" ? value : value.textContent) : h("span"));
-const cloud = (kind, text) => h("span", { class: `cloud ${kind}` }, h("i"), text);
+export const cloud = (kind, text) => h("span", { class: `cloud ${kind}` }, h("i"), text);
 const step = (title, where, extra) => h("li", {}, h("div", {}, h("b", {}, title), where ? h("span", { class: "where" }, where) : null, extra));
 const note = (ic, ...children) => h("div", { class: "gnote" }, icon(ic), h("span", {}, ...children));
 

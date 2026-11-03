@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"strconv"
 
+	"runova/internal/apps"
 	"runova/internal/auth"
 )
 
@@ -62,13 +63,11 @@ func (s *server) addDomain(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	var in struct {
-		Host string `json:"host"`
-	}
+	var in apps.DomainInput
 	if !decode(w, r, &in) {
 		return
 	}
-	d, err := s.apps.AddDomain(r.Context(), u, id, in.Host)
+	d, err := s.apps.AddDomain(r.Context(), u, id, in)
 	if err != nil {
 		appError(w, r, err)
 		return

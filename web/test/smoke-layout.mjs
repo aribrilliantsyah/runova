@@ -40,6 +40,10 @@ try {
   const appId = created.body.app.id;
   await call("POST", `/api/apps/${appId}/domains`, { host: "billing.perusahaan.co.id" }, cookie);
   await call("POST", `/api/apps/${appId}/domains`, { host: "pending.perusahaan.co.id" }, cookie);
+  const hosting = await call("POST", "/api/hosting-domains", { name: "apps.perusahaan.co.id", reserved: "blog" }, cookie);
+  check(hosting.status === 201, `hosting ${hosting.status}`);
+  await call("POST", "/api/hosting-domains", { name: "bad.proxy-sangat-panjang-untuk-menguji-tata-letak.co.id" }, cookie);
+  await call("POST", `/api/apps/${appId}/domains`, { hosting_domain_id: hosting.body.id, label: "billing-budi-santoso" }, cookie);
   await call("POST", `/api/databases/${db.body.id}/backups`, {}, cookie);
   await call("POST", "/api/users", { username: "sari", display_name: "Sari Wulandari", email: "sari@perusahaan.co.id", password: "sari-password-1", role: "user" }, cookie);
   for (let i = 0; i < 40; i++) {
@@ -95,7 +99,7 @@ try {
         if (r.endsWith("/env")) await page.waitForSelector("#envlist .envrow");
         if (r.endsWith("/databases")) await page.waitForSelector(".dbcard");
         if (r.endsWith("/users")) await page.waitForSelector("#userrows tr");
-        if (r.endsWith("/server")) await page.waitForSelector(".g3 .svc");
+        if (r.endsWith("/server")) await page.waitForSelector("#hostrows tr");
         if (r.endsWith("/domains")) await page.waitForSelector("table.t tbody tr");
         await measure(where(r));
         if (r.endsWith("/env")) {

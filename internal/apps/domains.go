@@ -25,15 +25,44 @@ func (s *Service) probe(ctx context.Context, host string) (bool, string) {
 	return caddy.ProbeTLS(ctx, host)
 }
 
-// AddDomain routes host to the app. The host is normalized and must be free
-// (no app and not the panel); Caddy must accept the new configuration, or the
-// domain is removed again.
-func (s *Service) AddDomain(ctx context.Context, user store.User, appID int64, host string) (store.Domain, error) {
-	app, _, err := s.load(ctx, user, appID)
+// AddDomain gives the app an address: a label under a registered hosting
+// domain (counted against the owner's subdomain quota) or, for admins, a free
+// host name. A free host is normalized and must be free (no app and not the
+// panel). Caddy must accept the new configuration, or the domain is removed again.
+func (s *Service) AddDomain(ctx context.Context, user store.User, appID int64, in DomainInput) (store.Domain, error) {
+	app, owner, err := s.load(ctx, user, appID)
 	if err != nil {
 		return store.Domain{}, err
 	}
-	host, err = caddy.ValidateDomain(host)
+	var d store.Domain
+	switch {
+	case in.HostingDomainID != 0 && in.Host != "":
+		return store.Domain{}, invalid("Pilih domain hosting atau isi domain sendiri, tidak keduanya")
+	case in.HostingDomainID != 0:
+		d, err = s.addHostedDomain(ctx, app, owner, in)
+	case in.Host != "":
+		if !user.IsAdmin() {
+			return store.Domain{}, forbidden("Domain sendiri hanya bisa ditambahkan admin")
+		}
+		d, err = s.addFreeDomain(ctx, app, in.Host)
+	default:
+		return store.Domain{}, invalid("Pilih domain hosting dan isi nama alamat")
+	}
+	if err != nil {
+		return store.Domain{}, err
+	}
+	if err := s.ApplyCaddy(ctx); err != nil {
+		if rmErr := s.Store.RemoveDomain(context.WithoutCancel(ctx), app.ID, d.ID); rmErr != nil {
+			slog.Error("roll back domain", "host", d.Host, "err", rmErr)
+		}
+		return store.Domain{}, err
+	}
+	s.logActivity(ctx, user, store.ActDomainAdd, app.Name, d.Host)
+	return d, nil
+}
+
+func (s *Service) addFreeDomain(ctx context.Context, app store.App, host string) (store.Domain, error) {
+	host, err := caddy.ValidateDomain(host)
 	if err != nil {
 		return store.Domain{}, invalid("%s", err.Error())
 	}
@@ -50,17 +79,8 @@ func (s *Service) AddDomain(ctx context.Context, user store.User, appID int64, h
 		return store.Domain{}, conflict("Domain sudah dipakai")
 	case errors.Is(err, store.ErrDomainLimit):
 		return store.Domain{}, invalid("Maksimal %d domain per aplikasi", store.MaxDomainsPerApp)
-	case err != nil:
-		return store.Domain{}, err
 	}
-	if err := s.ApplyCaddy(ctx); err != nil {
-		if rmErr := s.Store.RemoveDomain(context.WithoutCancel(ctx), app.ID, d.ID); rmErr != nil {
-			slog.Error("roll back domain", "host", host, "err", rmErr)
-		}
-		return store.Domain{}, err
-	}
-	s.logActivity(ctx, user, store.ActDomainAdd, app.Name, host)
-	return d, nil
+	return d, err
 }
 
 // RemoveDomain deletes the domain and its route.
@@ -141,15 +161,20 @@ func (s *Service) checkDomain(ctx context.Context, app store.App, d store.Domain
 	return d, nil
 }
 
-// CheckDomains probes every domain that is not active yet.
+// CheckDomains probes every domain that is not active yet, except subdomains
+// of a disabled hosting domain (Caddy does not serve them).
 func (s *Service) CheckDomains(ctx context.Context) error {
 	list, err := s.Store.AllDomains(ctx)
 	if err != nil {
 		return err
 	}
+	off, err := s.disabledHosting(ctx)
+	if err != nil {
+		return err
+	}
 	var errs []error
 	for _, d := range list {
-		if d.Status == store.DomainActive {
+		if d.Status == store.DomainActive || d.HostingDomainID != nil && off[*d.HostingDomainID] {
 			continue
 		}
 		app, err := s.Store.App(ctx, d.AppID)

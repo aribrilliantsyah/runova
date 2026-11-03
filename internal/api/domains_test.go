@@ -70,8 +70,8 @@ func addDomain(c *client, id int64, host string) resp {
 func TestDomainUniqueness(t *testing.T) {
 	e := newAppEnv(t, 0)
 	withCaddy(e)
-	e.addUser("andi", "andi-password-1", store.RoleUser)
-	e.addUser("budi", "budi-password-1", store.RoleUser)
+	e.addUser("andi", "andi-password-1", store.RoleAdmin)
+	e.addUser("budi", "budi-password-1", store.RoleAdmin)
 	a := e.login("andi", "andi-password-1")
 	b := e.login("budi", "budi-password-1")
 	admin := e.login("admin", adminPassword)
@@ -101,8 +101,14 @@ func TestDomainUniqueness(t *testing.T) {
 	if r := addDomain(b, idB, "203.0.113.5"); r.status != 400 {
 		t.Fatalf("IP as domain = %d %s", r.status, r.body)
 	}
-	if r := addDomain(b, idA, "y.co"); r.status != 404 {
-		t.Fatalf("B adds to A's app = %d %s", r.status, r.body)
+	e.addUser("citra", "citra-password-1", store.RoleUser)
+	citra := e.login("citra", "citra-password-1")
+	idC, _ := citra.createApp("three", nil)
+	if r := addDomain(citra, idC, "y.co"); r.status != 403 {
+		t.Fatalf("a user adding a free domain = %d %s", r.status, r.body)
+	}
+	if r := citra.do("POST", domainsPath(idA), obj{"hosting_domain_id": 1, "label": "abc"}); r.status != 404 {
+		t.Fatalf("a user on someone else's app = %d %s", r.status, r.body)
 	}
 }
 
@@ -121,7 +127,7 @@ func withPanel(t *testing.T, c *client, fields obj) obj {
 func TestDomainLimit(t *testing.T) {
 	e := newAppEnv(t, 0)
 	withCaddy(e)
-	e.addUser("budi", "budi-password-1", store.RoleUser)
+	e.addUser("budi", "budi-password-1", store.RoleAdmin)
 	c := e.login("budi", "budi-password-1")
 	id, _ := c.createApp("one", nil)
 	for _, h := range []string{"a.co", "b.co", "c.co", "d.co", "e.co"} {
@@ -138,7 +144,7 @@ func TestDomainLimit(t *testing.T) {
 func TestAddDomainCaddyRejects(t *testing.T) {
 	e := newAppEnv(t, 0)
 	loader := withCaddy(e)
-	e.addUser("budi", "budi-password-1", store.RoleUser)
+	e.addUser("budi", "budi-password-1", store.RoleAdmin)
 	c := e.login("budi", "budi-password-1")
 	id, _ := c.createApp("one", nil)
 	c.waitStatus(id, "running")
@@ -169,7 +175,7 @@ func TestAddDomainCaddyRejects(t *testing.T) {
 func TestDomainEndpoints(t *testing.T) {
 	e := newAppEnv(t, 0)
 	loader := withCaddy(e)
-	e.addUser("budi", "budi-password-1", store.RoleUser)
+	e.addUser("budi", "budi-password-1", store.RoleAdmin)
 	c := e.login("budi", "budi-password-1")
 	id, _ := c.createApp("one", nil)
 	c.waitStatus(id, "running")
@@ -216,7 +222,7 @@ func TestDomainEndpoints(t *testing.T) {
 func TestIPAccessToggleAppliesCaddy(t *testing.T) {
 	e := newAppEnv(t, 0)
 	loader := withCaddy(e)
-	e.addUser("budi", "budi-password-1", store.RoleUser)
+	e.addUser("budi", "budi-password-1", store.RoleAdmin)
 	c := e.login("budi", "budi-password-1")
 	id, _ := c.createApp("one", obj{"ip_access": true})
 	c.waitStatus(id, "running")
@@ -255,7 +261,7 @@ func TestIPAccessToggleAppliesCaddy(t *testing.T) {
 func TestGuideWithoutPublicIP(t *testing.T) {
 	e := newAppEnv(t, 0)
 	withCaddy(e)
-	e.addUser("budi", "budi-password-1", store.RoleUser)
+	e.addUser("budi", "budi-password-1", store.RoleAdmin)
 	admin := e.login("admin", adminPassword)
 	c := e.login("budi", "budi-password-1")
 	id, _ := c.createApp("one", nil)

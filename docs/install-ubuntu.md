@@ -139,6 +139,21 @@ Installer memasang `docker.io`, `caddy`, `postgresql-18`, `ufw`, `jq`, dan `curl
 
 Password admin hilang: `sudo -u runova env RUNOVA_DATA=/var/lib/runova runova admin reset-password admin`.
 
+## Domain hosting untuk pengguna
+
+Agar pengguna bisa memberi aplikasinya alamat tanpa mengurus DNS, daftarkan satu domain wildcard. Contoh: domain `porto.devkriyanesia.my.id` di zona Cloudflare `devkriyanesia.my.id`; panel tetap di `runova.prodak.id` (domain panel tidak otomatis menjadi domain hosting).
+
+1. Isi **IP publik** server di halaman **Server** (setelan jaringan).
+2. Di Cloudflare, zona `devkriyanesia.my.id` → DNS → Records → Add record: **Type** `A`, **Name** `*.porto`, **IPv4 address** IP publik server, **Proxy status** **DNS only** (awan abu-abu), TTL Auto. Port 80 dan 443 harus terbuka dari internet.
+3. Di Runova, **Server → Domain hosting**, isi `porto.devkriyanesia.my.id` (boleh `*.porto.devkriyanesia.my.id`) lalu **Daftarkan**. Status DNS harus **DNS benar**; bila tidak, pesannya menyebut penyebabnya (belum ada record, menunjuk ke IP lain, atau proxy Cloudflare menyala). Tombol cek ulang ada di baris domain.
+4. Pengguna memilih domain itu di wizard deploy langkah 4 atau tab Domain aplikasi, mengetik nama (`cv-budi`), dan alamat `cv-budi.porto.devkriyanesia.my.id` langsung dipakai. Caddy menerbitkan sertifikat per subdomain (satu per alamat) lewat HTTP/TLS-ALPN, jadi tidak perlu token API Cloudflare dan tidak ada sertifikat wildcard.
+
+**Batas Let's Encrypt.** Let's Encrypt menerbitkan paling banyak 50 sertifikat baru per minggu untuk satu domain utama (`devkriyanesia.my.id`, termasuk semua subdomainnya dan domain panel bila serumpun). Kartu Domain hosting menghitung perkiraan subdomain yang dibuat dalam 7 hari terakhir dan memberi peringatan kuning mulai 40 dan merah mulai 50; ini perkiraan Runova, bukan hitungan Let's Encrypt. Bila batas terlampaui, sertifikat subdomain baru tertunda sampai minggu berikutnya.
+
+**Cloudflare Proxied dan Tunnel tidak dipakai di sini:** sertifikat Universal SSL Cloudflare tidak mencakup subdomain tingkat dua seperti `*.porto.devkriyanesia.my.id`.
+
+Mematikan domain hosting menghentikan semua subdomainnya dan memberi tahu pemiliknya; menghapusnya baru bisa setelah tidak ada subdomain yang memakainya. Domain milik sendiri (mis. `budi.com`) hanya bisa ditambahkan admin.
+
 ## 7. Pembaruan
 
 Jalankan perintah instalasi lagi. Tanpa `--domain`/`--port`, alamat panel tetap:

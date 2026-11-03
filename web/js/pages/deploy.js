@@ -6,8 +6,8 @@ import { uploader } from "/assets/js/components/uploader.js";
 import { envForm } from "/assets/js/components/envform.js";
 import { dbPick } from "/assets/js/components/dbpick.js";
 import { resourceCards } from "/assets/js/components/resource.js";
-import { guide } from "/assets/js/components/guide.js";
-import { appNameError, hostError, jvmOptsError, portError, suggestName } from "/assets/js/validate.js";
+import { addressControl } from "/assets/js/components/address.js";
+import { appNameError, jvmOptsError, portError, suggestName } from "/assets/js/validate.js";
 import { JAVA_VERSIONS, LTS_NOTE, runtimeImage } from "/assets/js/kinds.js";
 import { toast } from "/assets/js/toast.js";
 
@@ -20,7 +20,7 @@ const STEPS = [
 
 export async function renderDeploy(root) {
   const user = session.current();
-  const [info, appsData, dbData] = await Promise.all([api.get("/api/info"), api.get("/api/apps"), api.get("/api/databases")]);
+  const [info, appsData, dbData, hostingData] = await Promise.all([api.get("/api/info"), api.get("/api/apps"), api.get("/api/databases"), api.get("/api/hosting-domains")]);
   const usage = appsData.usage;
   const shell = ctx.shell;
 
@@ -167,23 +167,11 @@ export async function renderDeploy(root) {
   }
 
   // Step 4
-  const domain = h("input", { class: "f mono", id: "wdomain", placeholder: "billing.perusahaan.co.id", "aria-label": "Domain", autocomplete: "off", spellcheck: "false" });
-  const guideBox = h("div", { hidden: true });
   const ipSw = h("button", { class: "sw", type: "button", role: "switch", "aria-checked": "true", "aria-label": "Akses lewat IP" });
   ipSw.addEventListener("click", () => ipSw.setAttribute("aria-checked", String(ipSw.getAttribute("aria-checked") !== "true")));
   const res = resourceCards({ usage, onChange: refresh });
   const hostLabel = info.public_ip || location.hostname;
-  const domainErr = h("div", { class: "errtext", hidden: true });
-  domain.addEventListener("input", () => {
-    const host = domain.value.trim().toLowerCase();
-    const bad = host && hostError(host);
-    domainErr.textContent = bad || "";
-    domainErr.hidden = !bad;
-    guideBox.replaceChildren();
-    guideBox.hidden = !host || Boolean(bad);
-    if (!guideBox.hidden) guideBox.append(guide({ host, publicIP: info.public_ip }));
-    refresh();
-  });
+  const address = addressControl({ data: hostingData, isAdmin: user.role === "admin", publicIP: info.public_ip, onChange: () => refresh() });
   const s4 = h(
     "div",
     { class: "wstep", "data-w": "4" },
@@ -197,11 +185,9 @@ export async function renderDeploy(root) {
         "div",
         { class: "bd", style: { "padding-top": "2px", "padding-bottom": "2px" } },
         h("div", { class: "setting" }, h("div", {}, h("b", {}, "Akses lewat IP"), h("div", { class: "d" }, "Buka di ", h("span", { class: "mono" }, `${hostLabel}:<port>`), " untuk pengujian sebelum domain siap")), h("div", { class: "ctl" }, ipSw)),
-        h("div", { class: "setting" }, h("div", {}, h("b", {}, "Domain"), h("div", { class: "d" }, "Opsional, bisa ditambah nanti")), h("div", { class: "ctl wide", style: { width: "240px" } }, domain)),
+        h("div", { class: "setting addrset" }, h("div", {}, h("b", {}, "Alamat"), h("div", { class: "d" }, "Opsional, bisa ditambah nanti. Pilih domain hosting dan beri nama, tanpa mengatur DNS.")), h("div", { class: "ctl wide" }, address.node)),
       ),
     ),
-    domainErr,
-    guideBox,
   );
 
   // Summary
@@ -279,8 +265,9 @@ export async function renderDeploy(root) {
     }
     if (!res.fits()) out.push({ step: 4, text: "Kuota memori atau CPU habis" });
     if (usage.apps >= usage.quota.apps) out.push({ step: 4, text: `Kuota aplikasi habis (${usage.apps} dari ${usage.quota.apps})` });
-    const dom = domain.value.trim().toLowerCase();
-    if (dom && hostError(dom)) out.push({ step: 4, text: "Domain tidak valid" });
+    const addrBad = address.error();
+    if (addrBad) out.push({ step: 4, text: addrBad });
+    if (address.checking()) out.push({ step: 4, text: "Memeriksa alamat" });
     const nameBad = appNameError(name.value);
     if (nameBad) out.push({ step: 4, text: "Isi nama aplikasi yang valid", field: true });
     return out;
@@ -379,12 +366,12 @@ export async function renderDeploy(root) {
       }
       const created = await api.post("/api/apps", body);
       const id = created.app.id;
-      const host = domain.value.trim().toLowerCase();
-      if (host) {
+      const addr = address.value();
+      if (addr) {
         try {
-          await api.post(`/api/apps/${id}/domains`, { host });
+          await api.post(`/api/apps/${id}/domains`, addr);
         } catch (e) {
-          toast(`Aplikasi dibuat, tetapi domain ditolak: ${e.message}`, "err");
+          toast(`Aplikasi dibuat, tetapi alamat ditolak: ${e.message}`, "err");
         }
       }
       up = null;

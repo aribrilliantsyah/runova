@@ -18,6 +18,7 @@ import (
 
 	"runova/internal/artifact"
 	"runova/internal/docker"
+	"runova/internal/hostdns"
 	"runova/internal/secret"
 	"runova/internal/store"
 )
@@ -64,6 +65,10 @@ type Service struct {
 	// Caddy is told to reload after anything that changes what is served; nil means no Caddy.
 	Caddy interface {
 		Apply(ctx context.Context) error
+	}
+	// DNS checks that a hosting domain's wildcard record reaches this server; nil means hostdns.Checker{}.
+	DNS interface {
+		Check(ctx context.Context, domain, publicIP string) hostdns.Result
 	}
 	// Probe checks a domain's HTTPS certificate; nil means caddy.ProbeTLS.
 	Probe func(ctx context.Context, host string) (ok bool, detail string)

@@ -5,7 +5,7 @@
 <script type="module">
 import { test, assert, eq, run } from "/test/harness.js";
 import { h, icon, fmtBytes, fmtMB, fmtCPU, fmtTime, pct } from "/assets/js/dom.js";
-import { parseDotenv, suggestName, appNameError, envError, uploadError, memoryChoices } from "/assets/js/validate.js";
+import { labelError, hostingNameError, parseDotenv, suggestName, appNameError, envError, uploadError, memoryChoices } from "/assets/js/validate.js";
 import { splitHost } from "/assets/js/components/guide.js";
 import { kindLogo, runtimeSub } from "/assets/js/kinds.js";
 
@@ -150,6 +150,19 @@ test("runtimeSub puts the language before the runtime", () => {
   eq(runtimeSub({ kind: "jar", java_version: 21 }, "java"), "Java 21");
   eq(runtimeSub({ kind: "jar", java_version: 17 }, ""), "Java 17");
   eq(runtimeSub({ kind: "static" }, ""), "Binary statis");
+});
+
+test("labelError follows the server's label rules", () => {
+  for (const ok of ["cv-budi", "abc", "a1b", "a".repeat(40)]) eq(labelError(ok), "");
+  for (const bad of ["ab", "", "a".repeat(41), "-abc", "abc-", "Abc", "a.b.c", "a b", "ab--cd", "xn--abc", "abc_def"]) assert(labelError(bad) !== "", `${bad} should be refused`);
+  assert(labelError("ab").includes("3–40"));
+});
+
+test("hostingNameError accepts a wildcard prefix and refuses single labels", () => {
+  eq(hostingNameError("*.porto.devkriyanesia.my.id"), "");
+  eq(hostingNameError(" Porto.Ex.ID "), "");
+  assert(hostingNameError("localhost") !== "");
+  assert(hostingNameError("*.") !== "");
 });
 
 run();

@@ -19,6 +19,7 @@ import (
 	"runova/internal/dbs"
 	"runova/internal/docker"
 	"runova/internal/docker/dockertest"
+	"runova/internal/hostdns"
 	"runova/internal/pg"
 	"runova/internal/pg/pgfake"
 	"runova/internal/secret"
@@ -180,12 +181,27 @@ func fakeApps(svc *apps.Service) {
 		}()
 		return a, nil
 	}
+	svc.DNS = fakeDNS{}
 	svc.Probe = func(_ context.Context, host string) (bool, string) {
 		if strings.HasPrefix(host, "pending.") {
 			return false, "Caddy belum punya sertifikat untuk domain ini"
 		}
 		return true, ""
 	}
+}
+
+// fakeDNS answers hosting-domain DNS checks without a network: domains starting
+// with "bad." have no record and "proxy." ones sit behind Cloudflare.
+type fakeDNS struct{}
+
+func (fakeDNS) Check(_ context.Context, domain, _ string) hostdns.Result {
+	switch {
+	case strings.HasPrefix(domain, "bad."):
+		return hostdns.Result{Detail: "Belum ada record DNS untuk *." + domain}
+	case strings.HasPrefix(domain, "proxy."):
+		return hostdns.Result{Detail: "Alamat itu milik Cloudflare (proxy menyala); matikan proxy: pilih DNS only"}
+	}
+	return hostdns.Result{OK: true}
 }
 
 // fakeDatabases builds the database service over an in-memory PostgreSQL.
