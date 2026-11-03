@@ -43,11 +43,11 @@ pass() { printf '   ok: %s\n' "$*"; }
 # req JAR METHOD PATH [JSON]: sets CODE and BODY.
 req() {
 	local jar=$1 method=$2 path=$3 data=${4-} out
-	local args=(-sk -X "$method" -b "$jar" -c "$jar" -m 120 -w $'\n%{http_code}')
+	local args=(-sSk -X "$method" -b "$jar" -c "$jar" -m 120 -w $'\n%{http_code}')
 	if [[ -n $data ]]; then
 		args+=(-H 'Content-Type: application/json' --data "$data")
 	fi
-	out=$(curl "${args[@]}" "$PANEL$path") || fail "curl $method $path gagal"
+	out=$(curl "${args[@]}" "$PANEL$path" 2>&1) || fail "curl $method $path gagal (exit $?): $out"
 	CODE=${out##*$'\n'}
 	BODY=${out%$'\n'*}
 }
@@ -326,6 +326,15 @@ req "$ADMIN_JAR" GET /api/settings
 expect 200
 req "$ADMIN_JAR" PUT /api/settings "$(jq -c '.public_ip = "127.0.0.1"' <<<"$BODY")"
 expect 200
+# A new public IP changes the panel's IP-listener certificate; Caddy 2.6.2
+# swaps it asynchronously and fails some TLS handshakes for about half a
+# second (measured). Wait for five good handshakes in a row.
+ok=0
+for ((i = 0; i < 100 && ok < 5; i++)); do
+	if curl -sk -m 2 -o /dev/null "$PANEL/api/me"; then ok=$((ok + 1)); else ok=0; fi
+	sleep 0.1
+done
+((ok == 5)) || fail "panel tidak stabil setelah IP publik diganti"
 req "$ADMIN_JAR" POST /api/hosting-domains '{"name":"*.apps.localhost"}'
 expect 201
 HOSTING_ID=$(jq -r .id <<<"$BODY")
@@ -340,7 +349,6 @@ req "$BUDI_JAR" POST "/api/apps/$HELLO_ID/domains" "$(jq -nc --argjson h "$HOSTI
 expect 400
 req "$BUDI_JAR" POST "/api/apps/$HELLO_ID/domains" "$(jq -nc --argjson h "$HOSTING_ID" '{hosting_domain_id: $h, label: "cv-budi"}')"
 expect 201
-SUB_ID=$(jq -r .id <<<"$BODY")
 
 curl_sub() { curl -sk -m 10 --resolve "cv-budi.apps.localhost:443:127.0.0.1" "$@" "https://cv-budi.apps.localhost/"; }
 hello=""
