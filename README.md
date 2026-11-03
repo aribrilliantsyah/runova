@@ -81,14 +81,19 @@ Runova memasang **PostgreSQL 18** di server yang sama (paket resmi Ubuntu 26.04)
 
 Syarat: Ubuntu Server 26.04 LTS (amd64) polos, user dengan `sudo`, dan koneksi internet ke repositori apt Ubuntu. Installer memasang `docker.io`, `caddy`, `postgresql-18`, `ufw`, `jq`, dan `curl` dari apt resmi Ubuntu; tidak ada repositori pihak ketiga.
 
-Panduan lengkap untuk admin server (spesifikasi, firewall cloud, DNS, cadangan, pemecahan masalah) ada di **[docs/install-ubuntu.md](docs/install-ubuntu.md)**. Ringkasnya, dari checkout source ini di mesin Anda:
+Panduan lengkap untuk admin server (spesifikasi, firewall cloud, DNS, cadangan, pemecahan masalah) ada di **[docs/install-ubuntu.md](docs/install-ubuntu.md)**. Ringkasnya, di server:
 
 ```bash
-scripts/deploy.sh admin@IP-SERVER --domain panel.contoh.id   # panel di https://panel.contoh.id
-scripts/deploy.sh admin@IP-SERVER --port 8443                # atau panel di https://<IP server>:8443
+# panel di https://panel.contoh.id (arahkan DNS ke server dulu)
+curl -fsSL https://github.com/aribrilliantsyah/runova/releases/latest/download/get.sh | sudo bash -s -- --domain panel.contoh.id
+
+# atau panel di https://<IP server>:8443
+curl -fsSL https://github.com/aribrilliantsyah/runova/releases/latest/download/get.sh | sudo bash -s -- --port 8443
 ```
 
-`scripts/deploy.sh` membangun rilis, menyalinnya ke server lewat `scp`, memeriksa checksum, menjalankan `sudo ./install.sh` di server, dan menghapus berkas sementara. Pembangunan memakai Go. Opsi: `--version`, `-p/--ssh-port`, `-i/--identity`, dan `RUNOVA_SSH_OPTS` untuk opsi SSH lain; sisanya diteruskan ke `install.sh`. Tanpa skrip itu, bangun arsip dengan `scripts/release.sh <versi>`, salin `dist/` ke server, lalu `tar xzf` dan `sudo ./install.sh` (lihat panduan). Pemasangan satu baris lewat `curl | bash` menyusul saat Runova punya halaman rilis.
+`get.sh` mengunduh rilis terbaru dari [GitHub Releases](https://github.com/aribrilliantsyah/runova/releases), mencocokkan `SHA256SUMS` (arsip dan isinya), lalu menjalankan `install.sh` dengan opsi Anda. `--version 0.1.0` memasang versi tertentu. Setiap rilis juga punya [attestation](https://docs.github.com/en/actions/security-for-github-actions/using-artifact-attestations) asal-usul build: `gh attestation verify runova-<versi>-linux-amd64.tar.gz -R aribrilliantsyah/runova`.
+
+Dari checkout source (misalnya untuk mencoba perubahan yang belum dirilis), `scripts/deploy.sh admin@IP-SERVER [opsi]` membangun rilis lokal, menyalinnya lewat SSH, lalu menjalankan installer yang sama.
 
 Opsi `install.sh`: `--domain <host>` atau `--port <n>` (tidak bisa bersamaan; tanpa keduanya bawaannya `--port 8443`), `--public-ip <ip>` (disimpan ke setelan; untuk server di belakang NAT), `--skip-firewall` (jangan menyentuh `ufw`), `--yes` (tanpa tanya, untuk instalasi tanpa terminal). Untuk `--domain`, arahkan DNS domain itu ke server dulu.
 
@@ -102,10 +107,10 @@ Bila `/etc/caddy/Caddyfile` sudah Anda ubah (bukan bawaan paket), installer berh
 
 ## Pembaruan
 
-Ekstrak rilis baru dan jalankan perintah yang sama lagi:
+Jalankan perintah instalasi yang sama lagi (tanpa `--domain`/`--port` bila alamat panel tidak berubah):
 
 ```bash
-sudo ./install.sh
+curl -fsSL https://github.com/aribrilliantsyah/runova/releases/latest/download/get.sh | sudo bash -s --
 ```
 
 Installer idempoten: langkah yang sudah beres dilewati, binary dan unit diganti, layanan di-restart. Data, kunci, admin, aplikasi, dan alamat panel tidak disentuh, dan tidak ada password baru dicetak. Beri `--domain`/`--port` hanya bila ingin mengganti alamat panel.
@@ -115,6 +120,17 @@ Skema database ikut diperbarui otomatis saat Runova dibuka. Sebelum migrasi pert
 ```bash
 sudo -u runova env RUNOVA_DATA=/var/lib/runova runova db version
 ```
+
+## Merilis versi baru
+
+Rilis dibangun GitHub Actions (`.github/workflows/release.yml`) setiap ada tag `v*.*.*`: test, `scripts/release.sh`, attestation, lalu GitHub Release berisi arsip, `SHA256SUMS`, dan `get.sh`.
+
+```bash
+git tag v0.2.0
+git push origin v0.2.0
+```
+
+Setiap push ke `main` juga menjalankan CI (`.github/workflows/ci.yml`): gofmt, vet, test unit, test integrasi dengan Docker, PostgreSQL 18, dan Caddy sungguhan, serta bats dan shellcheck.
 
 ## Uninstall manual
 

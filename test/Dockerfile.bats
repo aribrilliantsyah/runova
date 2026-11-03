@@ -1,2 +1,2 @@
 FROM bats/bats:latest
-RUN apk add --no-cache jq
+RUN apk add --no-cache jq curl python3

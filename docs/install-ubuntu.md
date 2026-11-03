@@ -68,54 +68,64 @@ Lewati bagian ini bila panel diakses lewat `https://IP:8443`.
 
 ## 5. Menjalankan instalasi
 
-### Cara yang disarankan: `scripts/deploy.sh`
-
-Dari checkout source Runova di mesin Anda (butuh Go, `ssh`, `scp`, `sha256sum`):
+Masuk ke server lewat SSH, lalu jalankan **satu perintah** ini:
 
 ```bash
-# panel di https://panel.contoh.id
-scripts/deploy.sh admin@IP-SERVER --domain panel.contoh.id
+# panel di https://panel.contoh.id (DNS sudah menunjuk ke server, lihat bagian 4)
+curl -fsSL https://github.com/aribrilliantsyah/runova/releases/latest/download/get.sh | sudo bash -s -- --domain panel.contoh.id
 
 # atau panel di https://IP-SERVER:8443
-scripts/deploy.sh admin@IP-SERVER --port 8443 --public-ip IP-PUBLIK-SERVER
+curl -fsSL https://github.com/aribrilliantsyah/runova/releases/latest/download/get.sh | sudo bash -s -- --port 8443 --public-ip IP-PUBLIK-SERVER
 ```
 
-Skrip ini: memeriksa SSH tersambung, server Ubuntu 26.04 amd64, dan user punya sudo; membangun rilis; menyalin arsip dan `SHA256SUMS`; memeriksa checksum di server; menjalankan `sudo ./install.sh` (sudo bisa meminta password, dan password admin Runova tercetak di terminal Anda); lalu menghapus folder sementara `/tmp/runova-*`.
+Installer menampilkan ringkasan dan bertanya **Lanjutkan? [y/N]**; ketik `y`. Instalasi pertama butuh beberapa menit (apt memasang Docker, Caddy, dan PostgreSQL).
 
-Opsi: `--version x.y.z` (bawaan dari `git describe`), `-p/--ssh-port`, `-i/--identity`, dan opsi SSH tambahan lewat `RUNOVA_SSH_OPTS` (misalnya `RUNOVA_SSH_OPTS="-o ProxyJump=bastion"`). Opsi lain diteruskan ke `install.sh`:
+`get.sh` mengunduh rilis terbaru dari GitHub Releases, mencocokkan `SHA256SUMS` untuk arsip dan setiap berkas di dalamnya, lalu menjalankan `install.sh`. Semua opsi setelah `--` diteruskan ke installer:
 
-| Opsi install.sh | Arti |
+| Opsi | Arti |
 |---|---|
 | `--domain <host>` | panel di `https://<host>` |
 | `--port <n>` | panel di `https://<IP>:<n>` (bawaan 8443; bukan 2019, 5432, 7070, 20000-20999) |
-| `--public-ip <ip>` | IP publik server (untuk server di belakang NAT) |
-| `--skip-firewall` | jangan menyentuh `ufw` |
-| `--yes` | tanpa pertanyaan |
+| `--public-ip <ip>` | IP publik server (dipakai panduan domain dan detail koneksi database) |
+| `--skip-firewall` | jangan menyentuh `ufw` (firewall diatur di tempat lain) |
+| `--yes` | tanpa pertanyaan (untuk otomasi, misalnya cloud-init) |
+| `--version x.y.z` | pasang versi tertentu, bukan yang terbaru (opsi `get.sh`) |
 
 `--domain` dan `--port` tidak bisa bersamaan. Tanpa keduanya, bawaannya `--port 8443`.
 
-**Catat password admin yang tercetak di akhir.** Password itu hanya ditampilkan sekali.
+**Catat password admin yang tercetak di akhir.** Password itu hanya ditampilkan sekali. Contoh akhir keluaran:
 
-### Cara manual
+```
+Runova 0.1.0 siap.
 
-Di mesin Anda bangun arsip, lalu salin dan jalankan sendiri:
-
-```bash
-scripts/release.sh 0.1.0
-scp dist/runova-0.1.0-linux-amd64.tar.gz dist/SHA256SUMS admin@IP-SERVER:/tmp/
+Alamat panel : https://203.0.113.15:8443
+Sertifikat dibuat Caddy sendiri, jadi peramban memberi peringatan; lanjutkan saja.
+Username     : admin
+Password     : ••••••••••••••••••••
 ```
 
-Di server:
+### Lebih hati-hati: periksa dulu sebelum menjalankan
 
 ```bash
-cd /tmp
-sha256sum -c SHA256SUMS
-tar xzf runova-0.1.0-linux-amd64.tar.gz
-cd runova-0.1.0-linux-amd64
+V=0.1.0
+curl -fsSLO https://github.com/aribrilliantsyah/runova/releases/download/v$V/runova-$V-linux-amd64.tar.gz
+curl -fsSLO https://github.com/aribrilliantsyah/runova/releases/download/v$V/SHA256SUMS
+sha256sum -c SHA256SUMS --ignore-missing
+gh attestation verify runova-$V-linux-amd64.tar.gz -R aribrilliantsyah/runova   # opsional, butuh gh
+tar xzf runova-$V-linux-amd64.tar.gz
+cd runova-$V-linux-amd64
 sudo ./install.sh --domain panel.contoh.id      # atau --port 8443
 ```
 
-> Skrip unduh satu baris (`curl | bash`) belum ada: Runova belum punya halaman rilis. Itu menyusul saat halaman rilis tersedia.
+### Dari source di mesin Anda
+
+Untuk mencoba perubahan yang belum dirilis, dari checkout source Runova (butuh Go, `ssh`, `scp`):
+
+```bash
+scripts/deploy.sh admin@IP-SERVER --domain panel.contoh.id
+```
+
+Skrip ini memeriksa SSH, Ubuntu 26.04 amd64, dan `sudo` di server; membangun rilis lokal; menyalinnya; lalu menjalankan installer yang sama. Opsi tambahan: `--version`, `-p/--ssh-port`, `-i/--identity`, dan `RUNOVA_SSH_OPTS` (misalnya `RUNOVA_SSH_OPTS="-o ProxyJump=bastion"`).
 
 Installer memasang `docker.io`, `caddy`, `postgresql-18`, `ufw`, `jq`, dan `curl` dari apt Ubuntu; membuat user `runova`, kunci enkripsi, dan layanan systemd; mengatur Caddy dan PostgreSQL; membuka port di `ufw` (SSH diizinkan lebih dulu sebelum `ufw` diaktifkan); lalu menjalankan `runova check`. Ringkasan lengkap ada di [README](../README.md#instalasi).
 
@@ -131,13 +141,13 @@ Password admin hilang: `sudo -u runova env RUNOVA_DATA=/var/lib/runova runova ad
 
 ## 7. Pembaruan
 
-Jalankan **perintah yang sama** lagi dari checkout source yang lebih baru, misalnya:
+Jalankan perintah instalasi lagi. Tanpa `--domain`/`--port`, alamat panel tetap:
 
 ```bash
-scripts/deploy.sh admin@IP-SERVER
+curl -fsSL https://github.com/aribrilliantsyah/runova/releases/latest/download/get.sh | sudo bash -s --
 ```
 
-Installer idempoten: langkah yang sudah beres dilewati, binary dan unit diganti, Runova di-restart. Data, kunci, admin, aplikasi, dan alamat panel tidak disentuh, dan tidak ada password baru dicetak. Beri `--domain`/`--port` hanya bila ingin mengganti alamat panel. Cara manual: ekstrak rilis baru dan jalankan `sudo ./install.sh` lagi.
+Installer idempoten: langkah yang sudah beres dilewati, binary dan unit diganti, Runova di-restart. Data, kunci, admin, aplikasi, dan alamat panel tidak disentuh, dan tidak ada password baru dicetak. Skema database diperbarui otomatis; sebelumnya Runova menyalin `runova.db` ke `/var/lib/runova/runova.db.bak-v<versi>-<waktu>`. Versi terpasang: `runova version`.
 
 ## 8. Cadangan
 

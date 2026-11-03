@@ -1,0 +1,33 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+      - name: gofmt
+        run: test -z "$(gofmt -l .)" || { gofmt -l .; exit 1; }
+      - run: go vet ./...
+      - name: build without cgo
+        run: CGO_ENABLED=0 go build ./...
+      - name: unit tests
+        run: go test -count=1 ./...
+      - name: integration tests (Docker, PostgreSQL 18, Caddy)
+        env:
+          RUNOVA_DOCKER_TEST: "1"
+          RUNOVA_PG_TEST: "1"
+          RUNOVA_CADDY_TEST: "1"
+        run: go test -count=1 ./internal/docker ./internal/apps ./internal/pg ./internal/dbs ./internal/caddy
+      - name: installer tests (bats, shellcheck)
+        run: test/bats.sh
