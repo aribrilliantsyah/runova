@@ -108,12 +108,11 @@ try {
 
   step("domains: add, status, guide filled in");
   await page.goto(`${srv.url}/#/apps/${id}/domains`);
-  await page.waitForSelector("input[aria-label='Domain baru']");
-  await page.fill("input[aria-label='Domain baru']", "not a host");
-  await page.click("button:has-text('Tambah')");
-  await page.waitForSelector(".errtext:has-text('Domain tidak valid')");
-  await page.fill("input[aria-label='Domain baru']", "billing.perusahaan.co.id");
-  await page.click("button:has-text('Tambah')");
+  await page.waitForSelector("input[aria-label='Domain sendiri']");
+  await page.fill("input[aria-label='Domain sendiri']", "not a host");
+  await page.waitForSelector(".astate.err:has-text('Domain tidak valid')");
+  await page.fill("input[aria-label='Domain sendiri']", "billing.perusahaan.co.id");
+  await page.click("#addaddr");
   await page.waitForSelector("td.mono:has-text('billing.perusahaan.co.id')");
   check((await page.locator(".guide .gmethod.on").count()) === 1, "one guide method visible");
   check((await page.locator(".guide .seg button").count()) === 1, "no public IP → only Tunnel is offered");

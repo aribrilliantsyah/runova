@@ -320,4 +320,62 @@ body=$(curl_ok "http://127.0.0.1:$HELLO_PORT/db")
 [[ $body == rows=3 ]] || fail "setelah restore: $body"
 pass "backup $backup; 3 baris dihapus; restore mengembalikan 3 baris"
 
-printf '\nSemua 8 skenario lulus.\n'
+# ---------------------------------------------------------------------------
+scenario "9 hosting-domain"
+req "$ADMIN_JAR" GET /api/settings
+expect 200
+req "$ADMIN_JAR" PUT /api/settings "$(jq -c '.public_ip = "127.0.0.1"' <<<"$BODY")"
+expect 200
+req "$ADMIN_JAR" POST /api/hosting-domains '{"name":"*.apps.localhost"}'
+expect 201
+HOSTING_ID=$(jq -r .id <<<"$BODY")
+[[ $(jq -r .name <<<"$BODY") == apps.localhost ]] || fail "nama domain hosting: $BODY"
+req "$BUDI_JAR" GET /api/hosting-domains
+expect 200
+[[ $(jq -r '.domains | map(.name) | join(",")' <<<"$BODY") == apps.localhost ]] || fail "budi harus melihat apps.localhost: $BODY"
+
+req "$BUDI_JAR" POST "/api/apps/$HELLO_ID/domains" '{"host":"budi.com"}'
+expect 403
+req "$BUDI_JAR" POST "/api/apps/$HELLO_ID/domains" "$(jq -nc --argjson h "$HOSTING_ID" '{hosting_domain_id: $h, label: "www"}')"
+expect 400
+req "$BUDI_JAR" POST "/api/apps/$HELLO_ID/domains" "$(jq -nc --argjson h "$HOSTING_ID" '{hosting_domain_id: $h, label: "cv-budi"}')"
+expect 201
+SUB_ID=$(jq -r .id <<<"$BODY")
+
+curl_sub() { curl -sk -m 10 --resolve "cv-budi.apps.localhost:443:127.0.0.1" "$@" "https://cv-budi.apps.localhost/"; }
+hello=""
+for ((i = 0; i < 60; i++)); do
+	hello=$(curl_sub 2>/dev/null) && [[ $hello == "hello v2" ]] && break
+	sleep 1
+done
+[[ $hello == "hello v2" ]] || fail "https://cv-budi.apps.localhost/ = '$hello' (diharapkan hello v2)"
+issuer=$(echo | openssl s_client -connect 127.0.0.1:443 -servername cv-budi.apps.localhost 2>/dev/null | openssl x509 -noout -issuer 2>/dev/null) || true
+[[ $issuer == *"Caddy Local Authority"* ]] || fail "penerbit sertifikat bukan CA internal Caddy: '$issuer'"
+
+req "$ANDI_JAR" POST "/api/apps/$HELLO_ID/domains" "$(jq -nc --argjson h "$HOSTING_ID" '{hosting_domain_id: $h, label: "curang"}')"
+expect 404
+req "$ANDI_JAR" POST "/api/apps/$ANDI_APP/domains" "$(jq -nc --argjson h "$HOSTING_ID" '{hosting_domain_id: $h, label: "cv-budi"}')"
+expect 409
+
+req "$ADMIN_JAR" DELETE "/api/hosting-domains/$HOSTING_ID"
+expect 409
+req "$ADMIN_JAR" PATCH "/api/hosting-domains/$HOSTING_ID" '{"enabled":false}'
+expect 200
+off=""
+for ((i = 0; i < 30; i++)); do
+	off=$(curl_sub -o /dev/null -w '%{http_code}' 2>/dev/null) || off=000
+	[[ $off != 200 ]] && break
+	sleep 1
+done
+[[ $off != 200 ]] || fail "subdomain tetap menjawab 200 setelah domain hosting dimatikan"
+req "$ADMIN_JAR" PATCH "/api/hosting-domains/$HOSTING_ID" '{"enabled":true}'
+expect 200
+back=""
+for ((i = 0; i < 60; i++)); do
+	back=$(curl_sub 2>/dev/null) && [[ $back == "hello v2" ]] && break
+	sleep 1
+done
+[[ $back == "hello v2" ]] || fail "subdomain tidak kembali setelah domain hosting dinyalakan: '$back'"
+pass "cv-budi.apps.localhost menjawab hello v2 lewat HTTPS (sertifikat Caddy Local Authority); domain sendiri 403, label www 400, andi 404/409; mati: $off, nyala: kembali"
+
+printf '\nSemua 9 skenario lulus.\n'

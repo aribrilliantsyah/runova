@@ -2,6 +2,7 @@ import * as api from "/assets/js/api.js";
 import { h, icon, fmtMB, fmtNum, pct, bar, clear, poll, fill } from "/assets/js/dom.js";
 import { act } from "/assets/js/components/act.js";
 import { dialog } from "/assets/js/components/dialog.js";
+import { hostingCard } from "/assets/js/components/hostingcard.js";
 import { quotaForm } from "/assets/js/components/quotaform.js";
 import { RUNTIMES } from "/assets/js/kinds.js";
 import { toast } from "/assets/js/toast.js";
@@ -19,6 +20,7 @@ function service(ic, name, ok, detail, errText) {
 export async function renderServer(root) {
   let st = null;
   let settings = await api.get("/api/settings");
+  const hosting = hostingCard();
   const view = h("div", { class: "pb" });
   const sub = h("p", {}, "Memuat…");
   root.append(h("section", {}, h("div", { class: "ph" }, h("div", {}, h("h1", {}, "Server"), sub)), view));
@@ -130,11 +132,11 @@ export async function renderServer(root) {
 
   function paint() {
     if (!st) return;
-    fill(view, ...paintStatus(), ...settingsCards());
+    fill(view, ...paintStatus(), hosting.node, ...settingsCards());
   }
 
   async function refreshStatus() {
-    st = await api.get("/api/server");
+    [st] = await Promise.all([api.get("/api/server"), hosting.reload()]);
     sub.textContent = `${st.host.hostname} · ${st.host.os} · ${st.host.arch}`;
     const focus = document.activeElement;
     if (view.contains(focus) && focus.matches("input,textarea,select")) {

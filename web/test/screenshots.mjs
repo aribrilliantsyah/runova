@@ -53,6 +53,10 @@ try {
   const worker = await make(rustBin, "report-worker", { name: "report-worker", memory_mb: 256, cpu_milli: 250, ip_access: true, env: [] });
   const legacy = await make(kotlinJar, "legacy-hr.jar", { name: "legacy-hr", java_version: 17, memory_mb: 256, cpu_milli: 250, ip_access: false, env: [{ name: "JWT_SECRET", value: "x", secret: true }, { name: "DB_PASSWORD", value: "x", secret: true }] });
   const notif = await make(unknownBin, "notif-relay", { name: "notif-relay", memory_mb: 128, cpu_milli: 100, ip_access: false, env: [] });
+  const hosting = (await call("POST", "/api/hosting-domains", { name: "*.porto.perusahaan.co.id", reserved: "blog" }, cookie)).body;
+  await call("POST", "/api/hosting-domains", { name: "apps.perusahaan.co.id" }, cookie);
+  await call("POST", `/api/apps/${notif}/domains`, { hosting_domain_id: hosting.id, label: "notif-relay" }, cookie);
+  await call("POST", `/api/apps/${worker}/domains`, { hosting_domain_id: hosting.id, label: "laporan-bulanan" }, cookie);
   await call("POST", `/api/apps/${billing}/domains`, { host: "billing.perusahaan.co.id" }, cookie);
   await call("POST", `/api/apps/${gateway}/domains`, { host: "sso.perusahaan.co.id" }, cookie);
   await call("POST", `/api/apps/${legacy}/domains`, { host: "hr-lama.perusahaan.co.id" }, cookie);
@@ -94,6 +98,25 @@ try {
       else for (let i = 1; i < step; i++) await p.click(".mbar button:has-text('Lanjut')");
     }
   };
+  const addressAfter = async (p) => {
+    await deployAfter(4)(p);
+    await p.fill(".addr input[aria-label='Nama alamat']", "cv-budi");
+    await p.waitForSelector(".addr .astate.ok");
+  };
+  await shot("desktop-server-hosting.png", {
+    width: 1440, height: 1000, scheme: "light", route: "/server", wait: "#hostrows tr",
+    after: async (p) => {
+      await p.locator("#hostingcard").scrollIntoViewIfNeeded();
+      await p.fill("#hostname", "*.baru.perusahaan.co.id");
+      await p.waitForSelector("#hostdns");
+    },
+  });
+  await shot("desktop-address-dark.png", { width: 1440, height: 900, scheme: "dark", route: "/deploy", wait: ".drop", after: addressAfter });
+  await shot("mobile-address.png", { width: 390, height: 844, scheme: "light", route: "/deploy", wait: ".drop", after: addressAfter });
+  await shot("mobile-server-hosting.png", {
+    width: 390, height: 844, scheme: "dark", route: "/server", wait: "#hostrows tr",
+    after: (p) => p.locator("#hostingcard").scrollIntoViewIfNeeded(),
+  });
   await shot("desktop-deploy.png", { width: 1440, height: 900, scheme: "light", route: "/deploy", wait: ".drop", after: deployAfter(2) });
   await shot("mobile-apps.png", { width: 390, height: 844, scheme: "light", route: "/apps", wait: ".acard:has-text('notif-relay')" });
   await shot("mobile-deploy.png", { width: 390, height: 844, scheme: "light", route: "/deploy", wait: ".drop", after: deployAfter(2) });

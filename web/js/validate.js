@@ -24,6 +24,22 @@ export function hostError(host) {
   return HOST.test(host) ? "" : "Domain tidak valid: huruf kecil dan angka, minimal dua bagian, contoh app.perusahaan.co.id";
 }
 
+const LABEL_CHARS = /^[a-z0-9-]+$/;
+
+/** labelError(label): the server's rules for the name before a hosting domain (internal/apps/hostnames.go), or "". */
+export function labelError(label) {
+  if (label.length < 3 || label.length > 40) return "Nama alamat harus 3–40 karakter";
+  if (!LABEL_CHARS.test(label)) return "Nama alamat hanya boleh huruf kecil, angka, dan tanda hubung";
+  if (label.startsWith("-") || label.endsWith("-")) return "Nama alamat tidak boleh diawali atau diakhiri tanda hubung";
+  if (label[2] === "-" && label[3] === "-") return "Nama alamat tidak boleh memakai -- di posisi ketiga dan keempat";
+  return "";
+}
+
+/** hostingNameError(name): a hosting domain as the admin types it; a leading "*." is accepted. */
+export function hostingNameError(name) {
+  return hostError(name.trim().toLowerCase().replace(/^\*\./, ""));
+}
+
 export function envNameError(name) {
   return ENV_NAME.test(name) ? "" : `Nama variabel "${name}" tidak valid: huruf besar, angka, dan garis bawah, diawali huruf`;
 }
