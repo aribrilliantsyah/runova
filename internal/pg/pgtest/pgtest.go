@@ -3,6 +3,7 @@ package pgtest
 
 import (
 	"context"
+	"errors"
 	"os"
 	"os/exec"
 	"strings"
@@ -27,14 +28,16 @@ func StartPG(t *testing.T) string {
 		t.Skip("set RUNOVA_PG_TEST=1 to run PostgreSQL integration tests")
 	}
 
+	// Output, not CombinedOutput: when the image is pulled first, docker run
+	// writes the pull progress to stderr and only the container ID to stdout.
 	out, err := exec.Command("docker", "run", "-d", "--rm",
 		"-p", "127.0.0.1::5432",
 		"-e", "POSTGRES_PASSWORD="+testSuperPass,
 		"-e", "POSTGRES_HOST_AUTH_METHOD=scram-sha-256",
 		testImage, "-c", "fsync=off",
-	).CombinedOutput()
+	).Output()
 	if err != nil {
-		t.Fatalf("docker run: %v\n%s", err, out)
+		t.Fatalf("docker run: %v\n%s", err, stderrOf(err))
 	}
 	id := strings.TrimSpace(string(out))
 	t.Cleanup(func() {
@@ -43,17 +46,16 @@ func StartPG(t *testing.T) string {
 		}
 	})
 
-	// docker inspect works across CLI/daemon versions; `docker port` does not
-	// on every CI runner ("page not found" from a newer daemon).
-	out, err = exec.Command("docker", "inspect", "-f",
-		`{{range (index .NetworkSettings.Ports "5432/tcp")}}{{.HostIp}} {{.HostPort}}{{"\n"}}{{end}}`, id).CombinedOutput()
+	out, err = exec.Command("docker", "port", id, "5432/tcp").CombinedOutput()
 	if err != nil {
-		t.Fatalf("docker inspect: %v\n%s", err, out)
+		t.Fatalf("docker port: %v\n%s", err, out)
 	}
-	host, port, ok := strings.Cut(strings.TrimSpace(strings.SplitN(string(out), "\n", 2)[0]), " ")
-	if !ok || port == "" {
-		t.Fatalf("no published port for 5432/tcp: %q", out)
+	hostPort := strings.TrimSpace(strings.SplitN(string(out), "\n", 2)[0])
+	i := strings.LastIndex(hostPort, ":")
+	if i < 0 {
+		t.Fatalf("unexpected docker port output %q", out)
 	}
+	host, port := hostPort[:i], hostPort[i+1:]
 
 	superDSN := "host=" + host + " port=" + port + " user=postgres password=" + testSuperPass + " dbname=postgres"
 	ctx, cancel := context.WithTimeout(context.Background(), testStartupWait)
@@ -80,4 +82,12 @@ func StartPG(t *testing.T) string {
 		}
 	}
 	return "host=" + host + " port=" + port + " user=runova password=" + testRunovaPass + " dbname=postgres"
+}
+
+// stderrOf returns what a failed command wrote to stderr.
+func stderrOf(err error) []byte {
+	if ee, ok := errors.AsType[*exec.ExitError](err); ok {
+		return ee.Stderr
+	}
+	return nil
 }
