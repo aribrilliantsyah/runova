@@ -43,16 +43,17 @@ func StartPG(t *testing.T) string {
 		}
 	})
 
-	out, err = exec.Command("docker", "port", id, "5432/tcp").CombinedOutput()
+	// docker inspect works across CLI/daemon versions; `docker port` does not
+	// on every CI runner ("page not found" from a newer daemon).
+	out, err = exec.Command("docker", "inspect", "-f",
+		`{{range (index .NetworkSettings.Ports "5432/tcp")}}{{.HostIp}} {{.HostPort}}{{"\n"}}{{end}}`, id).CombinedOutput()
 	if err != nil {
-		t.Fatalf("docker port: %v\n%s", err, out)
+		t.Fatalf("docker inspect: %v\n%s", err, out)
 	}
-	hostPort := strings.TrimSpace(strings.SplitN(string(out), "\n", 2)[0])
-	i := strings.LastIndex(hostPort, ":")
-	if i < 0 {
-		t.Fatalf("unexpected docker port output %q", out)
+	host, port, ok := strings.Cut(strings.TrimSpace(strings.SplitN(string(out), "\n", 2)[0]), " ")
+	if !ok || port == "" {
+		t.Fatalf("no published port for 5432/tcp: %q", out)
 	}
-	host, port := hostPort[:i], hostPort[i+1:]
 
 	superDSN := "host=" + host + " port=" + port + " user=postgres password=" + testSuperPass + " dbname=postgres"
 	ctx, cancel := context.WithTimeout(context.Background(), testStartupWait)
