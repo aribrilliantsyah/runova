@@ -1,198 +1,206 @@
-# Memasang Runova di Ubuntu Server 26.04
+# Installing Runova on Ubuntu Server 26.04
 
-Panduan untuk admin server. Hasil akhirnya: panel Runova berjalan di server Anda, lengkap dengan Docker, Caddy (HTTPS otomatis), dan PostgreSQL 18, siap dipakai pengguna untuk men-deploy aplikasi.
+**English** · [Bahasa Indonesia](install-ubuntu.id.md)
 
-## 1. Spesifikasi server
+Guide for server admins. End result: the Runova panel running on your server, complete with Docker, Caddy (automated HTTPS), and PostgreSQL 18, ready for users to deploy applications.
 
-Runova hanya mendukung **Ubuntu Server 26.04 LTS, amd64**, dipasang polos (belum ada Docker, Caddy, atau PostgreSQL yang Anda atur sendiri).
+## 1. Server specifications
 
-| | Minimum | Disarankan |
+Runova only supports **Ubuntu Server 26.04 LTS, amd64**, installed clean (no pre-existing custom Docker, Caddy, or PostgreSQL setup).
+
+| | Minimum | Recommended |
 |---|---|---|
 | CPU | 2 vCPU | 4 vCPU |
-| RAM | 4 GB | 8 GB atau lebih |
-| Disk | 40 GB | 80 GB SSD atau lebih |
+| RAM | 4 GB | 8 GB or more |
+| Disk | 40 GB | 80 GB SSD or more |
 
-Asumsi angka ini: panel, Caddy, PostgreSQL, dan Docker sendiri memakai sekitar 1 GB RAM; sisanya dibagi ke aplikasi pengguna. Aplikasi Java biasanya butuh 256-512 MB per aplikasi, binary Go atau Rust jauh lebih kecil. Disk dipakai image Docker (image Java sekitar 200-300 MB per versi), artefak yang diunggah, data aplikasi, database, dan log. Storage pengguna tidak dikuota, jadi pantau disk di halaman **Server**.
+Assumptions behind these numbers: the panel, Caddy, PostgreSQL, and Docker collectively use around 1 GB of RAM; the remainder is allocated across user applications. Java applications typically require 256–512 MB each, whereas Go or Rust binaries require significantly less. Disk space is consumed by Docker images (Java images are around 200–300 MB per version), uploaded artifacts, application data, databases, and logs. User storage is not subject to quotas, so monitor disk usage on the **Server** page.
 
-Server butuh akses internet keluar ke repositori apt Ubuntu dan, saat deploy pertama, ke Docker Hub dan `gcr.io` untuk image dasar. Setelah image ada, panel tidak memuat apa pun dari luar.
+The server requires outbound internet access to Ubuntu apt repositories and, during the initial deployment, to Docker Hub and `gcr.io` for base images. Once images are present, the panel loads nothing from external sources.
 
-## 2. Menyiapkan server baru
+## 2. Setting up a fresh server
 
-Masuk sebagai user yang disediakan penyedia server (biasanya `ubuntu` atau `root`), lalu:
+Log in as the user provided by your server provider (typically `ubuntu` or `root`), then:
 
 ```bash
-# perbarui sistem
+# update system
 sudo apt-get update && sudo apt-get -y full-upgrade
 
-# user admin dengan sudo (lewati bila sudah punya)
+# admin user with sudo (skip if already created)
 sudo adduser admin
 sudo usermod -aG sudo admin
 ```
 
-Dari **mesin Anda**, pasang kunci SSH supaya tidak perlu password untuk SSH:
+From **your local machine**, install an SSH key so you do not need a password for SSH:
 
 ```bash
-ssh-keygen -t ed25519            # bila belum punya kunci
+ssh-keygen -t ed25519            # if you don't have a key yet
 ssh-copy-id admin@IP-SERVER
-ssh admin@IP-SERVER              # pastikan masuk tanpa password SSH
+ssh admin@IP-SERVER              # verify login works without an SSH password
 ```
 
-`sudo` tetap boleh meminta password; skrip deploy memakai terminal sehingga password bisa diketik. Hanya setelah kunci SSH berfungsi, Anda boleh mematikan login password SSH (`PasswordAuthentication no` di `/etc/ssh/sshd_config.d/`). Jangan menutup sesi SSH lama sebelum mencoba sesi baru.
+`sudo` may still prompt for a password; deployment scripts allocate a terminal so passwords can be entered interactively. Only after SSH key authentication is confirmed working should you disable SSH password authentication (`PasswordAuthentication no` in `/etc/ssh/sshd_config.d/`). Never close your existing SSH session before testing a new one.
 
-Bila server memakai port SSH selain 22, installer mengenalinya dan mengizinkannya di `ufw`.
+If the server uses an SSH port other than 22, the installer detects it and allows it in `ufw`.
 
-## 3. Firewall penyedia cloud
+## 3. Cloud provider firewall
 
-Selain `ufw` di server (diatur installer), banyak penyedia cloud punya firewall sendiri (security group, firewall jaringan). Buka di sana:
+In addition to `ufw` on the server (configured by the installer), many cloud providers have their own firewalls (security groups, network firewalls). Open the following ports there:
 
-| Port | Untuk | Wajib |
+| Port | Purpose | Required |
 |---|---|---|
-| 22/tcp (atau port SSH Anda) | SSH | ya |
-| 80/tcp | Caddy: tantangan sertifikat dan pengalihan ke HTTPS | ya, bila memakai domain |
-| 443/tcp | Caddy: HTTPS aplikasi dan panel (mode domain) | ya, bila memakai domain |
-| port panel, bawaan 8443/tcp | panel di `https://IP:8443` (mode IP) | ya, bila tanpa domain |
-| 20000-20999/tcp | akses IP aplikasi untuk pengujian | opsional, untuk uji lewat IP |
-| 5432/tcp | PostgreSQL dari luar (DBeaver dan sejenisnya) | opsional |
+| 22/tcp (or your custom SSH port) | SSH | yes |
+| 80/tcp | Caddy: certificate challenges and HTTP-to-HTTPS redirects | yes, when using a domain |
+| 443/tcp | Caddy: application and panel HTTPS (domain mode) | yes, when using a domain |
+| panel port, default 8443/tcp | panel at `https://IP:8443` (IP mode) | yes, when without a domain |
+| 20000-20999/tcp | application IP access for testing | optional, for testing via IP |
+| 5432/tcp | external PostgreSQL access (DBeaver and similar tools) | optional |
 
-Port 5432 hanya menerima koneksi dari jaringan Docker dan jaringan yang Anda izinkan di panel; membukanya di firewall cloud tidak membuka database untuk semua orang, tetapi jangan buka bila tidak perlu.
+Port 5432 only accepts connections from Docker networks and networks explicitly allowed in the panel; opening it in your cloud firewall does not expose databases to everyone, but do not open it unless needed.
 
-## 4. DNS untuk domain panel
+## 4. DNS for panel domain
 
-Lewati bagian ini bila panel diakses lewat `https://IP:8443`.
+Skip this section if the panel will be accessed via `https://IP:8443`.
 
-1. Buat record **A**: `panel.contoh.id` → IP publik server.
-2. **Cloudflare:** saat pertama, set proxy ke **DNS only** (awan abu-abu) supaya Caddy bisa menerbitkan sertifikat. Setelah panel terbuka lewat HTTPS, boleh diubah ke **Proxied** dengan SSL/TLS **Full (strict)**.
-3. Tunggu DNS menyebar (`dig +short panel.contoh.id` harus menampilkan IP server), baru jalankan installer dengan `--domain`.
+1. Create an **A** record: `panel.example.com` → server public IP.
+2. **Cloudflare:** initially, set proxy status to **DNS only** (grey cloud) so Caddy can issue certificates. Once the panel is accessible over HTTPS, you may switch to **Proxied** with SSL/TLS set to **Full (strict)**.
+3. Wait for DNS propagation (`dig +short panel.example.com` must return the server IP), then run the installer with `--domain`.
 
-**Server tanpa IP publik** (di belakang NAT atau jaringan kantor): domain tidak bisa diarahkan langsung. Pakai **Cloudflare Tunnel**: di Cloudflare Zero Trust, Networking → Tunnels, pasang `cloudflared` di server, lalu tambahkan Published application dengan Service URL `http://localhost:80` (Caddy). HTTPS diurus Cloudflare. Panel tetap bisa dipakai lewat `https://IP-LAN:8443` dari jaringan yang sama.
+**Servers without a public IP** (behind NAT or in an office network): domains cannot be pointed directly. Use **Cloudflare Tunnel**: in Cloudflare Zero Trust, navigate to Networking → Tunnels, install `cloudflared` on the server, and add a Published application with Service URL `http://localhost:80` (Caddy). HTTPS is handled by Cloudflare. The panel remains accessible at `https://IP-LAN:8443` from the same local network.
 
-## 5. Menjalankan instalasi
+## 5. Running the installation
 
-Masuk ke server lewat SSH, lalu jalankan **satu perintah** ini:
+Log in to the server via SSH, then run this **single command**:
 
 ```bash
-# panel di https://panel.contoh.id (DNS sudah menunjuk ke server, lihat bagian 4)
-curl -fsSL https://github.com/aribrilliantsyah/runova/releases/latest/download/get.sh | sudo bash -s -- --domain panel.contoh.id
+# panel at https://panel.example.com (DNS already points to the server, see section 4)
+curl -fsSL https://github.com/aribrilliantsyah/runova/releases/latest/download/get.sh | sudo bash -s -- --domain panel.example.com
 
-# atau panel di https://IP-SERVER:8443
-curl -fsSL https://github.com/aribrilliantsyah/runova/releases/latest/download/get.sh | sudo bash -s -- --port 8443 --public-ip IP-PUBLIK-SERVER
+# or panel at https://SERVER-IP:8443
+curl -fsSL https://github.com/aribrilliantsyah/runova/releases/latest/download/get.sh | sudo bash -s -- --port 8443 --public-ip PUBLIC-SERVER-IP
 ```
 
-Installer menampilkan ringkasan dan bertanya **Lanjutkan? [y/N]**; ketik `y`. Instalasi pertama butuh beberapa menit (apt memasang Docker, Caddy, dan PostgreSQL).
+The installer shows what it will do and asks **Continue? [y/N]**; type `y`. Each step then shows a spinner with the elapsed time, and the detailed output (apt and friends) goes to `/var/log/runova-install.log`. The first installation takes several minutes (apt installs Docker, Caddy, and PostgreSQL). If a step fails, the last 30 lines of that log are printed.
 
-`get.sh` mengunduh rilis terbaru dari GitHub Releases, mencocokkan `SHA256SUMS` untuk arsip dan setiap berkas di dalamnya, lalu menjalankan `install.sh`. Semua opsi setelah `--` diteruskan ke installer:
+`get.sh` downloads the latest release from GitHub Releases, verifies `SHA256SUMS` for the archive and every contained file, then runs `install.sh`. All options after `--` are forwarded to the installer:
 
-| Opsi | Arti |
+| Option | Meaning |
 |---|---|
-| `--domain <host>` | panel di `https://<host>` |
-| `--port <n>` | panel di `https://<IP>:<n>` (bawaan 8443; bukan 2019, 5432, 7070, 20000-20999) |
-| `--public-ip <ip>` | IP publik server (dipakai panduan domain dan detail koneksi database) |
-| `--skip-firewall` | jangan menyentuh `ufw` (firewall diatur di tempat lain) |
-| `--yes` | tanpa pertanyaan (untuk otomasi, misalnya cloud-init) |
-| `--version x.y.z` | pasang versi tertentu, bukan yang terbaru (opsi `get.sh`) |
+| `--domain <host>` | panel at `https://<host>` |
+| `--port <n>` | panel at `https://<IP>:<n>` (default 8443; not 2019, 5432, 7070, 20000-20999) |
+| `--public-ip <ip>` | server public IP (used in domain setup guide and database connection details) |
+| `--skip-firewall` | do not touch `ufw` (firewall managed elsewhere) |
+| `--yes` | non-interactive without prompts (for automation, e.g. cloud-init) |
+| `--version x.y.z` | install specific version instead of latest (`get.sh` option) |
 
-`--domain` dan `--port` tidak bisa bersamaan. Tanpa keduanya, bawaannya `--port 8443`.
+`--domain` and `--port` are mutually exclusive. Without either, it defaults to `--port 8443`.
 
-**Catat password admin yang tercetak di akhir.** Password itu hanya ditampilkan sekali. Contoh akhir keluaran:
+**Note the admin password printed at the end.** That password is only displayed once. Example output:
 
 ```
-Runova 0.3.0 siap.
+Details: /var/log/runova-install.log
+[1/13] Installing packages (docker.io, caddy, postgresql-18, ufw, jq, curl) ... done (1m54s)
+[2/13] Creating user and folders ... done (0s)
+...
+[13/13] Verifying the installation (runova check) ... done (0s)
 
-Alamat panel : https://203.0.113.15:8443
-Sertifikat dibuat Caddy sendiri, jadi peramban memberi peringatan; lanjutkan saja.
+Runova 0.3.1 is ready.
+
+Panel address: https://203.0.113.15:8443
+Caddy creates the certificate itself, so the browser will show a warning; just continue.
 Username     : admin
 Password     : ••••••••••••••••••••
 ```
 
-### Lebih hati-hati: periksa dulu sebelum menjalankan
+### More cautious: verify before running
 
 ```bash
-V=0.3.0
+V=0.3.1
 curl -fsSLO https://github.com/aribrilliantsyah/runova/releases/download/v$V/runova-$V-linux-amd64.tar.gz
 curl -fsSLO https://github.com/aribrilliantsyah/runova/releases/download/v$V/SHA256SUMS
 sha256sum -c SHA256SUMS --ignore-missing
-gh attestation verify runova-$V-linux-amd64.tar.gz -R aribrilliantsyah/runova   # opsional, butuh gh
+gh attestation verify runova-$V-linux-amd64.tar.gz -R aribrilliantsyah/runova   # optional, requires gh
 tar xzf runova-$V-linux-amd64.tar.gz
 cd runova-$V-linux-amd64
-sudo ./install.sh --domain panel.contoh.id      # atau --port 8443
+sudo ./install.sh --domain panel.example.com      # or --port 8443
 ```
 
-### Dari source di mesin Anda
+### From source on your machine
 
-Untuk mencoba perubahan yang belum dirilis, dari checkout source Runova (butuh Go, `ssh`, `scp`):
+To test unreleased changes, from a Runova source checkout (requires Go, `ssh`, `scp`):
 
 ```bash
-scripts/deploy.sh admin@IP-SERVER --domain panel.contoh.id
+scripts/deploy.sh admin@IP-SERVER --domain panel.example.com
 ```
 
-Skrip ini memeriksa SSH, Ubuntu 26.04 amd64, dan `sudo` di server; membangun rilis lokal; menyalinnya; lalu menjalankan installer yang sama. Opsi tambahan: `--version`, `-p/--ssh-port`, `-i/--identity`, dan `RUNOVA_SSH_OPTS` (misalnya `RUNOVA_SSH_OPTS="-o ProxyJump=bastion"`).
+This script verifies SSH, Ubuntu 26.04 amd64, and `sudo` on the server; builds a local release; copies it over; then runs the same installer. Additional options: `--version`, `-p/--ssh-port`, `-i/--identity`, and `RUNOVA_SSH_OPTS` (e.g. `RUNOVA_SSH_OPTS="-o ProxyJump=bastion"`).
 
-Installer memasang `docker.io`, `caddy`, `postgresql-18`, `ufw`, `jq`, dan `curl` dari apt Ubuntu; membuat user `runova`, kunci enkripsi, dan layanan systemd; mengatur Caddy dan PostgreSQL; membuka port di `ufw` (SSH diizinkan lebih dulu sebelum `ufw` diaktifkan); lalu menjalankan `runova check`. Ringkasan lengkap ada di [README](../README.md#instalasi).
+The installer installs `docker.io`, `caddy`, `postgresql-18`, `ufw`, `jq`, and `curl` from Ubuntu apt; creates the `runova` user, encryption key, and systemd service; configures Caddy and PostgreSQL; opens ports in `ufw` (SSH is allowed before `ufw` is enabled); then executes `runova check`. A complete summary is in the [README](../README.md#installation).
 
-## 6. Setelah instalasi
+## 6. After installation
 
-1. Buka alamat panel yang dicetak installer. Pada mode IP, sertifikat dibuat Caddy sendiri sehingga peramban memberi peringatan; lanjutkan saja.
-2. Masuk sebagai `admin` dengan password yang tercetak, lalu **ganti password admin** dari menu akun.
-3. Buka halaman **Server** dan isi **IP publik** server. Tanpa ini, panduan domain di aplikasi hanya menawarkan Cloudflare Tunnel.
-4. Di halaman **Pengguna**, buat pengguna beserta kuotanya (jumlah aplikasi, memori, CPU, database).
-5. Uji deploy: masuk sebagai pengguna itu, unggah binary Linux kecil atau `.jar`, jalankan wizard deploy dengan **akses IP** menyala, lalu buka `http://IP-SERVER:<port akses IP>`. Bila terbuka, Docker, Caddy, dan alurnya sehat. Deploy `.jar` pertama menarik image `eclipse-temurin` sehingga butuh internet dan waktu.
+1. Open the panel address printed by the installer. In IP mode, the certificate is self-issued by Caddy, so browsers will display a warning; proceed past it.
+2. Log in as `admin` with the printed password, then change the admin password from the account menu.
+3. Open the **Server** page and enter the server's **IP publik** (public IP). Without this, the domain setup guide in applications will only offer Cloudflare Tunnel.
+4. On the **Pengguna** (Users) page, create users along with their quotas (number of applications, memory, CPU, databases).
+5. Test deployment: log in as that user, upload a small Linux binary or `.jar`, complete the deploy wizard with **akses IP** (IP access) enabled, then navigate to `http://IP-SERVER:<port akses IP>`. If it opens, Docker, Caddy, and the deployment pipeline are working properly. The first `.jar` deployment pulls the `eclipse-temurin` image, requiring internet access and some time.
 
-Password admin hilang: `sudo -u runova env RUNOVA_DATA=/var/lib/runova runova admin reset-password admin`.
+Lost admin password: `sudo -u runova env RUNOVA_DATA=/var/lib/runova runova admin reset-password admin`.
 
-## Domain hosting untuk pengguna
+## Domain hosting for users
 
-Agar pengguna bisa memberi aplikasinya alamat tanpa mengurus DNS, daftarkan satu domain wildcard. Contoh: domain `porto.devkriyanesia.my.id` di zona Cloudflare `devkriyanesia.my.id`; panel tetap di `runova.prodak.id` (domain panel tidak otomatis menjadi domain hosting).
+To allow users to assign addresses to their applications without managing DNS, register a wildcard domain. Example: domain `porto.devkriyanesia.my.id` in Cloudflare zone `devkriyanesia.my.id`; the panel remains at `runova.prodak.id` (the panel domain does not automatically become a hosting domain).
 
-1. Isi **IP publik** server di halaman **Server** (setelan jaringan).
-2. Di Cloudflare, zona `devkriyanesia.my.id` → DNS → Records → Add record: **Type** `A`, **Name** `*.porto`, **IPv4 address** IP publik server, **Proxy status** **DNS only** (awan abu-abu), TTL Auto. Port 80 dan 443 harus terbuka dari internet.
-3. Di Runova, **Server → Domain hosting**, isi `porto.devkriyanesia.my.id` (boleh `*.porto.devkriyanesia.my.id`) lalu **Daftarkan**. Status DNS harus **DNS benar**; bila tidak, pesannya menyebut penyebabnya (belum ada record, menunjuk ke IP lain, atau proxy Cloudflare menyala). Tombol cek ulang ada di baris domain.
-4. Pengguna memilih domain itu di wizard deploy langkah 4 atau tab Domain aplikasi, mengetik nama (`cv-budi`), dan alamat `cv-budi.porto.devkriyanesia.my.id` langsung dipakai. Caddy menerbitkan sertifikat per subdomain (satu per alamat) lewat HTTP/TLS-ALPN, jadi tidak perlu token API Cloudflare dan tidak ada sertifikat wildcard.
+1. Fill in the server's **IP publik** (public IP) on the **Server** page (network settings).
+2. In Cloudflare, zone `devkriyanesia.my.id` → DNS → Records → Add record: **Type** `A`, **Name** `*.porto`, **IPv4 address** server public IP, **Proxy status** **DNS only** (grey cloud), TTL Auto. Ports 80 and 443 must be open to the internet.
+3. In Runova, navigate to **Server → Domain hosting**, enter `porto.devkriyanesia.my.id` (or `*.porto.devkriyanesia.my.id`), then click **Daftarkan** (Register). DNS status must show **DNS benar** (DNS correct); if not, the message explains the cause (no record yet, points to another IP, or Cloudflare proxy is active). A re-check button is available on the domain row.
+4. Users select that domain in deploy wizard step 4 or the application's Domain tab, type a name (`cv-budi`), and the address `cv-budi.porto.devkriyanesia.my.id` is immediately used. Caddy issues certificates per subdomain (one per address) via HTTP/TLS-ALPN, so no Cloudflare API token is needed and no wildcard certificates are used.
 
-**Batas Let's Encrypt.** Let's Encrypt menerbitkan paling banyak 50 sertifikat baru per minggu untuk satu domain utama (`devkriyanesia.my.id`, termasuk semua subdomainnya dan domain panel bila serumpun). Kartu Domain hosting menghitung perkiraan subdomain yang dibuat dalam 7 hari terakhir dan memberi peringatan kuning mulai 40 dan merah mulai 50; ini perkiraan Runova, bukan hitungan Let's Encrypt. Bila batas terlampaui, sertifikat subdomain baru tertunda sampai minggu berikutnya.
+**Let's Encrypt limits.** Let's Encrypt issues at most 50 new certificates per week for a single registered domain (`devkriyanesia.my.id`, including all its subdomains and the panel domain if sharing the same root). The Domain hosting card calculates an estimate of subdomains created in the last 7 days, showing a yellow warning starting at 40 and red at 50; this is Runova's estimate, not Let's Encrypt's internal count. If the limit is exceeded, new subdomain certificates are delayed until the following week.
 
-**Cloudflare Proxied dan Tunnel tidak dipakai di sini:** sertifikat Universal SSL Cloudflare tidak mencakup subdomain tingkat dua seperti `*.porto.devkriyanesia.my.id`.
+**Cloudflare Proxied and Tunnel are not supported here:** Cloudflare Universal SSL certificates do not cover second-level subdomains such as `*.porto.devkriyanesia.my.id`.
 
-Mematikan domain hosting menghentikan semua subdomainnya dan memberi tahu pemiliknya; menghapusnya baru bisa setelah tidak ada subdomain yang memakainya. Domain milik sendiri (mis. `budi.com`) hanya bisa ditambahkan admin.
+Disabling domain hosting deactivates all of its subdomains and notifies their owners; deleting it is only possible after no subdomains are using it. Custom domains (e.g. `budi.com`) can only be added by admins.
 
-## 7. Pembaruan
+## 7. Updates
 
-Panel menampilkan banner untuk admin bila ada rilis baru (dimatikan lewat **Server → Periksa pembaruan**). Di server:
+The panel displays a banner for admins when a new release is available (disabled via **Server → Periksa pembaruan**). On the server:
 
 ```bash
-sudo runova update            # ke rilis terbaru, bertanya dulu
-sudo runova update --yes      # tanpa tanya
-runova update --check         # hanya memeriksa: keluar 0 terbaru, 10 ada pembaruan
+sudo runova update            # to latest release, with confirmation prompt
+sudo runova update --yes      # non-interactive
+runova update --check         # check only: exit 0 up to date, 10 update available
 ```
 
-`runova update` mengunduh `get.sh` dari rilis target, mencocokkan checksumnya dengan `SHA256SUMS`, lalu menjalankannya; hasilnya sama dengan perintah instalasi `curl`. Alamat panel tetap. Installer idempoten: binary dan unit diganti, Runova di-restart; data, kunci, admin, aplikasi, dan alamat panel tidak disentuh, dan tidak ada password baru dicetak. Skema database diperbarui otomatis; sebelumnya Runova menyalin `runova.db` ke `/var/lib/runova/runova.db.bak-v<versi>-<waktu>`. Versi terpasang: `runova version`.
+`runova update` downloads `get.sh` from the target release, verifies its checksum against `SHA256SUMS`, then runs it; the result is identical to the `curl` installation command. The panel address remains unchanged. The installer is idempotent: binary and units are replaced, Runova is restarted; data, keys, admin accounts, applications, and panel address are untouched, and no new password is printed. Database schema is updated automatically; beforehand Runova copies `runova.db` to `/var/lib/runova/runova.db.bak-v<version>-<timestamp>`. Installed version: `runova version`.
 
-Server Runova 0.2.0 ke bawah belum punya `runova update`; jalankan perintah instalasi lagi (tanpa `--domain`/`--port`, alamat panel tetap):
+Servers running Runova 0.2.0 or earlier do not yet have `runova update`; rerun the installation command (without `--domain`/`--port`, keeping the panel address):
 
 ```bash
 curl -fsSL https://github.com/aribrilliantsyah/runova/releases/latest/download/get.sh | sudo bash -s --
 ```
 
-### Kembali ke versi sebelumnya
+### Rolling back to a previous version
 
-Installer menyimpan binary yang digantikan di `/var/lib/runova/rollback/` (satu versi). Bila pembaruan bermasalah:
+The installer preserves the replaced binary in `/var/lib/runova/rollback/` (one version). If an update causes issues:
 
 ```bash
-sudo runova rollback          # bertanya dulu
+sudo runova rollback          # with confirmation prompt
 ```
 
-Binary lama dipasang kembali. Bila database sudah dimigrasi oleh versi baru, cadangan sebelum migrasi (`runova.db.bak-v<skema lama>-*`) dipulihkan: **perubahan data panel sejak pembaruan (pengguna, aplikasi, domain, setelan) hilang**, dan database sebelum rollback disimpan di `runova.db.before-rollback-<waktu>`. Tanpa cadangan yang cocok, `rollback` berhenti dan tidak mengubah apa pun. Container aplikasi dan database PostgreSQL pengguna tidak disentuh. `rollback` kedua kalinya maju kembali ke versi semula.
+The previous binary is restored. If the database was already migrated by the newer version, the pre-migration backup (`runova.db.bak-v<older schema>-*`) is restored: **panel data changes since the update (users, applications, domains, settings) are lost**, and the pre-rollback database is saved at `runova.db.before-rollback-<timestamp>`. Without a matching backup, `rollback` halts without making changes. Application containers and user PostgreSQL databases are untouched. Running `rollback` a second time rolls forward back to the original version.
 
-## 8. Cadangan
+## 8. Backups
 
-Yang harus dicadangkan:
+What to back up:
 
-| Yang | Isi |
+| Item | Contents |
 |---|---|
-| `/etc/runova/secret.key` | **Kunci enkripsi.** Semua rahasia (environment rahasia, password database) terenkripsi dengan kunci ini. **Tanpa kunci ini rahasia tidak bisa dibuka**, dan tidak ada cara memulihkannya. Simpan salinannya di tempat terpisah dari server. |
-| `/var/lib/runova` | Database Runova (`runova.db`), artefak yang diunggah, data aplikasi (`data/`), dan backup harian database (`backup/`). |
-| PostgreSQL | Database pengguna. |
+| `/etc/runova/secret.key` | **Encryption key.** All secrets (secret environment variables, database passwords) are encrypted with this key. **Without this key, secrets cannot be decrypted**, and there is no way to recover them. Store a copy in a separate location away from the server. |
+| `/var/lib/runova` | Runova database (`runova.db`), uploaded artifacts, application data (`data/`), and daily database backups (`backup/`). |
+| PostgreSQL | User databases. |
 
-Contoh cadangan folder data (hentikan Runova sebentar agar `runova.db` konsisten):
+Example data directory backup (briefly stop Runova for `runova.db` consistency):
 
 ```bash
 sudo systemctl stop runova
@@ -200,48 +208,48 @@ sudo tar czf /root/runova-data-$(date +%F).tar.gz -C / var/lib/runova etc/runova
 sudo systemctl start runova
 ```
 
-Aplikasi yang berjalan tidak ikut berhenti; Runova menyambung kembali saat menyala.
+Running applications are not interrupted; Runova reconnects when it starts up.
 
-**PostgreSQL:** Runova sudah membuat `pg_dump` per database tiap pukul 02:00 dan menyimpannya 7 hari di `/var/lib/runova/backup/<database>/`, tetapi itu di disk yang sama dengan datanya. Salin folder itu ke luar server, dan/atau buat dump seluruh klaster:
+**PostgreSQL:** Runova already creates a `pg_dump` per database daily at 02:00 and retains it for 7 days in `/var/lib/runova/backup/<database>/`, but that resides on the same disk as the data. Copy that directory offsite, and/or create a full cluster dump:
 
 ```bash
 sudo -u postgres pg_dumpall | gzip > /root/pg-semua-$(date +%F).sql.gz
 ```
 
-Pulihkan ke server baru: pasang Runova dengan installer, hentikan `runova`, kembalikan `/var/lib/runova` dan `/etc/runova/secret.key` (pemilik `runova:runova`), jalankan `sudo systemctl start runova`, lalu pulihkan database dari halaman **Database** (backup) atau `pg_restore`.
+Restoring to a new server: install Runova using the installer, stop `runova`, restore `/var/lib/runova` and `/etc/runova/secret.key` (ownership `runova:runova`), run `sudo systemctl start runova`, then restore databases from the **Database** page (backups) or `pg_restore`.
 
-## 9. Pemecahan masalah
+## 9. Troubleshooting
 
-**Pemeriksaan pertama:**
+**First checks:**
 
 ```bash
 sudo -u runova env RUNOVA_DATA=/var/lib/runova runova check
 sudo journalctl -u runova -u caddy -u postgresql -n 100 --no-pager
 ```
 
-`runova check` mencetak `ok` atau `fail <nama>: <alasan>` untuk Docker, `docker-init`, Caddy, PostgreSQL, kunci, folder data, dan `pg_hba.d`; keluar dengan kode 1 bila ada yang gagal.
+`runova check` prints `ok` or `fail <name>: <reason>` for Docker, `docker-init`, Caddy, PostgreSQL, keys, data directories, and `pg_hba.d`; exits with code 1 if any check fails.
 
-**Port 80/443 bentrok.** Installer atau Caddy gagal start dengan `address already in use`. Cari pemakainya dan hentikan:
+**Port 80/443 conflicts.** Installer or Caddy fails to start with `address already in use`. Find the process using them and stop it:
 
 ```bash
 sudo ss -ltnp 'sport = :80 or sport = :443'
 ```
 
-Biasanya Apache atau nginx bawaan: `sudo systemctl disable --now apache2` atau `nginx`. Lalu `sudo systemctl restart caddy`.
+Usually pre-installed Apache or nginx: `sudo systemctl disable --now apache2` or `nginx`. Then `sudo systemctl restart caddy`.
 
-**Sertifikat belum terbit.** Lihat `journalctl -u caddy`. Penyebab umum: DNS belum menunjuk ke server (`dig +short domain`), port 80/443 tertutup di firewall cloud atau `ufw`, record Cloudflare masih **Proxied** saat pertama kali (ubah ke DNS only), atau batas penerbitan Let's Encrypt tercapai karena terlalu banyak percobaan. Pesan `failed to install root certificate ... sudo` dari Caddy di journal tidak berbahaya: Caddy mencoba memasang sertifikat internalnya ke sistem.
+**Certificate not yet issued.** Check `journalctl -u caddy`. Common causes: DNS does not point to the server yet (`dig +short domain`), port 80/443 is blocked in cloud firewall or `ufw`, Cloudflare record is still set to **Proxied** on first setup (switch to DNS only), or Let's Encrypt rate limits reached from too many attempts. The `failed to install root certificate ... sudo` message from Caddy in journal logs is harmless: Caddy is attempting to trust its internal certificate on the system.
 
-**`ufw` mengunci SSH.** Installer mengizinkan port SSH sebelum mengaktifkan `ufw`, dengan membaca `sshd -T`, `ss`, dan `ssh.socket`. Bila tetap terkunci, masuk lewat konsol penyedia server dan jalankan:
+**`ufw` locks out SSH.** The installer allows the SSH port prior to enabling `ufw` by inspecting `sshd -T`, `ss`, and `ssh.socket`. If you are still locked out, access the server via your hosting provider's web console and run:
 
 ```bash
 sudo ufw allow <port-ssh>/tcp
 sudo ufw status verbose
 ```
 
-Bila firewall diatur di tempat lain, pasang dengan `--skip-firewall`.
+If the firewall is managed elsewhere, install with `--skip-firewall`.
 
-**Aplikasi tidak bisa dijangkau lewat IP:port.** Pastikan port 20000-20999 terbuka di `ufw` dan di firewall cloud, dan akses IP aplikasi menyala di panel.
+**Application unreachable via IP:port.** Ensure ports 20000-20999 are open in `ufw` and cloud firewall, and that application IP access is enabled in the panel.
 
-**Docker memakai jaringan yang bentrok dengan jaringan kantor.** Installer memindahkan jaringan bawaan Docker ke `172.31.0.0/16`, dan Runova memakai `172.30.0.0/16` untuk jaringan pengguna. Bila jaringan Anda memakai rentang itu, atur `/etc/docker/daemon.json` dan jangan lupa `default-address-pools`.
+**Docker uses a network range conflicting with office network.** The installer moves Docker's default network pool to `172.31.0.0/16`, and Runova allocates `172.30.0.0/16` for user networks. If your network uses these ranges, configure `/etc/docker/daemon.json` and adjust `default-address-pools`.
 
-**Installer berhenti di tengah.** Baca pesan galatnya, perbaiki, lalu jalankan perintah yang sama; langkah yang sudah selesai dilewati.
+**Installer halts midway.** Read the error message, resolve the issue, and rerun the same command; completed steps will be skipped.
