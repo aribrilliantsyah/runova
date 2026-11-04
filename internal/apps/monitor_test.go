@@ -347,10 +347,14 @@ func TestCleanExitMarksStopped(t *testing.T) {
 
 	labels := map[string]string{"runova.app": strconv.FormatInt(app.ID, 10), "exitCode": "0"}
 	e.engine.Emit(docker.Event{ContainerID: cid, Action: "die", Labels: labels, Time: e.clock.Now()})
-	waitFor(t, "app stopped", func() bool {
-		got, _ := e.store.App(ctx, app.ID)
-		return got.Status == store.AppStopped
+	// The status is written first, the notification last: wait for the latter.
+	waitFor(t, "clean-exit notification", func() bool {
+		n, _ := e.store.UnreadCount(ctx, u.ID)
+		return n > 0
 	})
+	if got, _ := e.store.App(ctx, app.ID); got.Status != store.AppStopped {
+		t.Fatalf("status = %s, want stopped", got.Status)
+	}
 	if n := len(e.engine.CallsWithPrefix("stop ")); n != 0 {
 		t.Errorf("stop calls = %d; a clean exit needs no stop", n)
 	}
