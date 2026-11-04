@@ -1,6 +1,7 @@
 package api_test
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"net"
@@ -9,11 +10,13 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
 	"runova/internal/api"
 	"runova/internal/apps"
+	"runova/internal/dbenv"
 	"runova/internal/dbs"
 	"runova/internal/docker/dockertest"
 	"runova/internal/pg/pgfake"
@@ -60,12 +63,13 @@ func newDBEnv(t *testing.T) *dbEnv {
 		HealthTimeout: time.Second, HealthInterval: time.Millisecond, HealthReadWait: 2 * time.Millisecond,
 		DBEnv: dsvc.AppEnv,
 	}
+	var deploys sync.WaitGroup
 	ctx, cancel := context.WithCancel(context.Background())
-	srv := httptest.NewServer(api.New(api.Config{Store: st, Now: clk.Now, DataDir: dataDir, Apps: svc, DBs: dsvc, Context: ctx}))
-	t.Cleanup(func() { cancel(); srv.Close(); st.Close() })
+	srv := httptest.NewServer(api.New(api.Config{Store: st, Now: clk.Now, DataDir: dataDir, Apps: svc, DBs: dsvc, Context: ctx, Deploys: &deploys}))
+	t.Cleanup(func() { cancel(); deploys.Wait(); srv.Close(); st.Close() })
 	e := &env{t: t, srv: srv, store: st, clock: clk, dataDir: dataDir}
 	e.addUser("admin", adminPassword, store.RoleAdmin)
-	return &dbEnv{appEnv: &appEnv{env: e, engine: engine, svc: svc}, pg: fake, dbs: dsvc}
+	return &dbEnv{appEnv: &appEnv{env: e, engine: engine, svc: svc, deploys: &deploys}, pg: fake, dbs: dsvc}
 }
 
 // userWithRole adds a user and gives it a PostgreSQL role, as creating it through the API does.
@@ -250,6 +254,108 @@ func TestAppSpecGetsDBEnv(t *testing.T) {
 	// Binding is visible on the app, and the database cannot go while bound.
 	if r := c.do("DELETE", dbPath(dbID, ""), obj{"confirm": "budi_billing"}); r.status != 409 || r.errMsg(t) != "Masih dipakai oleh: billing-api" {
 		t.Fatalf("delete bound = %d %s", r.status, r.body)
+	}
+}
+
+// dbTarGz is a static binary with an .env.example naming database variables
+// Runova knows and one it does not.
+func dbTarGz(t *testing.T) []byte {
+	t.Helper()
+	var tgz bytes.Buffer
+	writeTarGz(t, &tgz, map[string][]byte{"server": staticELF(), ".env.example": []byte("DB_URL=\nDB_USER=\nDB_PASSWORD=\nREDIS_URL=\n")})
+	return tgz.Bytes()
+}
+
+func TestDetectedDBEnvFilledAutomatically(t *testing.T) {
+	e := newDBEnv(t)
+	u, c := e.userWithRole("budi")
+	dbID := c.createDB("billing")
+
+	up := c.upload("rilis.tar.gz", dbTarGz(t))
+	var got struct {
+		ID    string      `json:"id"`
+		DBEnv []dbenv.Var `json:"db_env"`
+	}
+	up.into(t, &got)
+	for _, want := range []dbenv.Var{{Name: "DB_URL", Kind: dbenv.URL}, {Name: "DB_USER", Kind: dbenv.User}, {Name: "DB_PASSWORD", Kind: dbenv.Password}, {Name: "PGPASSWORD", Kind: dbenv.Password}} {
+		if !slices.Contains(got.DBEnv, want) {
+			t.Errorf("upload db_env lacks %+v: %+v", want, got.DBEnv)
+		}
+	}
+	if slices.ContainsFunc(got.DBEnv, func(v dbenv.Var) bool { return v.Name == "REDIS_URL" }) {
+		t.Errorf("REDIS_URL marked as database: %+v", got.DBEnv)
+	}
+
+	// The user overrides DB_USER and fills REDIS_URL; DB_URL and DB_PASSWORD come from the database.
+	r := c.do("POST", "/api/apps", obj{"upload_id": got.ID, "name": "billing-api", "memory_mb": 256, "cpu_milli": 250, "database_id": dbID,
+		"env": []obj{{"name": "DB_USER", "value": "custom"}, {"name": "REDIS_URL", "value": "redis://r:6379"}, {"name": "DB_PASSWORD", "value": "", "secret": true}}})
+	if r.status != 201 {
+		t.Fatalf("create = %d %s", r.status, r.body)
+	}
+	var created struct{ App store.App }
+	r.into(t, &created)
+	id := created.App.ID
+	c.waitStatus(id, "running")
+
+	containerEnv := func() []string {
+		var env []string
+		for _, ct := range e.engine.Containers() {
+			if ct.Spec.Labels["runova.app"] == strconv.FormatInt(id, 10) {
+				env = ct.Spec.Env
+			}
+		}
+		return env
+	}
+	role, _ := e.pg.Role("budi")
+	env := containerEnv()
+	for _, want := range []string{
+		"DB_URL=postgres://budi:" + role.Password + "@host.docker.internal:5432/budi_billing",
+		"DB_USER=custom", "DB_PASSWORD=" + role.Password, "REDIS_URL=redis://r:6379",
+	} {
+		if !slices.Contains(env, want) {
+			t.Errorf("container env lacks %q: %q", want, env)
+		}
+	}
+
+	// The app tells which variables come from which database, without values.
+	r = c.do("GET", appPath(id, ""), nil)
+	if strings.Contains(string(r.body), role.Password) {
+		t.Fatalf("app detail leaks the database password: %s", r.body)
+	}
+	var detail struct {
+		DBEnv *struct {
+			Database string      `json:"database"`
+			Vars     []dbenv.Var `json:"vars"`
+		} `json:"db_env"`
+	}
+	r.into(t, &detail)
+	if detail.DBEnv == nil || detail.DBEnv.Database != "budi_billing" || !slices.Contains(detail.DBEnv.Vars, dbenv.Var{Name: "DB_URL", Kind: dbenv.URL}) {
+		t.Fatalf("db_env = %s", r.body)
+	}
+
+	// A new password reaches every filled name on the next deploy.
+	if r := c.do("POST", "/api/databases/password", nil); r.status != 200 {
+		t.Fatalf("rotate = %d %s", r.status, r.body)
+	}
+	if r := c.do("POST", appPath(id, "/deploy"), nil); r.status != 202 {
+		t.Fatalf("redeploy = %d %s", r.status, r.body)
+	}
+	e.deploys.Wait()
+	role, _ = e.pg.Role("budi")
+	env = containerEnv()
+	for _, want := range []string{"DB_PASSWORD=" + role.Password, "PGPASSWORD=" + role.Password} {
+		if !slices.Contains(env, want) {
+			t.Errorf("after rotation env lacks %q: %q", want, env)
+		}
+	}
+	_ = u
+
+	// Without a database nothing is marked.
+	if r := c.do("PATCH", appPath(id, ""), obj{"database_id": 0}); r.status != 200 {
+		t.Fatalf("detach = %d %s", r.status, r.body)
+	}
+	if r := c.do("GET", appPath(id, ""), nil); !strings.Contains(string(r.body), `"db_env":null`) {
+		t.Errorf("detached app still has db_env: %s", r.body)
 	}
 }
 

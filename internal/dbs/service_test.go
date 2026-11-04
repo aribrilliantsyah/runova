@@ -227,7 +227,7 @@ func TestAppEnv(t *testing.T) {
 	}
 	app := e.app(t, u, "billing-api", 20000, &d.ID)
 
-	got, err := e.svc.AppEnv(ctx, app)
+	got, err := e.svc.AppEnv(ctx, app, []string{"DB_URL", "DB_USER", "DB_PASSWORD", "REDIS_URL", "PGHOST"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -241,6 +241,9 @@ func TestAppEnv(t *testing.T) {
 		"PGUSER=budi",
 		"PGPASSWORD=p@ss:/w",
 		"PGDATABASE=budi_billing",
+		"DB_URL=postgres://budi:p%40ss%3A%2Fw@host.docker.internal:5432/budi_billing",
+		"DB_USER=budi",
+		"DB_PASSWORD=p@ss:/w",
 	}
 	if !slices.Equal(got, want) {
 		t.Fatalf("env =\n%q\nwant\n%q", got, want)
@@ -249,8 +252,19 @@ func TestAppEnv(t *testing.T) {
 		t.Errorf("AppEnv touched PostgreSQL: %v", calls)
 	}
 
+	app.Kind = artifact.KindJar
+	got, err = e.svc.AppEnv(ctx, app, []string{"DB_URL", "SPRING_R2DBC_URL"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, w := range []string{"DB_URL=jdbc:postgresql://host.docker.internal:5432/budi_billing", "SPRING_R2DBC_URL=r2dbc:postgresql://host.docker.internal:5432/budi_billing"} {
+		if !slices.Contains(got, w) {
+			t.Errorf("jar env lacks %q: %q", w, got)
+		}
+	}
+
 	app.DatabaseID = nil
-	if got, err := e.svc.AppEnv(ctx, app); err != nil || got != nil {
+	if got, err := e.svc.AppEnv(ctx, app, []string{"DB_URL"}); err != nil || got != nil {
 		t.Fatalf("no database: %v, %v", got, err)
 	}
 }

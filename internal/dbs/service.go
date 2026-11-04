@@ -11,14 +11,14 @@ import (
 	"fmt"
 	"log/slog"
 	"math/big"
-	"net/url"
 	"os"
 	"path/filepath"
-	"strconv"
 	"strings"
 	"sync"
 	"time"
 
+	"runova/internal/artifact"
+	"runova/internal/dbenv"
 	"runova/internal/pg"
 	"runova/internal/secret"
 	"runova/internal/store"
@@ -475,9 +475,10 @@ func (s *Service) RotatePassword(ctx context.Context, u store.User) error {
 }
 
 // AppEnv returns the database variables for the app ("NAME=value"), nil when
-// it uses no database. It reads the stored password and never connects to
+// it uses no database: the standard names, then every detected name that
+// dbenv.KindOf recognizes. It reads the stored password and never connects to
 // PostgreSQL.
-func (s *Service) AppEnv(ctx context.Context, app store.App) ([]string, error) {
+func (s *Service) AppEnv(ctx context.Context, app store.App, detected []string) ([]string, error) {
 	if app.DatabaseID == nil {
 		return nil, nil
 	}
@@ -493,20 +494,13 @@ func (s *Service) AppEnv(ctx context.Context, app store.App) ([]string, error) {
 	if err != nil {
 		return nil, err
 	}
-	port := strconv.Itoa(s.port())
-	hostport := dockerHost + ":" + port
-	u := url.URL{Scheme: "postgres", User: url.UserPassword(owner.Username, password), Host: hostport, Path: "/" + d.Name}
-	return []string{
-		"DATABASE_URL=" + u.String(),
-		"SPRING_DATASOURCE_URL=jdbc:postgresql://" + hostport + "/" + d.Name,
-		"SPRING_DATASOURCE_USERNAME=" + owner.Username,
-		"SPRING_DATASOURCE_PASSWORD=" + password,
-		"PGHOST=" + dockerHost,
-		"PGPORT=" + port,
-		"PGUSER=" + owner.Username,
-		"PGPASSWORD=" + password,
-		"PGDATABASE=" + d.Name,
-	}, nil
+	c := dbenv.Conn{Host: dockerHost, Port: s.port(), User: owner.Username, Password: password, Database: d.Name}
+	vars := dbenv.Vars(detected, app.Kind == artifact.KindJar)
+	out := make([]string, len(vars))
+	for i, v := range vars {
+		out[i] = v.Name + "=" + c.Value(v.Kind)
+	}
+	return out, nil
 }
 
 // WriteHBA writes the pg_hba.d file Runova owns and has PostgreSQL reload it.

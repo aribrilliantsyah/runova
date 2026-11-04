@@ -184,8 +184,8 @@ func TestContainerSpec(t *testing.T) {
 		JavaVersion: &v, JVMOpts: "-Xss512k  -Dx=1", InternalPort: 8080, HostPort: 30123,
 	}
 	spec := e.svc.ContainerSpec(app, owner, d,
-		[]store.EnvEntry{{Name: "PORT", Value: "1"}, {Name: "MODE", Value: "prod"}, {Name: "DB", Value: "user"}},
-		[]string{"DB=fromdb", "PGHOST=host.docker.internal"})
+		[]store.EnvEntry{{Name: "PORT", Value: "1"}, {Name: "MODE", Value: "prod"}, {Name: "DB", Value: "user"}, {Name: "DB_PASSWORD", Value: ""}},
+		[]string{"DB=fromdb", "PGHOST=host.docker.internal", "DB_PASSWORD=fromdb"})
 
 	if spec.Image != "eclipse-temurin:21-jre" {
 		t.Errorf("image = %s", spec.Image)
@@ -196,7 +196,8 @@ func TestContainerSpec(t *testing.T) {
 	if spec.User != "100002:100002" {
 		t.Errorf("user = %s", spec.User)
 	}
-	wantEnv := []string{"PORT=8080", "MODE=prod", "DB=fromdb", "PGHOST=host.docker.internal", "RUNOVA_DATA_DIR=/data", "HOME=/tmp"}
+	// A value the user typed beats the database's; an empty one leaves it to the database.
+	wantEnv := []string{"PORT=8080", "MODE=prod", "DB=user", "PGHOST=host.docker.internal", "DB_PASSWORD=fromdb", "RUNOVA_DATA_DIR=/data", "HOME=/tmp"}
 	if !slices.Equal(spec.Env, wantEnv) {
 		t.Errorf("env = %v, want %v", spec.Env, wantEnv)
 	}

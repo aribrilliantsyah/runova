@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 
+	"runova/internal/artifact"
 	"runova/internal/store"
 )
 
@@ -16,12 +17,21 @@ func (s *Service) checkDatabase(ctx context.Context, owner store.User, id int64)
 	return err
 }
 
-// dbEnv returns the database variables of the app; nil when DBEnv is unset or the app uses no database.
-func (s *Service) dbEnv(ctx context.Context, app store.App) ([]string, error) {
+// dbEnv returns the database variables of the app; nil when DBEnv is unset or
+// the app uses no database. Names the artifact references and names the user
+// set are offered to DBEnv, which fills those it recognizes.
+func (s *Service) dbEnv(ctx context.Context, app store.App, rep artifact.Report, env []store.EnvEntry) ([]string, error) {
 	if s.DBEnv == nil || app.DatabaseID == nil {
 		return nil, nil
 	}
-	return s.DBEnv(ctx, app)
+	names := make([]string, 0, len(rep.Env)+len(env))
+	for _, v := range rep.Env {
+		names = append(names, v.Name)
+	}
+	for _, e := range env {
+		names = append(names, e.Name)
+	}
+	return s.DBEnv(ctx, app, names)
 }
 
 func sameID(a, b *int64) bool {
