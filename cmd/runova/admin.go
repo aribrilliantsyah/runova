@@ -42,7 +42,7 @@ func admin(cfg config.Config, args []string, stdout, stderr io.Writer) int {
 
 	st, err := store.Open(cfg.DBPath())
 	if err != nil {
-		fmt.Fprintf(stderr, "Tidak bisa membuka database: %v\n", err)
+		fmt.Fprintf(stderr, "Could not open the database: %v\n", err)
 		return 1
 	}
 	defer st.Close()
@@ -63,7 +63,7 @@ func admin(cfg config.Config, args []string, stdout, stderr io.Writer) int {
 func adminExists(ctx context.Context, st *store.Store, stderr io.Writer) int {
 	users, err := st.Users(ctx)
 	if err != nil {
-		fmt.Fprintf(stderr, "Gagal membaca pengguna: %v\n", err)
+		fmt.Fprintf(stderr, "Could not read users: %v\n", err)
 		return 2
 	}
 	for _, u := range users {
@@ -81,7 +81,7 @@ func createAdmin(ctx context.Context, st *store.Store, username string, stdout, 
 	}
 	settings, err := st.Settings(ctx)
 	if err != nil {
-		fmt.Fprintf(stderr, "Gagal membaca setelan: %v\n", err)
+		fmt.Fprintf(stderr, "Could not read settings: %v\n", err)
 		return 1
 	}
 	pw, hash, ok := newCredentials(stderr)
@@ -93,11 +93,11 @@ func createAdmin(ctx context.Context, st *store.Store, username string, stdout, 
 		Role: store.RoleAdmin, Quota: settings.DefaultQuota,
 	}, time.Now().UnixMilli())
 	if errors.Is(err, store.ErrConflict) {
-		fmt.Fprintln(stderr, "pengguna sudah ada")
+		fmt.Fprintln(stderr, "user already exists")
 		return 1
 	}
 	if err != nil {
-		fmt.Fprintf(stderr, "Gagal membuat pengguna: %v\n", err)
+		fmt.Fprintf(stderr, "Could not create the user: %v\n", err)
 		return 1
 	}
 	fmt.Fprintf(stdout, "Username: %s\nPassword: %s\n", username, pw)
@@ -107,11 +107,11 @@ func createAdmin(ctx context.Context, st *store.Store, username string, stdout, 
 func resetPassword(ctx context.Context, st *store.Store, username string, stdout, stderr io.Writer) int {
 	u, _, err := st.UserByUsername(ctx, username)
 	if errors.Is(err, store.ErrNotFound) {
-		fmt.Fprintf(stderr, "pengguna %q tidak ditemukan\n", username)
+		fmt.Fprintf(stderr, "user %q not found\n", username)
 		return 1
 	}
 	if err != nil {
-		fmt.Fprintf(stderr, "Gagal membaca pengguna: %v\n", err)
+		fmt.Fprintf(stderr, "Could not read the user: %v\n", err)
 		return 1
 	}
 	pw, hash, ok := newCredentials(stderr)
@@ -119,7 +119,7 @@ func resetPassword(ctx context.Context, st *store.Store, username string, stdout
 		return 1
 	}
 	if err := st.SetPassword(ctx, u.ID, hash); err != nil {
-		fmt.Fprintf(stderr, "Gagal mengganti password: %v\n", err)
+		fmt.Fprintf(stderr, "Could not change the password: %v\n", err)
 		return 1
 	}
 	fmt.Fprintf(stdout, "Username: %s\nPassword: %s\n", username, pw)

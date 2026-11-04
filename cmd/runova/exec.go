@@ -39,9 +39,9 @@ func isTerminal(f *os.File) bool {
 	return err == nil
 }
 
-var errNoTerminal = errors.New("Tidak ada terminal untuk bertanya; tambahkan --yes")
+var errNoTerminal = errors.New("no terminal to ask on; add --yes")
 
-// confirm asks "Lanjutkan? [y/N]" and reports whether the answer was yes. With
+// confirm asks "Continue? [y/N]" and reports whether the answer was yes. With
 // yes set it does not ask; without a terminal it fails instead of guessing.
 func (c console) confirm(stdout io.Writer, yes bool) (bool, error) {
 	if yes {
@@ -50,7 +50,7 @@ func (c console) confirm(stdout io.Writer, yes bool) (bool, error) {
 	if !c.Interactive {
 		return false, errNoTerminal
 	}
-	fmt.Fprint(stdout, "Lanjutkan? [y/N] ")
+	fmt.Fprint(stdout, "Continue? [y/N] ")
 	line, _ := bufio.NewReader(c.In).ReadString('\n')
 	answer := strings.ToLower(strings.TrimSpace(line))
 	return answer == "y" || answer == "ya" || answer == "yes", nil

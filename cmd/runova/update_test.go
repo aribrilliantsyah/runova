@@ -95,13 +95,13 @@ func TestUpdateCheckExitCodes(t *testing.T) {
 		want      int
 		out       string
 	}{
-		{"0.2.0", 10, "Terbaru  : 0.3.0"},
-		{"0.3.0", 0, "Sudah versi terbaru"},
-		{"0.4.0", 0, "Sudah versi terbaru"},
-		{"dev", 0, "Terbaru  : 0.3.0"},
+		{"0.2.0", 10, "Latest   : 0.3.0"},
+		{"0.3.0", 0, "Already the latest version"},
+		{"0.4.0", 0, "Already the latest version"},
+		{"dev", 0, "Latest   : 0.3.0"},
 	} {
 		code, out, errOut := r.run(tc.installed, "--check")
-		if code != tc.want || !strings.Contains(out, tc.out) || !strings.Contains(out, "Terpasang: "+tc.installed) {
+		if code != tc.want || !strings.Contains(out, tc.out) || !strings.Contains(out, "Installed: "+tc.installed) {
 			t.Errorf("installed %s: code %d, out %q, err %q", tc.installed, code, out, errOut)
 		}
 	}
@@ -110,7 +110,7 @@ func TestUpdateCheckExitCodes(t *testing.T) {
 	}
 
 	r.cfg.GitHub = "http://127.0.0.1:1"
-	if code, _, errOut := r.run("0.2.0", "--check"); code != 1 || !strings.Contains(errOut, "Tidak bisa memeriksa") {
+	if code, _, errOut := r.run("0.2.0", "--check"); code != 1 || !strings.Contains(errOut, "Could not check") {
 		t.Fatalf("unreachable: code %d, err %q", code, errOut)
 	}
 }
@@ -126,7 +126,7 @@ func TestUpdateRequiresRoot(t *testing.T) {
 	r := newUpdateRig(t, "0.3.0")
 	r.root = false
 	code, _, errOut := r.run("0.2.0", "--yes")
-	if code != 1 || !strings.Contains(errOut, "Jalankan dengan sudo: sudo runova update") || len(r.calls) != 0 {
+	if code != 1 || !strings.Contains(errOut, "Run with sudo: sudo runova update") || len(r.calls) != 0 {
 		t.Fatalf("code %d, err %q, calls %v", code, errOut, r.calls)
 	}
 }
@@ -134,7 +134,7 @@ func TestUpdateRequiresRoot(t *testing.T) {
 func TestUpdateAlreadyLatest(t *testing.T) {
 	r := newUpdateRig(t, "0.2.0")
 	code, out, _ := r.run("0.2.0", "--yes")
-	if code != 0 || !strings.Contains(out, "Runova 0.2.0 sudah versi terbaru") || len(r.calls) != 0 {
+	if code != 0 || !strings.Contains(out, "Runova 0.2.0 is already the latest version") || len(r.calls) != 0 {
 		t.Fatalf("code %d, out %q, calls %v", code, out, r.calls)
 	}
 }
@@ -182,7 +182,7 @@ func TestUpdateRefusesOlderVersion(t *testing.T) {
 func TestUpdateRefusesInvalidVersion(t *testing.T) {
 	r := newUpdateRig(t, "0.3.0")
 	for _, v := range []string{"latest", "1.2", "../x"} {
-		if code, _, errOut := r.run("0.2.0", "--version", v, "--yes"); code != 1 || !strings.Contains(errOut, "Versi tidak valid") {
+		if code, _, errOut := r.run("0.2.0", "--version", v, "--yes"); code != 1 || !strings.Contains(errOut, "Invalid version") {
 			t.Errorf("%s: code %d, err %q", v, code, errOut)
 		}
 	}
@@ -206,7 +206,7 @@ func TestUpdateConfirmation(t *testing.T) {
 	}
 
 	r.tty, r.input = true, "n\n"
-	if code, out, _ := r.run("0.2.0"); code != 1 || !strings.Contains(out, "Lanjutkan? [y/N]") || len(r.calls) != 0 {
+	if code, out, _ := r.run("0.2.0"); code != 1 || !strings.Contains(out, "Continue? [y/N]") || len(r.calls) != 0 {
 		t.Fatalf("answer n: code %d, out %q, calls %v", code, out, r.calls)
 	}
 	r.input = "\n"
@@ -224,7 +224,7 @@ func TestUpdateRefusesBadChecksum(t *testing.T) {
 	r := newUpdateRig(t, "0.3.0")
 	r.sums = func(string) string { return strings.Repeat("a", 64) + "  get.sh\n" }
 	code, _, errOut := r.run("0.2.0", "--yes")
-	if code != 1 || !strings.Contains(errOut, "Checksum get.sh tidak cocok") || len(r.calls) != 0 {
+	if code != 1 || !strings.Contains(errOut, "get.sh checksum does not match") || len(r.calls) != 0 {
 		t.Fatalf("code %d, err %q, calls %v", code, errOut, r.calls)
 	}
 }
@@ -233,7 +233,7 @@ func TestUpdateRefusesSumsWithoutGetSh(t *testing.T) {
 	r := newUpdateRig(t, "0.3.0")
 	r.sums = func(string) string { return strings.Repeat("a", 64) + "  runova-0.3.0-linux-amd64.tar.gz\n" }
 	code, _, errOut := r.run("0.2.0", "--yes")
-	if code != 1 || !strings.Contains(errOut, "tidak memuat get.sh") || len(r.calls) != 0 {
+	if code != 1 || !strings.Contains(errOut, "does not list get.sh") || len(r.calls) != 0 {
 		t.Fatalf("code %d, err %q, calls %v", code, errOut, r.calls)
 	}
 }
@@ -242,7 +242,7 @@ func TestUpdateMissingGetSh(t *testing.T) {
 	r := newUpdateRig(t, "0.3.0")
 	r.getSh = ""
 	code, _, errOut := r.run("0.2.0", "--yes")
-	if code != 1 || !strings.Contains(errOut, "Gagal mengunduh get.sh") || len(r.calls) != 0 {
+	if code != 1 || !strings.Contains(errOut, "could not download get.sh") || len(r.calls) != 0 {
 		t.Fatalf("code %d, err %q, calls %v", code, errOut, r.calls)
 	}
 }
@@ -255,7 +255,7 @@ func (e exitError) ExitCode() int { return int(e) }
 func TestUpdatePassesInstallerFailureOn(t *testing.T) {
 	r := newUpdateRig(t, "0.3.0")
 	r.execErr = exitError(3)
-	if code, _, errOut := r.run("0.2.0", "--yes"); code != 3 || !strings.Contains(errOut, "Pembaruan gagal") {
+	if code, _, errOut := r.run("0.2.0", "--yes"); code != 3 || !strings.Contains(errOut, "Update failed") {
 		t.Fatalf("code %d, err %q", code, errOut)
 	}
 	r.execErr = errors.New("bash: not found")
@@ -267,7 +267,7 @@ func TestUpdatePassesInstallerFailureOn(t *testing.T) {
 func TestUpdateUsage(t *testing.T) {
 	r := newUpdateRig(t, "0.3.0")
 	for _, args := range [][]string{{"extra"}, {"--nope"}, {"--check", "--version", "0.3.0"}} {
-		if code, _, errOut := r.run("0.2.0", args...); code != 2 || !strings.Contains(errOut, "Penggunaan:") {
+		if code, _, errOut := r.run("0.2.0", args...); code != 2 || !strings.Contains(errOut, "Usage:") {
 			t.Errorf("%v: code %d, err %q", args, code, errOut)
 		}
 	}

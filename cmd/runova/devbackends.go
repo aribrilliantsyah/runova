@@ -31,7 +31,7 @@ import (
 var productionData = "/var/lib/runova"
 
 // errFakeOnProduction is returned when RUNOVA_FAKE_BACKENDS=1 meets the production data directory.
-var errFakeOnProduction = errors.New("RUNOVA_FAKE_BACKENDS=1 ditolak untuk RUNOVA_DATA=" + productionData)
+var errFakeOnProduction = errors.New("RUNOVA_FAKE_BACKENDS=1 refused for RUNOVA_DATA=" + productionData)
 
 // onProductionData reports whether dir is the production data directory. It compares the
 // directories themselves (os.SameFile), so a relative path, a symlink or a bind of the
@@ -57,7 +57,7 @@ func checkFakeBackends(cfg config.Config) error {
 }
 
 // errDevOnProduction is returned when RUNOVA_DEV_CHMOD=1 meets the production data directory.
-var errDevOnProduction = errors.New("RUNOVA_DEV_CHMOD=1 ditolak untuk RUNOVA_DATA=" + productionData)
+var errDevOnProduction = errors.New("RUNOVA_DEV_CHMOD=1 refused for RUNOVA_DATA=" + productionData)
 
 // checkDevMode refuses RUNOVA_DEV_CHMOD on the production data directory.
 func checkDevMode(cfg config.Config) error {

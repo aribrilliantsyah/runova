@@ -24,8 +24,10 @@ const (
 	rollbackDirName = "rollback"
 )
 
+// highestSchemaLine matches the last line of `runova db version`. Binaries up to
+// v0.3.0, which rollback/ may hold, print it in Indonesian.
 var (
-	highestSchemaLine = regexp.MustCompile(`(?m)^Skema tertinggi binary ini: (\d+)$`)
+	highestSchemaLine = regexp.MustCompile(`(?m)^(?:Highest schema of this binary|Skema tertinggi binary ini): (\d+)$`)
 	backupSuffix      = regexp.MustCompile(`^\.bak-v(\d+)-(\d+)$`)
 )
 
@@ -101,35 +103,35 @@ func rollbackCmd(ctx context.Context, cfg config.Config, args []string, d rollba
 	}
 	yes := len(args) == 1
 	if !d.IsRoot() {
-		fmt.Fprintln(stderr, "Jalankan dengan sudo: sudo runova rollback")
+		fmt.Fprintln(stderr, "Run with sudo: sudo runova rollback")
 		return 1
 	}
 
 	dir := filepath.Join(cfg.DataDir, rollbackDirName)
 	oldBin := filepath.Join(dir, "runova")
 	if st, err := os.Stat(oldBin); err != nil || !st.Mode().IsRegular() {
-		fmt.Fprintln(stderr, "Tidak ada versi sebelumnya untuk dikembalikan")
+		fmt.Fprintln(stderr, "No previous version to roll back to")
 		return 1
 	}
-	oldVersion := "tidak diketahui"
+	oldVersion := "unknown"
 	if b, err := os.ReadFile(filepath.Join(dir, "VERSION")); err == nil && strings.TrimSpace(string(b)) != "" {
 		oldVersion = strings.TrimSpace(string(b))
 	}
 
 	var probe bytes.Buffer
 	if err := d.Exec(ctx, nil, &probe, io.Discard, oldBin, "db", "version"); err != nil {
-		fmt.Fprintf(stderr, "Binary sebelumnya (%s) tidak bisa dijalankan: %v\n", oldVersion, err)
+		fmt.Fprintf(stderr, "The previous binary (%s) cannot run: %v\n", oldVersion, err)
 		return 1
 	}
 	m := highestSchemaLine.FindSubmatch(probe.Bytes())
 	if m == nil {
-		fmt.Fprintf(stderr, "Binary sebelumnya (%s) tidak melaporkan versi skemanya; rollback dibatalkan\n", oldVersion)
+		fmt.Fprintf(stderr, "The previous binary (%s) does not report its schema version; rollback canceled\n", oldVersion)
 		return 1
 	}
 	oldSchema, _ := strconv.Atoi(string(m[1]))
 	current, _, err := store.SchemaVersion(cfg.DBPath())
 	if err != nil {
-		fmt.Fprintf(stderr, "Tidak bisa membaca versi skema database: %v\n", err)
+		fmt.Fprintf(stderr, "Could not read the database schema version: %v\n", err)
 		return 1
 	}
 
@@ -138,11 +140,11 @@ func rollbackCmd(ctx context.Context, cfg config.Config, args []string, d rollba
 	if needRestore {
 		var found bool
 		if restore, found, err = newestBackup(cfg.DBPath(), oldSchema); err != nil {
-			fmt.Fprintf(stderr, "Tidak bisa membaca folder data: %v\n", err)
+			fmt.Fprintf(stderr, "Could not read the data folder: %v\n", err)
 			return 1
 		}
 		if !found {
-			fmt.Fprintf(stderr, "Database sudah dimigrasi ke skema %d, sedangkan Runova %s hanya mengenal skema %d, dan tidak ada cadangan %s.bak-v%d-* untuk dipulihkan. Tidak ada yang diubah.\n",
+			fmt.Fprintf(stderr, "The database was migrated to schema %d, but Runova %s only knows schema %d, and there is no %s.bak-v%d-* backup to restore. Nothing was changed.\n",
 				current, oldVersion, oldSchema, filepath.Base(cfg.DBPath()), oldSchema)
 			return 1
 		}
@@ -150,11 +152,11 @@ func rollbackCmd(ctx context.Context, cfg config.Config, args []string, d rollba
 
 	fmt.Fprintf(stdout, "Rollback Runova %s -> %s\n", d.Version, oldVersion)
 	if needRestore {
-		fmt.Fprintf(stdout, "Database dipulihkan dari cadangan %s (%s).\n", filepath.Base(restore.path), restore.at.Local().Format("2006-01-02 15:04:05"))
-		fmt.Fprintln(stdout, "PERINGATAN: perubahan data panel sejak pembaruan (pengguna, aplikasi, domain, setelan) akan hilang.")
-		fmt.Fprintln(stdout, "Container aplikasi dan database PostgreSQL pengguna tidak disentuh.")
+		fmt.Fprintf(stdout, "The database will be restored from backup %s (%s).\n", filepath.Base(restore.path), restore.at.Local().Format("2006-01-02 15:04:05"))
+		fmt.Fprintln(stdout, "WARNING: panel data changed since the update (users, apps, domains, settings) will be lost.")
+		fmt.Fprintln(stdout, "App containers and users' PostgreSQL databases are not touched.")
 	} else {
-		fmt.Fprintf(stdout, "Skema database (%d) masih dikenal Runova %s; database tidak diubah.\n", current, oldVersion)
+		fmt.Fprintf(stdout, "Database schema (%d) is still known to Runova %s; the database is not changed.\n", current, oldVersion)
 	}
 	ok, err := d.Console.confirm(stdout, yes)
 	if err != nil {
@@ -162,7 +164,7 @@ func rollbackCmd(ctx context.Context, cfg config.Config, args []string, d rollba
 		return 1
 	}
 	if !ok {
-		fmt.Fprintln(stderr, "Dibatalkan")
+		fmt.Fprintln(stderr, "Canceled")
 		return 1
 	}
 
@@ -170,30 +172,30 @@ func rollbackCmd(ctx context.Context, cfg config.Config, args []string, d rollba
 		return d.Exec(ctx, nil, stdout, stderr, "systemctl", action, serviceName)
 	}
 	if err := systemctl("stop"); err != nil {
-		fmt.Fprintf(stderr, "Gagal menghentikan layanan %s; tidak ada yang diubah: %v\n", serviceName, err)
+		fmt.Fprintf(stderr, "Could not stop service %s; nothing was changed: %v\n", serviceName, err)
 		return 1
 	}
 	safety := fmt.Sprintf("%s.before-rollback-%d", cfg.DBPath(), d.Now().Unix())
 	if err := applyRollback(cfg, d, dir, oldBin, safety, restore, needRestore); err != nil {
-		fmt.Fprintf(stderr, "Rollback gagal: %v\n", err)
+		fmt.Fprintf(stderr, "Rollback failed: %v\n", err)
 		if startErr := systemctl("start"); startErr != nil {
-			fmt.Fprintf(stderr, "Layanan juga tidak bisa dihidupkan lagi: %v\n", startErr)
+			fmt.Fprintf(stderr, "The service could not be started again either: %v\n", startErr)
 		}
 		return 1
 	}
 	if err := systemctl("start"); err != nil {
-		fmt.Fprintf(stderr, "Layanan %s tidak bisa dihidupkan: %v\nLihat: journalctl -u %s -n 50\n", serviceName, err, serviceName)
+		fmt.Fprintf(stderr, "Service %s could not be started: %v\nSee: journalctl -u %s -n 50\n", serviceName, err, serviceName)
 		return 1
 	}
 	// As the service user, like the installer: root would be refused by PostgreSQL peer auth.
 	if err := d.Exec(ctx, nil, stdout, stderr, "runuser", "-u", serviceName, "--", "env",
 		"RUNOVA_DATA="+cfg.DataDir, "RUNOVA_SECRET_KEY="+cfg.SecretKeyPath, d.BinPath, "check"); err != nil {
-		fmt.Fprintf(stderr, "Rollback selesai, tetapi runova check gagal: %v\n", err)
+		fmt.Fprintf(stderr, "Rollback finished, but runova check failed: %v\n", err)
 		return 1
 	}
-	fmt.Fprintf(stdout, "Runova %s terpasang kembali.", oldVersion)
+	fmt.Fprintf(stdout, "Runova %s is back.", oldVersion)
 	if needRestore {
-		fmt.Fprintf(stdout, " Database sebelum rollback disimpan di %s", safety)
+		fmt.Fprintf(stdout, " The database from before the rollback is kept at %s", safety)
 	}
 	fmt.Fprintln(stdout)
 	return 0
@@ -206,18 +208,18 @@ func rollbackCmd(ctx context.Context, cfg config.Config, args []string, d rollba
 func applyRollback(cfg config.Config, d rollbackDeps, dir, oldBin, safety string, restore dbBackup, needRestore bool) error {
 	oldCopy, err := stageCopy(oldBin, filepath.Dir(d.BinPath), 0o755)
 	if err != nil {
-		return fmt.Errorf("menyiapkan binary sebelumnya: %w", err)
+		return fmt.Errorf("preparing the previous binary: %w", err)
 	}
 	defer os.Remove(oldCopy)
 	curCopy, err := stageCopy(d.BinPath, dir, 0o755)
 	if err != nil {
-		return fmt.Errorf("menyimpan binary sekarang: %w", err)
+		return fmt.Errorf("saving the current binary: %w", err)
 	}
 	defer os.Remove(curCopy)
 	dbPath := cfg.DBPath()
 	if needRestore {
 		if err := copyFile(dbPath, safety, 0o600, d.Chown); err != nil {
-			return fmt.Errorf("menyalin database sekarang: %w", err)
+			return fmt.Errorf("copying the current database: %w", err)
 		}
 		for _, side := range []string{"-wal", "-shm"} {
 			if err := os.Remove(dbPath + side); err != nil && !errors.Is(err, os.ErrNotExist) {
@@ -225,15 +227,15 @@ func applyRollback(cfg config.Config, d rollbackDeps, dir, oldBin, safety string
 			}
 		}
 		if err := copyFile(restore.path, dbPath, 0o600, d.Chown); err != nil {
-			return fmt.Errorf("memulihkan cadangan (database sekarang aman di %s): %w", safety, err)
+			return fmt.Errorf("restoring the backup (the current database is safe at %s): %w", safety, err)
 		}
 	}
 
 	if err := os.Rename(oldCopy, d.BinPath); err != nil {
-		return fmt.Errorf("memasang binary sebelumnya: %w", err)
+		return fmt.Errorf("installing the previous binary: %w", err)
 	}
 	if err := os.Rename(curCopy, oldBin); err != nil {
-		return fmt.Errorf("menyimpan binary sekarang untuk rollback berikutnya: %w", err)
+		return fmt.Errorf("saving the current binary for the next rollback: %w", err)
 	}
 	return writeFileAtomic(filepath.Join(dir, "VERSION"), []byte(d.Version+"\n"), 0o644)
 }

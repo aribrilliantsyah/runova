@@ -19,17 +19,17 @@ func dbCmd(cfg config.Config, args []string, stdout, stderr io.Writer) int {
 	}
 	current, latest, err := store.SchemaVersion(cfg.DBPath())
 	if err != nil {
-		fmt.Fprintf(stderr, "Tidak bisa membaca versi skema: %v\n", err)
+		fmt.Fprintf(stderr, "Could not read the schema version: %v\n", err)
 		return 1
 	}
 	switch _, statErr := os.Stat(cfg.DBPath()); {
 	case current > 0:
-		fmt.Fprintf(stdout, "Skema database: %d\n", current)
+		fmt.Fprintf(stdout, "Database schema: %d\n", current)
 	case statErr == nil:
-		fmt.Fprintln(stdout, "Skema database: 0 (belum dimigrasi; dimigrasi saat Runova dibuka)")
+		fmt.Fprintln(stdout, "Database schema: 0 (not migrated yet; migrated when Runova opens it)")
 	default:
-		fmt.Fprintln(stdout, "Skema database: 0 (belum dibuat)")
+		fmt.Fprintln(stdout, "Database schema: 0 (not created yet)")
 	}
-	fmt.Fprintf(stdout, "Skema tertinggi binary ini: %d\n", latest)
+	fmt.Fprintf(stdout, "Highest schema of this binary: %d\n", latest)
 	return 0
 }
