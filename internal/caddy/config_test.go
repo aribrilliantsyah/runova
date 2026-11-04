@@ -263,3 +263,40 @@ func TestBuildRejectsInconsistentState(t *testing.T) {
 		}
 	}
 }
+
+func TestBuildTrustedProxies(t *testing.T) {
+	state := caddy.State{
+		Sites:          []caddy.Site{{Host: "b.co", Upstream: "127.0.0.1:30001"}},
+		IPListeners:    []caddy.IPListener{{Port: 20001, Upstream: "127.0.0.1:30002"}},
+		PanelDomain:    "panel.co",
+		PanelIPPort:    8443,
+		PanelUpstream:  "127.0.0.1:7070",
+		TrustedProxies: []string{"10.0.0.0/8", "10.0.0.1"},
+	}
+	handlers := func(cfg obj) map[string]obj {
+		out := map[string]obj{}
+		for name, srv := range servers(t, cfg) {
+			for _, r := range srv.(obj)["routes"].([]any) {
+				out[name+" "+r.(obj)["@id"].(string)] = get(t, r, "handle", 0).(obj)
+			}
+		}
+		return out
+	}
+
+	with := handlers(decodeConfig(t, state))
+	if len(with) != 4 {
+		t.Fatalf("handlers = %d, want panel, site, IP listener and panel IP", len(with))
+	}
+	for id, h := range with {
+		if got := strs(t, h["trusted_proxies"]); !slices.Equal(got, []string{"10.0.0.0/8", "10.0.0.1"}) {
+			t.Errorf("%s trusted_proxies = %v", id, got)
+		}
+	}
+
+	state.TrustedProxies = nil
+	for id, h := range handlers(decodeConfig(t, state)) {
+		if _, set := h["trusted_proxies"]; set {
+			t.Errorf("%s has trusted_proxies without any trusted proxy", id)
+		}
+	}
+}

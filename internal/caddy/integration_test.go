@@ -201,3 +201,55 @@ func TestCaddyIntegration(t *testing.T) {
 		waitGet(t, url, `app xff="127.0.0.1"`)
 	})
 }
+
+func TestCaddyTrustedProxyIntegration(t *testing.T) {
+	c := startCaddy(t)
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprintf(w, "xff=%q", r.Header.Get("X-Forwarded-For"))
+	}))
+	defer upstream.Close()
+	port := freePort(t)
+	apply := func(trusted []string) {
+		t.Helper()
+		state := caddy.State{
+			AdminListen:    strings.TrimPrefix(c.admin, "http://"),
+			IPListeners:    []caddy.IPListener{{Port: port, Upstream: upstream.Listener.Addr().String()}},
+			TrustedProxies: trusted,
+		}
+		s := &caddy.Syncer{Client: caddy.NewClient(c.admin), State: func(context.Context) (caddy.State, error) { return state, nil }}
+		if err := s.Apply(context.Background()); err != nil {
+			t.Fatalf("Apply: %v", err)
+		}
+	}
+	// The test client plays the proxy: it connects from 127.0.0.1 and sends the
+	// header a proxy would have built.
+	get := func(want string) {
+		t.Helper()
+		deadline := time.Now().Add(10 * time.Second)
+		for {
+			req, _ := http.NewRequest("GET", fmt.Sprintf("http://127.0.0.1:%d/", port), nil)
+			req.Header.Set("X-Forwarded-For", "198.51.100.9")
+			res, err := http.DefaultClient.Do(req)
+			got := ""
+			if err == nil {
+				b, _ := io.ReadAll(res.Body)
+				res.Body.Close()
+				got = string(b)
+			}
+			if got == want {
+				return
+			}
+			if time.Now().After(deadline) {
+				t.Fatalf("upstream saw %q (err %v), want %q", got, err, want)
+			}
+			time.Sleep(50 * time.Millisecond)
+		}
+	}
+
+	apply(nil)
+	get(`xff="127.0.0.1"`)
+	apply([]string{"127.0.0.1"})
+	get(`xff="198.51.100.9, 127.0.0.1"`)
+	apply([]string{"10.99.0.0/16"})
+	get(`xff="127.0.0.1"`)
+}

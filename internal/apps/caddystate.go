@@ -72,6 +72,7 @@ func CaddyState(ctx context.Context, st *store.Store, panelUpstream string) (cad
 
 	state := caddy.State{
 		PanelDomain: settings.PanelDomain, PanelIPPort: settings.PanelPort, PanelUpstream: panelUpstream, PublicIP: settings.PublicIP,
+		TrustedProxies: settings.TrustedProxies,
 	}
 	upstream := map[int64]string{}
 	for _, app := range list {
