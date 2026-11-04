@@ -107,12 +107,12 @@ func New(cfg Config) http.Handler {
 	mux.HandleFunc("PUT /api/settings", admin(s.putSettings))
 	mux.HandleFunc("GET /api/server", admin(s.serverStatus))
 	mux.HandleFunc("GET /api/info", user(s.info))
-	mux.HandleFunc("GET /api/usage", admin(s.usage))
 	if s.update != nil {
 		mux.HandleFunc("GET /api/update", admin(s.updateStatus))
 	}
 
 	mux.HandleFunc("GET /api/activity", user(s.activity))
+	mux.HandleFunc("GET /api/activity/search", user(s.activitySearch))
 
 	mux.HandleFunc("POST /api/uploads", user(s.upload))
 	mux.HandleFunc("DELETE /api/uploads/{id}", user(s.deleteUpload))

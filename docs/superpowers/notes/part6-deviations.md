@@ -16,7 +16,7 @@ Nama, signature, dan konstanta di blok Interfaces rencana tidak diubah (`web.FS`
 
 8. **`GET /api/server`** (admin) seperti rencana, ditambah bentuk `{docker, caddy, postgres, host, apps}`. Probe dikirim lewat `api.Config.Health` (`Check` per layanan); layanan mati tetap 200 dengan `ok:false` dan alasannya. `docker.Client.Version` dan `pg.PgxAdmin.Version` baru. Caddy "ada" = `GET /config/` berhasil.
 9. **`GET /api/info`** (semua pengguna): batas unggah, IP publik, runtime yang diizinkan, domain panel. `GET /api/settings` hanya admin, padahal wizard butuh batas unggah dan runtime. Tidak membocorkan kuota bawaan atau jaringan PostgreSQL (diuji).
-10. **`GET /api/usage`** (admin): pemakaian aplikasi/memori/CPU/database per pengguna untuk tabel Pengguna. `internal/api/users.go` sengaja tidak disentuh (sesi paralel).
+10. **`GET /api/usage`** (admin): pemakaian aplikasi/memori/CPU/database per pengguna untuk tabel Pengguna. `internal/api/users.go` sengaja tidak disentuh (sesi paralel). Kemudian digabung ke `GET /api/users` dan dihapus; lihat `list-pages.md`.
 11. **`GET /api/apps` mendapat `summary`** (peta ID aplikasi → `{domains, version, deployed_at}`) supaya kartu daftar menampilkan domain dan waktu deploy tanpa N+1 permintaan. Hanya aplikasi dalam daftar yang masuk (`TestListAppsSummary`).
 12. **`RUNOVA_FAKE_BACKENDS=1`** (`config.Config.FakeBackends`, `cmd/runova/devbackends.go`): engine Docker `dockertest.Fake`, `pgfake`, Caddy loader dalam memori, `pg_dump`/`pg_restore` berupa skrip pengganti, health probe sukses, domain berawalan `pending.` tidak pernah mendapat sertifikat. Ditolak (exit 1, sebelum kunci dibaca) bila `RUNOVA_DATA` = `/var/lib/runova`.
 
@@ -28,7 +28,7 @@ Nama, signature, dan konstanta di blok Interfaces rencana tidak diubah (`web.FS`
 16. **Banner "Deploy ulang untuk menerapkan"** diingat di `sessionStorage` per aplikasi dan per deployment aktif; hilang begitu deployment lain aktif. Server hanya mengembalikan `redeploy_required` pada respons PUT/PATCH, tidak menyimpannya.
 17. **Rahasia dan "Lihat"**: nilai rahasia tidak pernah ada di halaman sampai "Lihat" (satu panggilan `reveal` per variabel, tercatat server). "Tampilkan nilai" memanggil `reveal` untuk tiap rahasia.
 18. **Log hanya tersambung bila ada deployment aktif.** Tanpa container server menjawab 409, jadi tab Log dan kartu Log terbaru menunggu dan tidak membuka WebSocket; deployment gagal menampilkan `failure_log` terakhirnya.
-19. **Paginasi aktivitas memakai `before=<at entri terakhir>`** (kontrak store: `at < before`). Entri yang berbagi milidetik yang sama persis di batas halaman bisa terlewat; tidak ada kursor ID di API.
+19. **(Diganti oleh `GET /api/activity/search` dengan offset, lihat `list-pages.md`.) Paginasi aktivitas memakai `before=<at entri terakhir>`** (kontrak store: `at < before`). Entri yang berbagi milidetik yang sama persis di batas halaman bisa terlewat; tidak ada kursor ID di API.
 20. **`Ctrl K` membuka pencarian aplikasi** (dialog dengan daftar), bukan palet perintah.
 21. **Tab detail memakai segmen URL** `#/apps/<id>[/env|domains|deployments|logs|monitor|advanced]`; berpindah tab tidak memuat ulang halaman aplikasi (`router.update`).
 

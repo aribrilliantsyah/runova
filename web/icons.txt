@@ -7,7 +7,6 @@ ban
 bell
 binary
 box
-boxes
 check
 chevron-down
 chevron-right
@@ -67,3 +66,12 @@ wrap-text
 chevron-up
 arrow-down-to-line
 circle-dashed
+chevron-left
+funnel
+clock
+circle-plus
+circle-minus
+braces
+radio
+arrow-down-up
+log-in

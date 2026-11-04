@@ -253,8 +253,8 @@ ALTER TABLE apps ADD COLUMN database_id INTEGER NULL REFERENCES databases ON DEL
 			if err := runMigrate(t, db, embeddedMigrations(), path); err != nil {
 				t.Fatal(err)
 			}
-			if v := version(t, db); v != 3 {
-				t.Fatalf("user_version = %d, want 3 (adopted as 1, then 0002 and 0003 applied)", v)
+			if v := version(t, db); v != 4 {
+				t.Fatalf("user_version = %d, want 4 (adopted as 1, then 0002, 0003 and 0004 applied)", v)
 			}
 			if n := count(t, db, `SELECT count(*) FROM users WHERE username = 'budi'`); n != 1 {
 				t.Fatal("user lost")

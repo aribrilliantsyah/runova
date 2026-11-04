@@ -24,6 +24,9 @@ type Config struct {
 	// DevChmod opens app data folders with chmod 0777 instead of chown, for a development process
 	// that is not root (local end-to-end tests only; refused for the production data directory).
 	DevChmod bool
+	// DevSeed fills a fresh development database with sample users, apps and activity
+	// (RUNOVA_DEV_SEED=1; only together with FakeBackends, never on production data).
+	DevSeed bool
 	// GitHub and Repo say where releases are published (RUNOVA_GITHUB, RUNOVA_REPO);
 	// tests point GitHub at a local server.
 	GitHub string
@@ -48,6 +51,7 @@ func Load(getenv func(string) string) Config {
 		PGHBAPath:     get("RUNOVA_PG_HBA", "/etc/postgresql/18/main/pg_hba.d/runova.conf"),
 		FakeBackends:  getenv("RUNOVA_FAKE_BACKENDS") == "1",
 		DevChmod:      getenv("RUNOVA_DEV_CHMOD") == "1",
+		DevSeed:       getenv("RUNOVA_DEV_SEED") == "1",
 		GitHub:        get("RUNOVA_GITHUB", "https://github.com"),
 		Repo:          get("RUNOVA_REPO", "aribrilliantsyah/runova"),
 	}

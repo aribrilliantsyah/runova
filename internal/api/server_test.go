@@ -6,7 +6,6 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
-	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -139,46 +138,5 @@ func TestInfoForEveryUser(t *testing.T) {
 	}
 	if len(r.body) == 0 || strings.Contains(string(r.body), "pg_allowed_nets") || strings.Contains(string(r.body), "default_quota") {
 		t.Errorf("info leaks admin settings: %s", r.body)
-	}
-}
-
-func TestUsageByUser(t *testing.T) {
-	e := newAppEnv(t, 0)
-	e.addUser("budi", "budi-password-1", store.RoleUser)
-	e.addUser("sari", "sari-password-1", store.RoleUser)
-	budi := e.login("budi", "budi-password-1")
-	id, _ := budi.createApp("billing", obj{"memory_mb": 256, "cpu_milli": 250})
-	budi.waitStatus(id, "running")
-	budi.createApp("worker", obj{"memory_mb": 128, "cpu_milli": 100})
-
-	admin := e.login("admin", adminPassword)
-	r := admin.do("GET", "/api/usage", nil)
-	if r.status != http.StatusOK {
-		t.Fatalf("status %d %s", r.status, r.body)
-	}
-	var got map[string]struct {
-		Apps      int `json:"apps"`
-		MemoryMB  int `json:"memory_mb"`
-		CPUMilli  int `json:"cpu_milli"`
-		Databases int `json:"databases"`
-	}
-	r.into(t, &got)
-	users, _ := e.store.Users(context.Background())
-	idOf := map[string]string{}
-	for _, u := range users {
-		idOf[u.Username] = strconv.FormatInt(u.ID, 10)
-	}
-	b := got[idOf["budi"]]
-	if b.Apps != 2 || b.MemoryMB != 384 || b.CPUMilli != 350 {
-		t.Errorf("budi usage = %+v, want 2 apps, 384 MB, 350 millicores", b)
-	}
-	if s := got[idOf["sari"]]; s.Apps != 0 || s.MemoryMB != 0 {
-		t.Errorf("sari usage = %+v, want zero", s)
-	}
-	if _, ok := got[idOf["sari"]]; !ok {
-		t.Errorf("a user without apps must still have an entry")
-	}
-	if r := budi.do("GET", "/api/usage", nil); r.status != http.StatusForbidden {
-		t.Errorf("non-admin status %d, want 403", r.status)
 	}
 }

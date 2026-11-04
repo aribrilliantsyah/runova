@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/mail"
+	"strconv"
 	"strings"
 	"unicode/utf8"
 
@@ -28,16 +29,34 @@ func validateProfile(displayName, email string) error {
 
 func validRole(r store.Role) bool { return r == store.RoleAdmin || r == store.RoleUser }
 
+// listUsers serves one page of the Users table with usage merged in:
+// q (username, name, email), role, sort, order, limit, offset.
 func (s *server) listUsers(w http.ResponseWriter, r *http.Request) {
-	users, err := s.store.Users(r.Context())
+	q := r.URL.Query()
+	f := store.UserListFilter{Q: q.Get("q"), Role: store.Role(q.Get("role")), Sort: q.Get("sort"), Order: q.Get("order")}
+	for _, p := range []struct {
+		name string
+		dst  *int
+	}{{"limit", &f.Limit}, {"offset", &f.Offset}} {
+		if v := q.Get(p.name); v != "" {
+			n, err := strconv.Atoi(v)
+			if err != nil || n < 0 {
+				writeError(w, http.StatusBadRequest, "Parameter "+p.name+" tidak valid")
+				return
+			}
+			*p.dst = n
+		}
+	}
+	page, err := s.store.UserList(r.Context(), f)
+	if errors.Is(err, store.ErrBadFilter) {
+		writeError(w, http.StatusBadRequest, "Filter tidak valid: sort, order, atau role tidak dikenal")
+		return
+	}
 	if err != nil {
 		serverError(w, r, err)
 		return
 	}
-	if users == nil {
-		users = []store.User{}
-	}
-	writeJSON(w, http.StatusOK, users)
+	writeJSON(w, http.StatusOK, page)
 }
 
 func (s *server) createUser(w http.ResponseWriter, r *http.Request) {

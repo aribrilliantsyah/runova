@@ -60,8 +60,8 @@ test("h select value applies after options", () => {
 });
 
 test("icon points at the sprite", () => {
-  const svg = icon("boxes");
-  eq(svg.querySelector("use").getAttribute("href"), "/assets/vendor/icons.svg#boxes");
+  const svg = icon("package");
+  eq(svg.querySelector("use").getAttribute("href"), "/assets/vendor/icons.svg#package");
   eq(svg.getAttribute("aria-hidden"), "true");
 });
 

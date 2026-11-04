@@ -252,7 +252,7 @@ export function buildShell({ onLogout }) {
       }),
       api.get("/api/databases").then((r) => setCount("db", `${r.used}/${r.limit}`)),
     ];
-    if (admin) jobs.push(api.get("/api/users").then((r) => setCount("users", String(r.length))));
+    if (admin) jobs.push(api.get("/api/users?limit=1").then((r) => setCount("users", String(r.total))));
     await Promise.allSettled(jobs);
   }
 

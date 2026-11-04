@@ -69,7 +69,7 @@ try {
   await admin.waitForSelector(".toast:has-text('Bertumpuk')");
 
   step("quota 1 for budi; wizard: no 'Domain sendiri', label rules, availability, preview");
-  const budiRow = (await api("GET", "/api/users", undefined, adminCookie)).body.find((u) => u.username === "budi");
+  const budiRow = (await api("GET", "/api/users?q=budi", undefined, adminCookie)).body.items.find((u) => u.username === "budi");
   await api("PATCH", `/api/users/${budiRow.id}`, { quota: { ...budiRow.quota, apps: 1 } }, adminCookie);
   await budi.goto(`${srv.url}/#/apps`);
   await budi.goto(`${srv.url}/#/deploy`);

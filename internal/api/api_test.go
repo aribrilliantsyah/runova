@@ -345,9 +345,9 @@ func TestCreateUserGetsDefaultQuota(t *testing.T) {
 	if got.status != 200 {
 		t.Fatalf("new user cannot log in: %d", got.status)
 	}
-	var list []store.User
+	var list userPage
 	c.do("GET", "/api/users", nil).into(t, &list)
-	if len(list) != 2 || list[0].Username != "admin" || list[1].Username != "budi" {
+	if list.Total != 2 || list.Items[0].Username != "admin" || list.Items[1].Username != "budi" {
 		t.Fatalf("users = %+v", list)
 	}
 }
