@@ -33,6 +33,11 @@ var scanIgnored = map[string]bool{
 
 var scanIgnoredPrefixes = []string{"GO", "CGO_", "RUST_", "LC_", "XDG_", "GLIBC_"}
 
+// scanIgnoredParts drops names holding protocol constants every TLS-capable
+// binary carries (crypto/tls key log labels such as
+// CLIENT_HANDSHAKE_TRAFFIC_SECRET), often run together with their neighbours.
+var scanIgnoredParts = []string{"TRAFFIC_SECRET", "EXPORTER_SECRET", "CLIENT_RANDOM"}
+
 // scanLikely marks words typical of configuration variables. When a binary
 // has more candidates than scanMaxEnv (any net/http program carries hundreds
 // of protocol constants), only names containing one of these are kept.
@@ -51,6 +56,11 @@ func scanCandidate(name string) bool {
 	}
 	for _, p := range scanIgnoredPrefixes {
 		if strings.HasPrefix(name, p) {
+			return false
+		}
+	}
+	for _, p := range scanIgnoredParts {
+		if strings.Contains(name, p) {
 			return false
 		}
 	}

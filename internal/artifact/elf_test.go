@@ -203,7 +203,8 @@ func TestELFTruncatedIsProblem(t *testing.T) {
 func TestScanEnv(t *testing.T) {
 	path := buildELF(t, elf.EM_X86_64, elf.ELFCLASS64, "",
 		"os.Getenv", "DATABASE_URL", "JWT_SECRET", "GOMAXPROCS", "LC_ALL", "lowercase_x", "PORT",
-		"HTTP_PROXY", "RUST_BACKTRACE", "CGO_ENABLED", "XDG_DATA", "AB_", "X_Y", "GODEBUG_X", "GO_THING")
+		"HTTP_PROXY", "RUST_BACKTRACE", "CGO_ENABLED", "XDG_DATA", "AB_", "X_Y", "GODEBUG_X", "GO_THING",
+		"CLIENT_HANDSHAKE_TRAFFIC_SECRETSERVER_HANDSHAKE_TRAFFIC_", "CLIENT_TRAFFIC_SECRET_0", "EXPORTER_SECRET", "CLIENT_RANDOM")
 	rep, err := InspectBinary(path)
 	if err != nil {
 		t.Fatal(err)
