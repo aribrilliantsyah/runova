@@ -139,7 +139,7 @@ Deteksi:
 
 ## 9. Aktivitas
 
-Dicatat dengan pelaku, target, dan waktu: login berhasil/gagal, pengguna dibuat/diubah/dihapus, kuota diubah, deploy, rollback, restart/stop, domain diubah, database dibuat/dihapus/di-restore, sesi terminal dibuka. Pengguna melihat aktivitasnya sendiri; admin melihat semua.
+Dicatat dengan pelaku, target, dan waktu: login berhasil/gagal, pengguna dibuat/diubah/dihapus, kuota diubah, deploy, rollback, restart/stop, domain diubah, database dibuat/dihapus/di-restore, sesi terminal dibuka. Pengguna melihat aktivitasnya sendiri; admin melihat semua. Halaman Aktivitas mencari di server (kata, frasa, pengecualian, field `aksi:` `pelaku:` `target:` `ip:` `hasil:`), dengan rentang waktu, histogram, facet, dan paging; batas pengguna biasa berlaku untuk semua bagian itu (`GET /api/activity/search`, lihat `docs/superpowers/notes/list-pages.md`).
 
 ## 10. Installer
 
