@@ -200,7 +200,7 @@ Admin membuka halaman **Server → Domain hosting** dan mendaftarkan domain wild
 - Jumlah subdomain pengguna dibatasi kuota aplikasinya; batas per aplikasi tetap 5 alamat.
 - Nama 3–40 karakter (huruf kecil, angka, tanda hubung); `www`, `api`, `mail`, `admin`, `runova`, label panel, dan nama cadangan tambahan dari admin tidak bisa dipakai. Siapa cepat dia dapat.
 - Mematikan domain hosting mencabut semua subdomainnya dari Caddy dan memberi tahu pemiliknya; domain hanya bisa dihapus bila tidak ada subdomain yang memakainya.
-- Satu sertifikat Let's Encrypt diterbitkan per subdomain. Let's Encrypt membatasi 50 sertifikat baru per minggu per domain utama; kartu Domain hosting menampilkan perkiraan dan memperingatkan mendekati batas.
+- Satu sertifikat Let's Encrypt diterbitkan per subdomain. Let's Encrypt membatasi 50 sertifikat baru per minggu per domain utama; kartu Domain hosting menampilkan perkiraan dan memperingatkan mendekati batas. Di belakang nginx (proxy tepercaya diisi) Caddy tidak mengambil sertifikat Let's Encrypt dan perkiraan tidak ditampilkan.
 - Domain milik sendiri (mis. `budi.com`) hanya bisa ditambahkan admin; domain seperti itu yang sudah dimiliki pengguna biasa tetap berjalan.
 - Proxy Cloudflare (awan oranye) dan Tunnel tidak didukung untuk subdomain tingkat dua.
 
@@ -216,7 +216,9 @@ Saat domain diisi, Runova menampilkan panduan yang sudah terisi subdomain, domai
 
 Untuk DNS langsung dan proxy, sertifikat diterbitkan Caddy di server. Untuk Tunnel, HTTPS diurus Cloudflare.
 
-Server Runova yang hanya punya IP lokal di belakang server lain ber-nginx dibahas di [nginx di depan Runova](docs/nginx-front-proxy.id.md), termasuk sertifikat wildcard untuk domain hosting.
+Server Runova yang hanya punya IP lokal di belakang server lain ber-nginx dibahas di [nginx di depan Runova](docs/nginx-front-proxy.id.md), termasuk sertifikat wildcard untuk domain hosting. Bila proxy tepercaya diisi, Caddy menerbitkan semua sertifikat dari CA internalnya (nginx memegang yang publik), sehingga subdomain baru langsung berfungsi dan nginx boleh mengalihkan port 80 sendiri.
+
+**0.3.4 (belum rilis):** di belakang nginx subdomain hosting baru gagal dengan `remote error: tls: internal error` dan nginx menjawab 502, karena Caddy terus meminta sertifikat Let's Encrypt yang tidak bisa didapat di belakang nginx. Mode front proxy memperbaikinya; status domain menyebut penyebabnya (Caddy atau nginx) dan semua domain dicek ulang saat proxy tepercaya berubah. Setelah update: pastikan proxy tepercaya terisi; berkas nginx tidak perlu diubah (meneruskan port 80 tetap berfungsi, `return 301` kini juga berfungsi).
 
 ## Tampilan
 
@@ -320,7 +322,7 @@ Alur produk (login, pengguna, database, deploy binary dan JAR, deploy tanpa jeda
 test/e2e/stack.sh up && test/e2e/run.sh && test/e2e/stack.sh down
 ```
 
-Dengan stack menyala, `test/e2e/nginx.sh` menaruh nginx 1.18 di depannya dengan `docs/examples/nginx-runova.conf` (berkas yang dimuat panduan) dan memeriksa akses panel tanpa loop redirect, batas login per IP klien asli (dua container klien, `X-Forwarded-For` palsu), WebSocket, subdomain, dan IP di log aktivitas.
+Dengan stack menyala, `test/e2e/nginx.sh` menaruh nginx 1.18 di depannya dengan `docs/examples/nginx-runova.conf` (berkas yang dimuat panduan) dan memeriksa akses panel tanpa loop redirect, batas login per IP klien asli (dua container klien, `X-Forwarded-For` palsu), WebSocket, subdomain hosting baru tanpa sertifikat publik apa pun (CA internal, status domain aktif), IP di log aktivitas, serta port 80 diteruskan ke Runova dengan nginx memverifikasi CA internal Caddy.
 
 `stack.sh up` memakai port panel 8443, Caddy admin 2019, PostgreSQL 55432, dan port akses IP 20000+ di mesin ini, jadi hentikan layanan lain yang memakainya. `RUNOVA_DEV_CHMOD=1` membuat folder data aplikasi 0777 sebagai pengganti `chown` (proses dev bukan root); ditolak untuk `RUNOVA_DATA=/var/lib/runova`. Tanpa `down`, sisa container `runova-*` dan folder `test/e2e/.cache/state` tertinggal; `run.sh` butuh stack yang baru dinaikkan. Pertama kali, `run.sh` membangun JAR Spring Boot contoh di `maven:3-eclipse-temurin-21` dan menyimpannya di `test/e2e/.cache/`.
 

@@ -200,7 +200,7 @@ Admins open the **Server → Domain hosting** page and register a wildcard domai
 - Subdomains per user are bounded by their application quota; the limit per application remains 5 addresses.
 - Names are 3–40 characters (lowercase letters, numbers, hyphens); `www`, `api`, `mail`, `admin`, `runova`, panel labels, and additional admin-reserved names cannot be used. First come, first served.
 - Disabling domain hosting revokes all its subdomains from Caddy and notifies their owners; a domain can only be deleted when no subdomains are using it.
-- One Let's Encrypt certificate is issued per subdomain. Let's Encrypt limits new certificates to 50 per week per registered domain; the Domain hosting card displays an estimate and warns when approaching the limit.
+- One Let's Encrypt certificate is issued per subdomain. Let's Encrypt limits new certificates to 50 per week per registered domain; the Domain hosting card displays an estimate and warns when approaching the limit. Behind nginx (trusted proxy set) Caddy takes no Let's Encrypt certificates and the estimate is not shown.
 - Custom domains (e.g. `budi.com`) can only be added by admins; existing custom domains owned by regular users continue running.
 - Cloudflare Proxy (orange cloud) and Cloudflare Tunnel are not supported for second-level subdomains.
 
@@ -216,7 +216,9 @@ When a domain is entered, Runova displays a setup guide prefilled with the subdo
 
 For Direct DNS and Proxy, certificates are issued by Caddy on the server. For Tunnel, HTTPS is handled by Cloudflare.
 
-A Runova server with only a local IP behind another server running nginx is covered by [nginx in front of Runova](docs/nginx-front-proxy.md), including wildcard certificates for the domain hosting.
+A Runova server with only a local IP behind another server running nginx is covered by [nginx in front of Runova](docs/nginx-front-proxy.md), including wildcard certificates for the domain hosting. With a trusted proxy set, Caddy issues every certificate from its internal CA (nginx holds the public ones), so new subdomains work at once and nginx may redirect port 80 itself.
+
+**0.3.4 (unreleased):** behind nginx a new hosting subdomain failed with `remote error: tls: internal error` and nginx answered 502, because Caddy kept asking Let's Encrypt for a certificate it could not get behind nginx. Front-proxy mode fixes it; the domain status names the cause (Caddy or nginx) and every domain is checked again when the trusted proxies change. After updating: make sure the trusted proxy is set; the nginx file needs no change (forwarding port 80 keeps working, `return 301` now works too).
 
 ## Interface
 
@@ -320,7 +322,7 @@ Product flows (login, users, databases, deploying binaries and JARs, zero-downti
 test/e2e/stack.sh up && test/e2e/run.sh && test/e2e/stack.sh down
 ```
 
-With the stack up, `test/e2e/nginx.sh` puts nginx 1.18 in front of it with `docs/examples/nginx-runova.conf` (the file the guide embeds) and checks panel access without a redirect loop, the login limit per real client IP (two client containers, forged `X-Forwarded-For`), WebSocket, subdomains, and the IP in the activity log.
+With the stack up, `test/e2e/nginx.sh` puts nginx 1.18 in front of it with `docs/examples/nginx-runova.conf` (the file the guide embeds) and checks panel access without a redirect loop, the login limit per real client IP (two client containers, forged `X-Forwarded-For`), WebSocket, a new hosting subdomain without any public certificate (internal CA, domain status active), the IP in the activity log, and port 80 forwarded to Runova with nginx verifying Caddy's internal CA.
 
 `stack.sh up` uses panel port 8443, Caddy admin 2019, PostgreSQL 55432, and IP access ports 20000+ on this host, so stop other services using those ports. `RUNOVA_DEV_CHMOD=1` creates application data directories with 0777 permissions instead of `chown` (dev process is not root); rejected for `RUNOVA_DATA=/var/lib/runova`. Without `down`, leftover `runova-*` containers and `test/e2e/.cache/state` directory remain; `run.sh` requires a freshly started stack. On first run, `run.sh` builds the sample Spring Boot JAR in `maven:3-eclipse-temurin-21` and caches it in `test/e2e/.cache/`.
 

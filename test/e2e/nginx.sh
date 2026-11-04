@@ -38,6 +38,7 @@ CONF="$REPO/docs/examples/nginx-runova.conf"
 CLIENT_PASSWORD_WRONG="salah-salah-salah"
 
 cleanup() {
+	[[ ${KEEP:-} == 1 ]] && return
 	docker rm -f "$NGINX" "$CLIENT_A" "$CLIENT_B" >/dev/null 2>&1 || true
 	docker network rm "$NET" >/dev/null 2>&1 || true
 	rm -rf "$WORK"
@@ -78,12 +79,13 @@ make_cert() {
 }
 make_cert "$PANEL_NAME" "DNS:$PANEL_NAME"
 make_cert "$HOSTING_NAME" "DNS:$HOSTING_NAME,DNS:*.$HOSTING_NAME"
-sed -e "s/192\.168\.1\.10/$GATEWAY/g" -e "s/runova\.prodak\.id/$PANEL_NAME/g" -e "s/porto\.devkriyanesia\.my\.id/$HOSTING_NAME/g" "$CONF" >"$WORK/runova.conf"
+mkdir -p "$WORK/conf"
+sed -e "s/192\.168\.1\.10/$GATEWAY/g" -e "s/runova\.prodak\.id/$PANEL_NAME/g" -e "s/porto\.devkriyanesia\.my\.id/$HOSTING_NAME/g" "$CONF" >"$WORK/conf/runova.conf"
 chmod -R a+rX "$WORK"
 
 docker network create --subnet "$SUBNET" --gateway "$GATEWAY" "$NET" >/dev/null
 docker run -d --name "$NGINX" --network "$NET" --ip "$NGINX_IP" \
-	-v "$WORK/runova.conf:/etc/nginx/conf.d/runova.conf:ro" -v "$WORK/certs:/etc/letsencrypt/live:ro" \
+	-v "$WORK/conf:/etc/nginx/conf.d:ro" -v "$WORK/certs:/etc/letsencrypt/live:ro" \
 	"$IMAGE" nginx -g 'daemon off;' >/dev/null
 docker run -d --name "$CLIENT_A" --network "$NET" --ip "$CLIENT_A_IP" "$IMAGE" sleep infinity >/dev/null
 docker run -d --name "$CLIENT_B" --network "$NET" --ip "$CLIENT_B_IP" "$IMAGE" sleep infinity >/dev/null
@@ -147,11 +149,12 @@ result=$(client "$CLIENT_A" -L --max-redirs 5 -o /dev/null -w '%{http_code} %{nu
 pass "panel 200 tanpa pengalihan"
 
 scenario "4 http to https once"
+# nginx redirects port 80 itself (return 301); Runova does not need it.
 first=$(client "$CLIENT_A" -o /dev/null -w '%{http_code} %{redirect_url}' "http://$PANEL_NAME/")
-[[ $first == "308 https://$PANEL_NAME/" ]] || fail "HTTP pertama: '$first'"
+[[ $first == "301 https://$PANEL_NAME/" ]] || fail "HTTP pertama: '$first'"
 result=$(client "$CLIENT_A" -L --max-redirs 5 -o /dev/null -w '%{http_code} %{num_redirects}' "http://$PANEL_NAME/")
 [[ $result == "200 1" ]] || fail "HTTP lalu HTTPS: '$result' (diharapkan '200 1': satu pengalihan)"
-pass "http:// dialihkan satu kali ke https:// lalu 200"
+pass "http:// dialihkan satu kali ke https:// (nginx 301) lalu 200"
 
 # ---------------------------------------------------------------------------
 scenario "5 login limit per real client"
@@ -214,5 +217,51 @@ via_nginx=$(jq -r --arg ip "$NGINX_IP" '[.[] | select(.ip == $ip)] | length' <<<
 [[ $login_b -ge 1 ]] || fail "login klien B tidak tercatat dengan IP-nya: $BODY"
 [[ $via_nginx == 0 ]] || fail "$via_nginx entri aktivitas memakai IP nginx"
 pass "5 login_failed dengan IP klien A, login klien B dengan IP-nya, tidak ada IP nginx"
+
+# ---------------------------------------------------------------------------
+scenario "10 port 80 forwarded to Runova, nginx verifying Caddy's internal CA"
+# The older guide forwarded port 80 to Runova; servers that keep it must still
+# work. The 443 blocks also verify Caddy with its root (the optional hardening
+# in the guide), and a subdomain added now must be served at once.
+curl -sf http://127.0.0.1:2019/pki/ca/local | jq -r .root_certificate >"$WORK/conf/caddy-root.pem" || fail "CA internal Caddy tidak terbaca"
+awk -v ip="$GATEWAY" '
+	/^# Port 80 redirects/ { skip = 1 }
+	skip && /^}$/ {
+		skip = 0
+		print "server {\n    listen 80;\n    server_name _;\n\n    location / {\n        proxy_pass http://" ip ";\n        proxy_set_header Host $host;\n        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;\n    }\n}"
+		next
+	}
+	skip { next }
+	/proxy_ssl_name \$host;/ {
+		print
+		print "        proxy_ssl_verify on;\n        proxy_ssl_verify_depth 2;\n        proxy_ssl_session_reuse off;\n        proxy_ssl_trusted_certificate /etc/nginx/conf.d/caddy-root.pem;"
+		next
+	}
+	{ print }
+' "$WORK/conf/runova.conf" >"$WORK/verify.conf"
+[[ $(grep -c 'proxy_ssl_verify on' "$WORK/verify.conf") == 2 ]] || fail "konfigurasi verifikasi tidak terbentuk"
+grep -q 'return 301' "$WORK/verify.conf" && fail "blok port 80 tidak terganti"
+chmod a+r "$WORK/verify.conf" "$WORK/conf/caddy-root.pem"
+cp "$WORK/verify.conf" "$WORK/conf/runova.conf"
+docker exec "$NGINX" sh -c 'nginx -t 2>&1 && nginx -s reload' >/dev/null || fail "nginx dengan verifikasi gagal dimuat: $(docker exec "$NGINX" nginx -t 2>&1)"
+sleep 1
+req "$ADMIN_JAR" POST "/api/apps/$APP_ID/domains" "$(jq -nc --argjson h "$HOSTING_ID" '{hosting_domain_id: $h, label: "baru"}')"
+expect 201
+NEW_ID=$(jq -r .id <<<"$BODY")
+NEW_NAME=baru.$HOSTING_NAME
+new=""
+for ((i = 0; i < 30; i++)); do
+	new=$(client "$CLIENT_A" --resolve "$NEW_NAME:443:$NGINX_IP" "https://$NEW_NAME/" 2>/dev/null) && [[ $new == "hello nginx" ]] && break
+	sleep 1
+done
+[[ $new == "hello nginx" ]] || fail "https://$NEW_NAME/ dengan proxy_ssl_verify on = '$new': $(docker exec "$NGINX" tail -n 3 /var/log/nginx/error.log)"
+sub=$(client "$CLIENT_A" "https://$SUB_NAME/") || true
+[[ $sub == "hello nginx" ]] || fail "https://$SUB_NAME/ dengan proxy_ssl_verify on = '$sub'"
+first=$(client "$CLIENT_A" --resolve "$NEW_NAME:80:$NGINX_IP" -o /dev/null -w '%{http_code} %{redirect_url}' "http://$NEW_NAME/")
+[[ $first == "308 https://$NEW_NAME/" ]] || fail "HTTP lewat Runova port 80: '$first' (diharapkan 308 dari Caddy)"
+req "$ADMIN_JAR" POST "/api/apps/$APP_ID/domains/$NEW_ID/check"
+expect 200
+[[ $(jq -r .status <<<"$BODY") == active ]] || fail "status domain $NEW_NAME: $BODY"
+pass "$NEW_NAME baru langsung 200 dengan nginx memverifikasi CA internal Caddy; port 80 lewat Runova: 308 sekali; status active"
 
 printf '\nSemua skenario nginx lulus.\n'
