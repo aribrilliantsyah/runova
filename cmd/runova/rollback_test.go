@@ -89,8 +89,11 @@ func (r *rollbackRig) run(args ...string) (int, string, string) {
 				call = "old-binary " + strings.Join(a, " ")
 				fmt.Fprintf(stdout, "Skema database: %d\nSkema tertinggi binary ini: %d\n", r.current, r.schema)
 			}
-			if name == r.bin {
-				call = "installed " + strings.Join(a, " ")
+			if name == "runuser" {
+				if len(a) < 2 || a[0] != "-u" || a[1] != "runova" || a[len(a)-2] != r.bin {
+					r.t.Errorf("check must run as the service user: %v", a)
+				}
+				call = "installed " + a[len(a)-1]
 			}
 			r.calls = append(r.calls, strings.TrimSpace(call))
 			if r.failOn != "" && strings.TrimSpace(call) == r.failOn {

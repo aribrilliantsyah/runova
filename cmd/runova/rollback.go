@@ -185,7 +185,9 @@ func rollbackCmd(ctx context.Context, cfg config.Config, args []string, d rollba
 		fmt.Fprintf(stderr, "Layanan %s tidak bisa dihidupkan: %v\nLihat: journalctl -u %s -n 50\n", serviceName, err, serviceName)
 		return 1
 	}
-	if err := d.Exec(ctx, nil, stdout, stderr, d.BinPath, "check"); err != nil {
+	// As the service user, like the installer: root would be refused by PostgreSQL peer auth.
+	if err := d.Exec(ctx, nil, stdout, stderr, "runuser", "-u", serviceName, "--", "env",
+		"RUNOVA_DATA="+cfg.DataDir, "RUNOVA_SECRET_KEY="+cfg.SecretKeyPath, d.BinPath, "check"); err != nil {
 		fmt.Fprintf(stderr, "Rollback selesai, tetapi runova check gagal: %v\n", err)
 		return 1
 	}

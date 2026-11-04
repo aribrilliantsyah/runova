@@ -9,6 +9,8 @@ import (
 	"os"
 	"os/exec"
 	"strings"
+
+	"golang.org/x/sys/unix"
 )
 
 // execFunc runs an external command. Tests replace it; osExec is the real one.
@@ -27,8 +29,14 @@ type console struct {
 }
 
 func stdConsole() console {
-	st, err := os.Stdin.Stat()
-	return console{In: os.Stdin, Interactive: err == nil && st.Mode()&os.ModeCharDevice != 0}
+	return console{In: os.Stdin, Interactive: isTerminal(os.Stdin)}
+}
+
+// isTerminal reports whether f is a terminal. A character device is not
+// enough: /dev/null is one, and is what a command run without a tty gets.
+func isTerminal(f *os.File) bool {
+	_, err := unix.IoctlGetTermios(int(f.Fd()), unix.TCGETS)
+	return err == nil
 }
 
 var errNoTerminal = errors.New("Tidak ada terminal untuk bertanya; tambahkan --yes")

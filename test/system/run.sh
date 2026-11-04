@@ -277,13 +277,18 @@ cp "$repo/dist/runova-$REL_VERSION-linux-amd64.tar.gz" "$repo/dist/SHA256SUMS" "
 cp "$repo/get.sh" "$rel_dir/get.sh"
 (cd "$rel_dir" && sha256sum get.sh >>SHA256SUMS)
 (cd "$repo" && CGO_ENABLED=0 go build -o "$WORK/relserver" ./test/system/relserver) || fail "build relserver gagal"
-docker cp "$WORK/relserver" "$NAME:/tmp/relserver"
-docker cp "$REL" "$NAME:/tmp/release"
-docker exec -d "$NAME" sh -c "/tmp/relserver /tmp/release 127.0.0.1:$REL_PORT $REL_REPO $REL_VERSION >/tmp/relserver.log 2>&1"
+docker cp "$WORK/relserver" "$NAME:/opt/relserver"
+docker cp "$REL" "$NAME:/opt/release"
+docker exec -d "$NAME" sh -c "/opt/relserver /opt/release 127.0.0.1:$REL_PORT $REL_REPO $REL_VERSION >/opt/relserver.log 2>&1"
+rel_up=0
 for _ in $(seq 20); do
-	in_box curl -fs -o /dev/null "http://127.0.0.1:$REL_PORT/$REL_REPO/releases/tag/v$REL_VERSION" && break
+	if in_box curl -fs -o /dev/null "http://127.0.0.1:$REL_PORT/$REL_REPO/releases/tag/v$REL_VERSION"; then
+		rel_up=1
+		break
+	fi
 	sleep 0.5
 done
+((rel_up)) || fail "server rilis lokal tidak menjawab: $(in_box cat /opt/relserver.log 2>&1)"
 # rv runs the installed runova as root against the local release server.
 rv() { in_box env "RUNOVA_GITHUB=http://127.0.0.1:$REL_PORT" "RUNOVA_REPO=$REL_REPO" /usr/local/bin/runova "$@"; }
 
