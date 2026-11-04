@@ -191,7 +191,7 @@ table.dt .qcell{min-width:104px}
 table.dt td,table.dt th{padding-left:12px;padding-right:12px}
 
 /* Columns give way as the results card narrows: summary first, then IP. */
-@container lcard (max-width: 1020px){
+@container lcard (max-width: 960px){
   .actt .c-sum{display:none}
 }
 @container lcard (max-width: 860px){
