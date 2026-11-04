@@ -1,5 +1,5 @@
 import * as api from "/assets/js/api.js";
-import { h, icon, fmtMB, fmtNum, pct, bar, clear, poll, fill } from "/assets/js/dom.js";
+import { h, icon, fmtMB, fmtNum, fmtTime, pct, bar, clear, poll, fill } from "/assets/js/dom.js";
 import { act } from "/assets/js/components/act.js";
 import { dialog } from "/assets/js/components/dialog.js";
 import { hostingCard } from "/assets/js/components/hostingcard.js";
@@ -19,6 +19,7 @@ function service(ic, name, ok, detail, errText) {
 
 export async function renderServer(root) {
   let st = null;
+  let upd = null;
   let settings = await api.get("/api/settings");
   const hosting = hostingCard();
   const view = h("div", { class: "pb" });
@@ -47,6 +48,43 @@ export async function renderServer(root) {
         service("database", "PostgreSQL", postgres.ok, `${postgres.version} · ${postgres.databases} database`, postgres.error),
       ),
     ];
+  }
+
+  function versionCard() {
+    const sw = h("button", { class: "sw", type: "button", role: "switch", "aria-checked": String(settings.update_check !== false), "aria-label": "Periksa pembaruan" });
+    sw.addEventListener("click", () => {
+      const on = sw.getAttribute("aria-checked") !== "true";
+      act(sw, async () => {
+        await save(null, { update_check: on }, on ? "Pemeriksaan pembaruan dinyalakan" : "Pemeriksaan pembaruan dimatikan");
+        dispatchEvent(new Event("runova:update"));
+        await loadUpdate();
+        paint();
+      });
+    });
+    const latest = !upd?.enabled ? "Pemeriksaan dimatikan" : upd.latest ? `v${upd.latest}${upd.update_available ? " (ada pembaruan)" : ""}` : "Belum diperiksa";
+    const checked = upd?.checked_at ? fmtTime(upd.checked_at) : "-";
+    return h(
+      "section",
+      { class: "card", id: "versioncard", style: { "margin-top": "12px" } },
+      h("header", {}, h("div", {}, h("h3", {}, "Versi Runova"), h("p", {}, "Memeriksa rilis baru tiap 6 jam dan menampilkannya sebagai banner untuk admin."))),
+      h(
+        "div",
+        { class: "bd" },
+        h("div", { class: "cfgform" },
+          h("div", { class: "two" }, field("Terpasang", h("div", { class: "mono", id: "ver-current" }, upd ? `v${upd.current}` : "-")), field("Terbaru", h("div", { class: "mono", id: "ver-latest" }, latest))),
+          field("Terakhir diperiksa", h("div", { id: "ver-checked" }, checked)),
+          h("div", { class: "rtitem" }, h("div", {}, h("b", {}, "Periksa pembaruan"), h("small", {}, "Server menghubungi github.com; matikan bila server tanpa internet.")), sw),
+        ),
+      ),
+    );
+  }
+
+  async function loadUpdate() {
+    try {
+      upd = await api.get("/api/update");
+    } catch {
+      upd = null;
+    }
   }
 
   function field(label, input, hint) {
@@ -95,6 +133,7 @@ export async function renderServer(root) {
     );
 
     return [
+      versionCard(),
       h("section", { class: "card", style: { "margin-top": "12px" } }, h("header", {}, h("div", {}, h("h3", {}, "Bawaan untuk pengguna baru"), h("p", {}, "Bisa diubah per pengguna lewat tombol Kuota."))), h("div", { class: "bd" }, q.node, h("div", { class: "actions", style: { "margin-top": "12px" } }, saveQuota))),
       h("section", { class: "card", style: { "margin-top": "12px" } }, h("header", {}, h("div", {}, h("h3", {}, "Yang boleh dijalankan"), h("p", {}, "Matikan untuk melarang deploy baru dengan runtime itu."))), h("div", { class: "bd" }, runtimes)),
       h(
@@ -136,7 +175,7 @@ export async function renderServer(root) {
   }
 
   async function refreshStatus() {
-    [st] = await Promise.all([api.get("/api/server"), hosting.reload()]);
+    [st] = await Promise.all([api.get("/api/server"), hosting.reload(), loadUpdate()]);
     sub.textContent = `${st.host.hostname} · ${st.host.os} · ${st.host.arch}`;
     const focus = document.activeElement;
     if (view.contains(focus) && focus.matches("input,textarea,select")) {

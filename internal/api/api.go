@@ -19,6 +19,7 @@ import (
 	"runova/internal/auth"
 	"runova/internal/dbs"
 	"runova/internal/store"
+	"runova/internal/update"
 )
 
 type Config struct {
@@ -40,6 +41,8 @@ type Config struct {
 	Static fs.FS
 	// Health probes Docker, Caddy and PostgreSQL for the Server page; a nil probe reports "not configured".
 	Health Health
+	// Update serves GET /api/update; without it the endpoint is not registered.
+	Update *update.Checker
 }
 
 type server struct {
@@ -56,6 +59,7 @@ type server struct {
 	deploys  *sync.WaitGroup
 	stats    statsCache
 	health   Health
+	update   *update.Checker
 }
 
 // New builds the API handler; every route lives under /api.
@@ -71,6 +75,7 @@ func New(cfg Config) http.Handler {
 		ctx:      cfg.Context,
 		idle:     cfg.TerminalIdle,
 		health:   cfg.Health,
+		update:   cfg.Update,
 		sessions: &auth.Sessions{Store: cfg.Store, Now: cfg.Now},
 		throttle: &auth.Throttle{Store: cfg.Store, Now: cfg.Now},
 	}
@@ -103,6 +108,9 @@ func New(cfg Config) http.Handler {
 	mux.HandleFunc("GET /api/server", admin(s.serverStatus))
 	mux.HandleFunc("GET /api/info", user(s.info))
 	mux.HandleFunc("GET /api/usage", admin(s.usage))
+	if s.update != nil {
+		mux.HandleFunc("GET /api/update", admin(s.updateStatus))
+	}
 
 	mux.HandleFunc("GET /api/activity", user(s.activity))
 

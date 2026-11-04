@@ -111,6 +111,11 @@ table.t tr:last-child td{border-bottom:0}
 .banner.info{background:var(--info-bg);color:var(--info)}
 .banner span{color:var(--text)}
 .banner .r{margin-left:auto;display:flex;gap:6px}
+.banner.upd{flex:none;flex-wrap:wrap;margin:0 0 8px;border:1px solid var(--line)}
+.banner.upd[hidden]{display:none}
+.banner.upd .msg{flex:1 1 220px;min-width:0;overflow-wrap:anywhere}
+.banner.upd code{font:500 12px var(--mono);padding:1px 6px;border-radius:5px;background:var(--panel);white-space:nowrap}
+.banner.upd .lucide{flex:none}
 input.f,select.f{height:32px;padding:0 10px;border:1px solid var(--line-2);border-radius:7px;background:var(--panel);width:100%}
 input.f.mono{font-family:var(--mono);font-size:12px}
 input.f::placeholder{color:var(--faint)}

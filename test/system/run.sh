@@ -264,4 +264,81 @@ wait_app "$BUDI_JAR" "$APP_ID"
 as_runova check >/dev/null || fail "runova check gagal setelah restart"
 pass "restart runova caddy postgresql: panel, aplikasi (rows=2), dan check pulih"
 
-printf '\nSemua 7 skenario lulus.\n'
+# ---------------------------------------------------------------------------
+scenario "7 runova update lalu rollback"
+REL="$WORK/release"
+REL_REPO=me/runova
+REL_VERSION=0.0.3-systest
+REL_PORT=18080
+rel_dir="$REL/$REL_REPO/releases/download/v$REL_VERSION"
+mkdir -p "$rel_dir"
+(cd "$repo" && scripts/release.sh "$REL_VERSION" >/dev/null) || fail "scripts/release.sh gagal"
+cp "$repo/dist/runova-$REL_VERSION-linux-amd64.tar.gz" "$repo/dist/SHA256SUMS" "$rel_dir/"
+cp "$repo/get.sh" "$rel_dir/get.sh"
+(cd "$rel_dir" && sha256sum get.sh >>SHA256SUMS)
+(cd "$repo" && CGO_ENABLED=0 go build -o "$WORK/relserver" ./test/system/relserver) || fail "build relserver gagal"
+docker cp "$WORK/relserver" "$NAME:/opt/relserver"
+docker cp "$REL" "$NAME:/opt/release"
+docker exec -d "$NAME" sh -c "/opt/relserver /opt/release 127.0.0.1:$REL_PORT $REL_REPO $REL_VERSION >/opt/relserver.log 2>&1"
+rel_up=0
+for _ in $(seq 20); do
+	if in_box curl -fs -o /dev/null "http://127.0.0.1:$REL_PORT/$REL_REPO/releases/tag/v$REL_VERSION"; then
+		rel_up=1
+		break
+	fi
+	sleep 0.5
+done
+((rel_up)) || fail "server rilis lokal tidak menjawab: $(in_box cat /opt/relserver.log 2>&1)"
+# rv runs the installed runova as root against the local release server.
+rv() { in_box env "RUNOVA_GITHUB=http://127.0.0.1:$REL_PORT" "RUNOVA_REPO=$REL_REPO" /usr/local/bin/runova "$@"; }
+
+[[ $(in_box /usr/local/bin/runova version) == "runova 0.0.2-systest" ]] || fail "versi awal skenario 7"
+rc=0
+out=$(rv update --check 2>&1) || rc=$?
+[[ $rc == 10 && $out == *"$REL_VERSION"* ]] || fail "update --check: kode $rc, keluaran: $out"
+rc=0
+out=$(rv update 2>&1) || rc=$?
+[[ $rc != 0 && $out == *--yes* ]] || fail "update tanpa terminal dan tanpa --yes harus ditolak: kode $rc, keluaran: $out"
+[[ $(in_box /usr/local/bin/runova version) == "runova 0.0.2-systest" ]] || fail "update tanpa --yes mengubah binary"
+
+out=$(rv update --yes 2>&1) || {
+	printf '%s\n' "$out" >&2
+	fail "runova update --yes gagal"
+}
+printf '%s\n' "$out" | tail -n 8 | sed 's/^/   | /'
+[[ $out != *Password* ]] || fail "update mencetak password"
+[[ $(in_box /usr/local/bin/runova version) == "runova $REL_VERSION" ]] || fail "versi setelah update: $(in_box /usr/local/bin/runova version)"
+[[ $(in_box cat /var/lib/runova/rollback/VERSION) == 0.0.2-systest ]] || fail "rollback/VERSION setelah update"
+rc=0
+rv update --check >/dev/null 2>&1 || rc=$?
+[[ $rc == 0 ]] || fail "update --check setelah update: kode $rc"
+req "$ADMIN_JAR" POST /api/login "$(jq -nc --arg p "$ADMIN_PASSWORD" '{username: "admin", password: $p}')"
+expect 200
+[[ $(curl_ok "http://$IP:$IP_PORT/db") == rows=2 ]] || fail "data aplikasi hilang setelah update"
+pass "update ke $REL_VERSION lewat get.sh rilis lokal; login dan data utuh; rollback/VERSION=0.0.2-systest"
+
+rc=0
+out=$(rv rollback 2>&1) || rc=$?
+[[ $rc != 0 && $out == *--yes* ]] || fail "rollback tanpa terminal dan tanpa --yes harus ditolak: kode $rc, keluaran: $out"
+out=$(rv rollback --yes 2>&1) || {
+	printf '%s\n' "$out" >&2
+	fail "runova rollback --yes gagal"
+}
+printf '%s\n' "$out" | tail -n 8 | sed 's/^/   | /'
+[[ $(in_box /usr/local/bin/runova version) == "runova 0.0.2-systest" ]] || fail "versi setelah rollback: $(in_box /usr/local/bin/runova version)"
+[[ $(in_box cat /var/lib/runova/rollback/VERSION) == "$REL_VERSION" ]] || fail "rollback/VERSION setelah rollback"
+[[ $(in_box systemctl is-active runova) == active ]] || fail "runova tidak aktif setelah rollback"
+as_runova check >/dev/null || fail "runova check gagal setelah rollback"
+for _ in $(seq 60); do
+	[[ $(curl -sk -m 3 -o /dev/null -w '%{http_code}' "$PANEL/api/me") =~ ^(200|401)$ ]] && break
+	sleep 1
+done
+req "$ADMIN_JAR" POST /api/login "$(jq -nc --arg p "$ADMIN_PASSWORD" '{username: "admin", password: $p}')"
+expect 200
+req "$BUDI_JAR" POST /api/login "$(jq -nc --arg p "$BUDI_PASSWORD" '{username: "budi", password: $p}')"
+expect 200
+[[ $(curl_ok "http://$IP:$IP_PORT/db") == rows=2 ]] || fail "data aplikasi hilang setelah rollback"
+wait_app "$BUDI_JAR" "$APP_ID"
+pass "rollback kembali ke 0.0.2-systest; panel login, pengguna, database, dan aplikasi utuh"
+
+printf '\nSemua 8 skenario lulus.\n'

@@ -22,6 +22,18 @@ func TestLoadDefaults(t *testing.T) {
 	}
 }
 
+func TestLoadRelease(t *testing.T) {
+	c := config.Load(func(string) string { return "" })
+	if c.GitHub != "https://github.com" || c.Repo != "aribrilliantsyah/runova" {
+		t.Errorf("defaults: %q, %q", c.GitHub, c.Repo)
+	}
+	env := map[string]string{"RUNOVA_GITHUB": "http://127.0.0.1:9", "RUNOVA_REPO": "me/runova"}
+	c = config.Load(func(k string) string { return env[k] })
+	if c.GitHub != "http://127.0.0.1:9" || c.Repo != "me/runova" {
+		t.Errorf("overrides: %q, %q", c.GitHub, c.Repo)
+	}
+}
+
 func TestLoadOverrides(t *testing.T) {
 	env := map[string]string{"RUNOVA_LISTEN": ":9000", "RUNOVA_DATA": "/tmp/x", "RUNOVA_SECRET_KEY": "/tmp/k"}
 	c := config.Load(func(k string) string { return env[k] })

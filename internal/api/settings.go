@@ -28,6 +28,11 @@ func (s *server) putSettings(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
+	was, err := s.store.Settings(r.Context())
+	if err != nil {
+		serverError(w, r, err)
+		return
+	}
 	panelChanged := false
 	if s.apps != nil {
 		var err error
@@ -43,6 +48,9 @@ func (s *server) putSettings(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		serverError(w, r, err)
 		return
+	}
+	if s.update != nil && saved.UpdateCheck && !was.UpdateCheck {
+		s.update.Poke()
 	}
 	actor := auth.FromContext(r.Context())
 	s.record(r, actor, store.ActSettingsUpdate, "", "")

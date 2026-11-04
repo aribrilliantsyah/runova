@@ -156,13 +156,31 @@ Mematikan domain hosting menghentikan semua subdomainnya dan memberi tahu pemili
 
 ## 7. Pembaruan
 
-Jalankan perintah instalasi lagi. Tanpa `--domain`/`--port`, alamat panel tetap:
+Panel menampilkan banner untuk admin bila ada rilis baru (dimatikan lewat **Server → Periksa pembaruan**). Di server:
+
+```bash
+sudo runova update            # ke rilis terbaru, bertanya dulu
+sudo runova update --yes      # tanpa tanya
+runova update --check         # hanya memeriksa: keluar 0 terbaru, 10 ada pembaruan
+```
+
+`runova update` mengunduh `get.sh` dari rilis target, mencocokkan checksumnya dengan `SHA256SUMS`, lalu menjalankannya; hasilnya sama dengan perintah instalasi `curl`. Alamat panel tetap. Installer idempoten: binary dan unit diganti, Runova di-restart; data, kunci, admin, aplikasi, dan alamat panel tidak disentuh, dan tidak ada password baru dicetak. Skema database diperbarui otomatis; sebelumnya Runova menyalin `runova.db` ke `/var/lib/runova/runova.db.bak-v<versi>-<waktu>`. Versi terpasang: `runova version`.
+
+Server Runova 0.2.0 ke bawah belum punya `runova update`; jalankan perintah instalasi lagi (tanpa `--domain`/`--port`, alamat panel tetap):
 
 ```bash
 curl -fsSL https://github.com/aribrilliantsyah/runova/releases/latest/download/get.sh | sudo bash -s --
 ```
 
-Installer idempoten: langkah yang sudah beres dilewati, binary dan unit diganti, Runova di-restart. Data, kunci, admin, aplikasi, dan alamat panel tidak disentuh, dan tidak ada password baru dicetak. Skema database diperbarui otomatis; sebelumnya Runova menyalin `runova.db` ke `/var/lib/runova/runova.db.bak-v<versi>-<waktu>`. Versi terpasang: `runova version`.
+### Kembali ke versi sebelumnya
+
+Installer menyimpan binary yang digantikan di `/var/lib/runova/rollback/` (satu versi). Bila pembaruan bermasalah:
+
+```bash
+sudo runova rollback          # bertanya dulu
+```
+
+Binary lama dipasang kembali. Bila database sudah dimigrasi oleh versi baru, cadangan sebelum migrasi (`runova.db.bak-v<skema lama>-*`) dipulihkan: **perubahan data panel sejak pembaruan (pengguna, aplikasi, domain, setelan) hilang**, dan database sebelum rollback disimpan di `runova.db.before-rollback-<waktu>`. Tanpa cadangan yang cocok, `rollback` berhenti dan tidak mengubah apa pun. Container aplikasi dan database PostgreSQL pengguna tidak disentuh. `rollback` kedua kalinya maju kembali ke versi semula.
 
 ## 8. Cadangan
 

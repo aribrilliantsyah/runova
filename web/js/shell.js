@@ -1,10 +1,14 @@
 // The signed-in frame: sidebar, top bar, bottom navigation (phones), "Lainnya" sheet.
 import * as api from "/assets/js/api.js";
-import { h, icon, bar, setBar, pct, fmtMB, fmtNum, fill, $ } from "/assets/js/dom.js";
+import { h, icon, bar, setBar, pct, fmtMB, fmtNum, fill, copyText, $ } from "/assets/js/dom.js";
 import { logo } from "/assets/js/logo.js";
 import * as session from "/assets/js/session.js";
 import { bell } from "/assets/js/bell.js";
 import { dialog } from "/assets/js/components/dialog.js";
+import { toast } from "/assets/js/toast.js";
+
+const UPDATE_COMMAND = "sudo runova update";
+const UPDATE_POLL_MS = 30 * 60 * 1000;
 
 const NAV_KEY = { apps: "apps", app: "apps", new: "new", db: "db", activity: "activity", users: "users", server: "server" };
 
@@ -110,7 +114,35 @@ export function buildShell({ onLogout }) {
   const mdeploy = h("button", { class: "btn pri", type: "button", disabled: true }, icon("rocket"), "Deploy");
   const mbar = h("div", { class: "mbar" }, mprev, mnext, mdeploy);
 
-  const main = h("div", { class: "main" }, top, content, bnav, mbar);
+  // Admin-only notice that a newer release exists; it cannot be dismissed and goes away once the server is updated.
+  const upd = h("div", { class: "banner info upd", role: "status", hidden: true });
+  const main = h("div", { class: "main" }, top, upd, content, bnav, mbar);
+
+  function paintUpdate(st) {
+    if (!st?.update_available) {
+      upd.hidden = true;
+      return;
+    }
+    const copy = h("button", { class: "btn sm", type: "button", "aria-label": `Salin perintah ${UPDATE_COMMAND}` }, icon("copy"), "Salin");
+    copy.addEventListener("click", async () => toast((await copyText(UPDATE_COMMAND)) ? "Perintah disalin" : "Tidak bisa menyalin; salin manual"));
+    upd.replaceChildren(
+      icon("download"),
+      h("span", { class: "msg" }, `Runova v${st.latest} tersedia (terpasang: v${st.current}). Perbarui di server: `, h("code", {}, UPDATE_COMMAND)),
+      h("div", { class: "r" }, copy, h("a", { class: "btn sm ghost", href: st.release_url, target: "_blank", rel: "noopener noreferrer" }, "Catatan rilis", icon("external-link"))),
+    );
+    upd.hidden = false;
+  }
+  async function refreshUpdate() {
+    if (!admin) return;
+    try {
+      paintUpdate(await api.get("/api/update"));
+    } catch {
+      upd.hidden = true;
+    }
+  }
+  const updTimer = admin ? setInterval(refreshUpdate, UPDATE_POLL_MS) : null;
+  addEventListener("runova:update", refreshUpdate);
+  refreshUpdate();
 
   // "Lainnya" bottom sheet
   const sheetUsage = h("span", { class: "muted" });
@@ -264,6 +296,8 @@ export function buildShell({ onLogout }) {
     mbar: { prev: mprev, prevText: mprev.lastChild, next: mnext, deploy: mdeploy },
     destroy() {
       bellStop();
+      clearInterval(updTimer);
+      removeEventListener("runova:update", refreshUpdate);
       removeEventListener("keydown", onKey);
       removeEventListener("runova:theme", onTheme);
     },
