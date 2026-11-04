@@ -118,6 +118,8 @@ export async function renderServer(root) {
     const panelPort = h("input", { class: "f", type: "number", "aria-label": "Port panel", placeholder: "kosong = tidak dipakai", value: settings.panel_port || "" });
     const nets = h("textarea", { class: "f", "aria-label": "Jaringan PostgreSQL yang diizinkan", placeholder: "203.0.113.0/24", spellcheck: "false", style: { "min-height": "72px" } });
     nets.value = settings.pg_allowed_nets.join("\n");
+    const proxies = h("textarea", { class: "f", "aria-label": "Proxy di depan Runova", placeholder: "10.0.0.5", spellcheck: "false", style: { "min-height": "56px" } });
+    proxies.value = settings.trusted_proxies.join("\n");
     const saveServer = h("button", { class: "btn dark", type: "button" }, "Simpan setelan");
     saveServer.addEventListener("click", () =>
       save(saveServer, {
@@ -129,6 +131,7 @@ export async function renderServer(root) {
         panel_domain: panelDomain.value.trim().toLowerCase(),
         panel_port: Number(panelPort.value) || 0,
         pg_allowed_nets: nets.value.split(/[\s,]+/).filter(Boolean),
+        trusted_proxies: proxies.value.split(/[\s,]+/).filter(Boolean),
       }, "Setelan disimpan"),
     );
 
@@ -152,6 +155,7 @@ export async function renderServer(root) {
             field("Domain panel", panelDomain, "HTTPS otomatis lewat Caddy. Mengisi domain dan port sekaligus tidak disarankan."),
             field("Port panel (HTTPS di IP:port)", panelPort),
             field("Jaringan PostgreSQL yang diizinkan", nets, "Satu CIDR per baris, mis. 203.0.113.0/24. Subnet Docker selalu diizinkan."),
+            field("Proxy di depan Runova", proxies, "IP atau CIDR proxy seperti nginx yang meneruskan ke server ini, satu per baris. Isi agar batas login dan aktivitas memakai IP asli pengunjung. Kosong bila tidak ada proxy."),
             h("div", { class: "actions" }, saveServer),
           ),
         ),

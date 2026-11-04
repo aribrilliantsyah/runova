@@ -116,6 +116,22 @@ for (const p of ["/api/apps", "/api/databases", "/api/info", "/api/notifications
   const settings = await (await fetch(`${srv.url}/api/settings`, { headers: { cookie: (await ctxA.cookies()).map((c) => `${c.name}=${c.value}`).join("; ") } })).json();
   check(settings.runtimes.java8 === false, "Java 8 should be off on the server");
 
+  step("server page: trusted proxies are saved, shown again after reload, and a bad one is refused");
+  const proxyBox = admin.locator("textarea[aria-label='Proxy di depan Runova']");
+  await proxyBox.fill("10.0.0.5\n192.168.0.0/24");
+  await admin.click("button:has-text('Simpan setelan')");
+  await admin.waitForSelector(".toast:has-text('Setelan disimpan')");
+  await admin.reload();
+  await admin.waitForSelector("textarea[aria-label='Proxy di depan Runova']");
+  check((await admin.locator("textarea[aria-label='Proxy di depan Runova']").inputValue()) === "10.0.0.5\n192.168.0.0/24", "trusted proxies should survive a reload");
+  problems.allow("PUT", "/api/settings", 400);
+  await admin.locator("textarea[aria-label='Proxy di depan Runova']").fill("0.0.0.0/0");
+  await admin.click("button:has-text('Simpan setelan')");
+  await admin.waitForFunction(() => document.body.textContent.includes("seluruh internet"));
+  await admin.locator("textarea[aria-label='Proxy di depan Runova']").fill("");
+  await admin.click("button:has-text('Simpan setelan')");
+  await admin.waitForSelector(".toast:has-text('Setelan disimpan')");
+
   step("delete a user: warns about data, needs the username");
   await admin.goto(`${srv.url}/#/users`);
   await admin.waitForSelector("#userrows tr[data-user='budi']");
