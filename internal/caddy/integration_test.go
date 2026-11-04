@@ -253,3 +253,47 @@ func TestCaddyTrustedProxyIntegration(t *testing.T) {
 	apply([]string{"10.99.0.0/16"})
 	get(`xff="127.0.0.1"`)
 }
+
+// Front-proxy mode on a real Caddy: a public-looking name that no public CA
+// will ever issue gets an internal certificate at once, the probe accepts it
+// through the admin API's root, and clearing the proxies sends the name back
+// to the public issuers (Caddy then has no certificate and the probe says so).
+func TestCaddyFrontProxyIntegration(t *testing.T) {
+	c := startCaddy(t)
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { fmt.Fprint(w, "app") }))
+	defer upstream.Close()
+	const host = "startboom.app.runova-lab.test"
+	state := caddy.State{
+		AdminListen:    strings.TrimPrefix(c.admin, "http://"),
+		Sites:          []caddy.Site{{Host: host, Upstream: upstream.Listener.Addr().String()}},
+		TrustedProxies: []string{"10.99.0.1"},
+	}
+	client := caddy.NewClient(c.admin)
+	s := &caddy.Syncer{Client: client, State: func(context.Context) (caddy.State, error) { return state, nil }}
+	if err := s.Apply(context.Background()); err != nil {
+		t.Fatalf("Apply: %v", err)
+	}
+	noDNS := func(context.Context, string) ([]string, error) { return nil, &net.DNSError{IsNotFound: true} }
+	p := caddy.Prober{LocalCA: client.LocalCA, LookupHost: noDNS}
+	deadline := time.Now().Add(15 * time.Second)
+	for {
+		ok, detail := p.Probe(context.Background(), host, true)
+		if ok {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("front-proxy probe: %s", detail)
+		}
+		time.Sleep(200 * time.Millisecond)
+	}
+
+	state.TrustedProxies = nil
+	if err := s.Apply(context.Background()); err != nil {
+		t.Fatalf("Apply: %v", err)
+	}
+	ok, detail := p.Probe(context.Background(), host, false)
+	if ok || !strings.HasPrefix(detail, "Caddy belum mendapat sertifikat untuk "+host) {
+		t.Fatalf("without a proxy: ok=%v %q, want Caddy without a certificate (no public CA issues .test)", ok, detail)
+	}
+	t.Logf("without a proxy: %s", detail)
+}
