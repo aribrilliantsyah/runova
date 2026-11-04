@@ -113,6 +113,7 @@ func New(cfg Config) http.Handler {
 	}
 
 	mux.HandleFunc("GET /api/activity", user(s.activity))
+	mux.HandleFunc("GET /api/activity/search", user(s.activitySearch))
 
 	mux.HandleFunc("POST /api/uploads", user(s.upload))
 	mux.HandleFunc("DELETE /api/uploads/{id}", user(s.deleteUpload))
