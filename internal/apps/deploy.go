@@ -154,7 +154,7 @@ func (s *Service) rollout(ctx context.Context, owner store.User, app store.App, 
 	if err != nil {
 		return "", err
 	}
-	dbEnv, err := s.dbEnv(ctx, app)
+	dbEnv, err := s.dbEnv(ctx, app, d.Report, env)
 	if err != nil {
 		return "", fmt.Errorf("database env: %w", err)
 	}

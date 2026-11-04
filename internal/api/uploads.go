@@ -19,6 +19,7 @@ import (
 
 	"runova/internal/artifact"
 	"runova/internal/auth"
+	"runova/internal/dbenv"
 	"runova/internal/store"
 )
 
@@ -35,6 +36,17 @@ type uploadResponse struct {
 	ID          string          `json:"id"`
 	Report      artifact.Report `json:"report"`
 	AllowedJava []int           `json:"allowed_java"`
+	// DBEnv lists the variables Runova fills when the app gets a database.
+	DBEnv []dbenv.Var `json:"db_env"`
+}
+
+// uploadDBEnv is what a database would fill for an app made from rep.
+func uploadDBEnv(rep artifact.Report) []dbenv.Var {
+	names := make([]string, len(rep.Env))
+	for i, v := range rep.Env {
+		names[i] = v.Name
+	}
+	return dbenv.Vars(names, rep.Kind == artifact.KindJar)
 }
 
 // uploadsDir is where in-flight and unclaimed uploads live.
@@ -133,7 +145,7 @@ func (s *server) upload(w http.ResponseWriter, r *http.Request) {
 	}
 	created = true
 	s.record(r, user, store.ActUpload, report.FileName, string(report.Kind))
-	writeJSON(w, http.StatusCreated, uploadResponse{ID: id, Report: report, AllowedJava: allowed})
+	writeJSON(w, http.StatusCreated, uploadResponse{ID: id, Report: report, AllowedJava: allowed, DBEnv: uploadDBEnv(report)})
 }
 
 var errNoFile = errors.New("no file part")

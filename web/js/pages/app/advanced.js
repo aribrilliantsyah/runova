@@ -73,7 +73,7 @@ export function renderAdvanced(page) {
     sel.value = String(app.database_id || 0);
     const save = h("button", { class: "btn dark", type: "button" }, "Simpan database");
     save.addEventListener("click", () => act(save, () => patch({ database_id: Number(sel.value) }, "Database disimpan")));
-    return h("section", { class: "card" }, h("header", {}, h("h3", {}, "Database terpakai"), h("p", {}, "DATABASE_URL dan variabel PG* diisi otomatis. Berlaku setelah deploy ulang.")), h("div", { class: "bd" }, dbs.pg_down ? h("p", { class: "hint" }, "PostgreSQL sedang tidak bisa diakses; pilihan tetap bisa disimpan.") : null, h("div", { class: "fld" }, sel), h("div", { class: "actions" }, save)));
+    return h("section", { class: "card" }, h("header", {}, h("h3", {}, "Database terpakai"), h("p", {}, "DATABASE_URL, variabel PG*, dan variabel database yang dikenali di aplikasi (DB_URL, DB_PASSWORD…) diisi otomatis, termasuk password. Berlaku setelah deploy ulang.")), h("div", { class: "bd" }, dbs.pg_down ? h("p", { class: "hint" }, "PostgreSQL sedang tidak bisa diakses; pilihan tetap bisa disimpan.") : null, h("div", { class: "fld" }, sel), h("div", { class: "actions" }, save)));
   }
 
   function dangerCard() {

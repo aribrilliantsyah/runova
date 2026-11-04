@@ -45,7 +45,8 @@ func imageFor(app store.App, d store.Deployment) string {
 
 // ContainerSpec builds the container for deployment d. It is pure: env holds
 // the user's variables in plain text and dbEnv the database variables
-// ("NAME=value"). Later sources win, and Runova's own variables win over all.
+// ("NAME=value"). A value the user typed wins over the database's, an empty
+// one leaves the name to the database, and Runova's own variables win over all.
 func (s *Service) ContainerSpec(app store.App, user store.User, d store.Deployment, env []store.EnvEntry, dbEnv []string) docker.ContainerSpec {
 	file := appMount + "/" + d.FileName
 	cmd := []string{file}
@@ -54,6 +55,11 @@ func (s *Service) ContainerSpec(app store.App, user store.User, d store.Deployme
 		cmd = append(cmd, "-jar", file)
 	}
 
+	fromDB := make(map[string]bool, len(dbEnv))
+	for _, kv := range dbEnv {
+		name, _, _ := strings.Cut(kv, "=")
+		fromDB[name] = true
+	}
 	vars := make([]string, 0, len(env)+len(dbEnv)+3)
 	index := map[string]int{}
 	set := func(name, value string) {
@@ -66,11 +72,16 @@ func (s *Service) ContainerSpec(app store.App, user store.User, d store.Deployme
 		vars = append(vars, kv)
 	}
 	for _, e := range env {
+		if e.Value == "" && fromDB[e.Name] {
+			continue
+		}
 		set(e.Name, e.Value)
 	}
 	for _, kv := range dbEnv {
 		name, value, _ := strings.Cut(kv, "=")
-		set(name, value)
+		if _, typed := index[name]; !typed {
+			set(name, value)
+		}
 	}
 	set("PORT", strconv.Itoa(d.InternalPort))
 	set("RUNOVA_DATA_DIR", dataMount)

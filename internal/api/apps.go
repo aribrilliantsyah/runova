@@ -9,7 +9,9 @@ import (
 	"time"
 
 	"runova/internal/apps"
+	"runova/internal/artifact"
 	"runova/internal/auth"
+	"runova/internal/dbenv"
 	"runova/internal/docker"
 	"runova/internal/store"
 )
@@ -206,14 +208,69 @@ func (s *server) getApp(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	stats := s.appStats(r.Context(), u, app)
+	dbEnv, err := s.appDBEnv(r.Context(), app, env)
+	if err != nil {
+		serverError(w, r, err)
+		return
+	}
 	writeJSON(w, http.StatusOK, struct {
 		App        store.App         `json:"app"`
 		Owner      string            `json:"owner"`
 		Env        []store.EnvEntry  `json:"env"`
+		DBEnv      *dbEnvView        `json:"db_env"`
 		Deployment *store.Deployment `json:"deployment"`
 		Stats      *docker.Stats     `json:"stats"`
 		Busy       bool              `json:"busy"`
-	}{app, owner.Username, maskSecrets(env), active, stats, s.apps.Busy(app.ID)})
+	}{app, owner.Username, maskSecrets(env), dbEnv, active, stats, s.apps.Busy(app.ID)})
+}
+
+// dbEnvVar is a variable the app gets from its database. Overridden means the
+// user set a value of their own, which the container gets instead.
+type dbEnvVar struct {
+	dbenv.Var
+	Overridden bool `json:"overridden"`
+}
+
+// dbEnvView names the app's database and the variables it fills; never values.
+type dbEnvView struct {
+	Database string     `json:"database"`
+	Vars     []dbEnvVar `json:"vars"`
+}
+
+// appDBEnv describes the database variables of the app's next deploy: names
+// from the newest artifact and the app's own variables (env, as stored). Nil
+// when the app uses no database.
+func (s *server) appDBEnv(ctx context.Context, app store.App, env []store.EnvEntry) (*dbEnvView, error) {
+	if app.DatabaseID == nil {
+		return nil, nil
+	}
+	d, err := s.store.Database(ctx, *app.DatabaseID)
+	if err != nil {
+		return nil, err
+	}
+	typed, err := s.apps.TypedEnv(ctx, app.ID)
+	if err != nil {
+		return nil, err
+	}
+	ds, err := s.store.Deployments(ctx, app.ID)
+	if err != nil {
+		return nil, err
+	}
+	var names []string
+	if len(ds) > 0 {
+		for _, v := range ds[0].Report.Env {
+			names = append(names, v.Name)
+		}
+	}
+	for _, e := range env {
+		names = append(names, e.Name)
+	}
+	vars := dbenv.Vars(names, app.Kind == artifact.KindJar)
+	out := &dbEnvView{Database: d.Name, Vars: make([]dbEnvVar, len(vars))}
+	for i, v := range vars {
+		out.Vars[i] = dbEnvVar{v, typed[v.Name]}
+	}
+	return out, nil
 }
 
 func (s *server) patchApp(w http.ResponseWriter, r *http.Request) {

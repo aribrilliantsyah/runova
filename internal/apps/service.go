@@ -49,8 +49,9 @@ type Service struct {
 	PortFree func(port int) bool
 	// Chown hands path to the user's container UID; nil means OSChown.
 	Chown func(path string, uid int) error
-	// DBEnv returns the database variables ("NAME=value") for an app; nil means no app has any.
-	DBEnv func(ctx context.Context, app store.App) ([]string, error)
+	// DBEnv returns the database variables ("NAME=value") for an app, filling
+	// the detected names it recognizes; nil means no app has any.
+	DBEnv func(ctx context.Context, app store.App, detected []string) ([]string, error)
 	// Dial probes the deployed app; nil means net.DialTimeout.
 	Dial func(network, addr string, timeout time.Duration) (net.Conn, error)
 
@@ -628,6 +629,26 @@ func (s *Service) SetEnv(ctx context.Context, user store.User, appID int64, env 
 		return err
 	}
 	return s.Store.ReplaceEnv(ctx, appID, sealed)
+}
+
+// TypedEnv returns the names of the app's variables that hold a value, secrets
+// included; an empty value leaves a database variable to the database.
+func (s *Service) TypedEnv(ctx context.Context, appID int64) (map[string]bool, error) {
+	stored, err := s.Store.Env(ctx, appID)
+	if err != nil {
+		return nil, err
+	}
+	plain, err := s.openEnv(stored)
+	if err != nil {
+		return nil, err
+	}
+	out := make(map[string]bool, len(plain))
+	for _, e := range plain {
+		if e.Value != "" {
+			out[e.Name] = true
+		}
+	}
+	return out, nil
 }
 
 // RevealEnv returns the plain value of one stored variable.
