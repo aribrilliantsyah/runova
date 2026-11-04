@@ -462,8 +462,8 @@ func TestMigration0002KeepsVersion1Data(t *testing.T) {
 	if err := runMigrate(t, db, embeddedMigrations(), path); err != nil {
 		t.Fatal(err)
 	}
-	if v := version(t, db); v != 3 {
-		t.Fatalf("user_version = %d, want 3", v)
+	if v := version(t, db); v != 4 {
+		t.Fatalf("user_version = %d, want 4", v)
 	}
 	if n := count(t, db, `SELECT count(*) FROM domains WHERE app_id = 1 AND hosting_domain_id IS NULL AND label = '' AND host IN ('billing.budi.com', 'www.budi.com')`); n != 2 {
 		t.Fatalf("free domains kept = %d, want 2", n)
