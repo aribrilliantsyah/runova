@@ -34,6 +34,7 @@ func (s *server) appRoutes(mux *http.ServeMux, user func(http.HandlerFunc) http.
 	mux.HandleFunc("POST /api/apps/{id}/start", user(s.lifecycle(s.appsStart)))
 	mux.HandleFunc("POST /api/apps/{id}/deployments/{did}/rollback", user(s.rollback))
 	mux.HandleFunc("GET /api/apps/{id}/deployments", user(s.listDeployments))
+	mux.HandleFunc("GET /api/apps/{id}/deployments/{did}/log", user(s.deploymentLog))
 	mux.HandleFunc("GET /api/apps/{id}/logs", user(s.logs))
 	mux.HandleFunc("GET /api/apps/{id}/terminal", user(s.terminal))
 	s.domainRoutes(mux, user)
@@ -205,15 +206,25 @@ func (s *server) getApp(w http.ResponseWriter, r *http.Request) {
 			active = &d
 		}
 	}
+	// latest is the newest deployment: the one in progress, or a failed one
+	// the active deployment survived, so the panel can say what happened.
+	var latest *store.Deployment
+	if list, err := s.store.Deployments(r.Context(), app.ID); err != nil {
+		serverError(w, r, err)
+		return
+	} else if len(list) > 0 {
+		latest = &list[0]
+	}
 	stats := s.appStats(r.Context(), u, app)
 	writeJSON(w, http.StatusOK, struct {
 		App        store.App         `json:"app"`
 		Owner      string            `json:"owner"`
 		Env        []store.EnvEntry  `json:"env"`
 		Deployment *store.Deployment `json:"deployment"`
+		Latest     *store.Deployment `json:"latest"`
 		Stats      *docker.Stats     `json:"stats"`
 		Busy       bool              `json:"busy"`
-	}{app, owner.Username, maskSecrets(env), active, stats, s.apps.Busy(app.ID)})
+	}{app, owner.Username, maskSecrets(env), active, latest, stats, s.apps.Busy(app.ID)})
 }
 
 func (s *server) patchApp(w http.ResponseWriter, r *http.Request) {
@@ -423,4 +434,34 @@ func (s *server) deleteApp(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, okBody)
+}
+
+// deploymentLog returns a deployment's container output: live while the
+// container exists, the saved copy afterwards.
+func (s *server) deploymentLog(w http.ResponseWriter, r *http.Request) {
+	u := auth.FromContext(r.Context())
+	id, ok := appID(w, r)
+	if !ok {
+		return
+	}
+	did, err := strconv.ParseInt(r.PathValue("did"), 10, 64)
+	if err != nil || did <= 0 {
+		writeError(w, http.StatusNotFound, "Deployment tidak ditemukan")
+		return
+	}
+	tail := maxLogTail
+	if v := r.URL.Query().Get("tail"); v != "" {
+		n, err := strconv.Atoi(v)
+		if err != nil || n < 1 || n > maxLogTail {
+			writeError(w, http.StatusBadRequest, "Parameter tail harus antara 1 dan "+strconv.Itoa(maxLogTail))
+			return
+		}
+		tail = n
+	}
+	out, err := s.apps.DeploymentLog(r.Context(), u, id, did, tail)
+	if err != nil {
+		appError(w, r, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, out)
 }

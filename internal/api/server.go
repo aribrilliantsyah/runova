@@ -64,6 +64,9 @@ type serverStatus struct {
 		MemAllocMB    int    `json:"mem_alloc_mb"`
 		DiskTotalMB   int    `json:"disk_total_mb"`
 		DiskUsedMB    int    `json:"disk_used_mb"`
+		// LocalIP is the machine's LAN address; IPAccess where app IP ports are linked.
+		LocalIP  string   `json:"local_ip"`
+		IPAccess IPAccess `json:"ip_access"`
 	} `json:"host"`
 	Apps struct {
 		Total   int `json:"total"`
@@ -118,6 +121,10 @@ func (s *server) serverStatus(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	if settings, err := s.store.Settings(ctx); err == nil {
+		out.Host.IPAccess = ipAccess(settings.PublicIP, interfaceAddrs())
+		out.Host.LocalIP = out.Host.IPAccess.LocalIP
+	}
 	out.Host.Hostname, _ = os.Hostname()
 	out.Host.OS = osName()
 	out.Host.Arch = runtime.GOOS + "/" + runtime.GOARCH
@@ -177,12 +184,15 @@ func (s *server) info(w http.ResponseWriter, r *http.Request) {
 		serverError(w, r, err)
 		return
 	}
+	acc := ipAccess(v.PublicIP, interfaceAddrs())
 	writeJSON(w, http.StatusOK, struct {
 		UploadLimitMB int             `json:"upload_limit_mb"`
 		PublicIP      string          `json:"public_ip"`
+		IPAccessHost  string          `json:"ip_access_host"`
+		IPAccessLocal bool            `json:"ip_access_local"`
 		Runtimes      map[string]bool `json:"runtimes"`
 		PanelDomain   string          `json:"panel_domain"`
-	}{v.UploadLimitMB, v.PublicIP, v.Runtimes, v.PanelDomain})
+	}{v.UploadLimitMB, v.PublicIP, acc.Host, acc.Local, v.Runtimes, v.PanelDomain})
 }
 
 type userUsage struct {
