@@ -286,7 +286,7 @@ func TestRollbackRestartsServiceWhenFilesFail(t *testing.T) {
 	}
 	db := r.read(r.cfg.DBPath())
 	code, _, errOut := r.run("--yes")
-	if code != 1 || !strings.Contains(errOut, "Rollback gagal") {
+	if code != 1 || !strings.Contains(errOut, "Rollback failed") {
 		t.Fatalf("code %d, err %q", code, errOut)
 	}
 	if r.read(r.cfg.DBPath()) != db {
