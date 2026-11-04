@@ -2,9 +2,18 @@ package caddy_test
 
 import (
 	"context"
+	"crypto/ecdsa"
+	"crypto/elliptic"
+	"crypto/rand"
+	"crypto/tls"
 	"crypto/x509"
+	"crypto/x509/pkix"
+	"encoding/json"
+	"encoding/pem"
 	"errors"
 	"io"
+	"log"
+	"math/big"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -332,26 +341,145 @@ func TestClientConfig(t *testing.T) {
 	}
 }
 
-func TestProbeTLS(t *testing.T) {
-	srv := httptest.NewTLSServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}))
-	defer srv.Close()
-	addr := srv.Listener.Addr().String()
-	pool := x509.NewCertPool()
-	pool.AddCert(srv.Certificate())
+// tlsServer serves TLS with a certificate for names signed by a fresh CA, or
+// with no certificate at all (like Caddy before it has one) when names is empty.
+func tlsServer(t *testing.T, names ...string) (addr string, ca *x509.Certificate) {
+	t.Helper()
+	caKey, _ := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	caTmpl := &x509.Certificate{
+		SerialNumber: big.NewInt(1), Subject: pkix.Name{CommonName: "test CA"},
+		NotBefore: time.Now().Add(-time.Hour), NotAfter: time.Now().Add(time.Hour),
+		IsCA: true, BasicConstraintsValid: true, KeyUsage: x509.KeyUsageCertSign,
+	}
+	caDER, _ := x509.CreateCertificate(rand.Reader, caTmpl, caTmpl, &caKey.PublicKey, caKey)
+	ca, _ = x509.ParseCertificate(caDER)
+	cfg := &tls.Config{GetCertificate: func(*tls.ClientHelloInfo) (*tls.Certificate, error) {
+		return nil, errors.New("no certificate")
+	}}
+	if len(names) > 0 {
+		key, _ := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+		leaf := &x509.Certificate{
+			SerialNumber: big.NewInt(2), DNSNames: names,
+			NotBefore: time.Now().Add(-time.Hour), NotAfter: time.Now().Add(time.Hour),
+			ExtKeyUsage: []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
+		}
+		der, _ := x509.CreateCertificate(rand.Reader, leaf, ca, &key.PublicKey, caKey)
+		cfg = &tls.Config{Certificates: []tls.Certificate{{Certificate: [][]byte{der}, PrivateKey: key}}}
+	}
+	srv := httptest.NewUnstartedServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}))
+	srv.TLS = cfg
+	srv.Config.ErrorLog = log.New(io.Discard, "", 0)
+	srv.StartTLS()
+	t.Cleanup(srv.Close)
+	return srv.Listener.Addr().String(), ca
+}
 
-	if ok, detail := caddy.ProbeTLSAt(context.Background(), addr, "example.com", pool); !ok {
+func pool(certs ...*x509.Certificate) *x509.CertPool {
+	p := x509.NewCertPool()
+	for _, c := range certs {
+		p.AddCert(c)
+	}
+	return p
+}
+
+func TestProbeDirect(t *testing.T) {
+	ctx := context.Background()
+	addr, ca := tlsServer(t, "x.co")
+	if ok, detail := (caddy.Prober{Addr: addr, Roots: pool(ca)}).Probe(ctx, "x.co", false); !ok {
 		t.Errorf("trusted certificate rejected: %s", detail)
 	}
-	ok, detail := caddy.ProbeTLSAt(context.Background(), addr, "example.com", x509.NewCertPool())
-	if ok || detail == "" {
-		t.Errorf("untrusted certificate accepted: ok=%v detail=%q", ok, detail)
+	for name, p := range map[string]struct {
+		prober caddy.Prober
+		host   string
+		want   string
+	}{
+		"untrusted":    {caddy.Prober{Addr: addr, Roots: x509.NewCertPool()}, "x.co", "Sertifikat belum dipercaya"},
+		"other name":   {caddy.Prober{Addr: addr, Roots: pool(ca)}, "y.co", "Sertifikat bukan untuk domain ini"},
+		"closed port":  {caddy.Prober{Addr: "127.0.0.1:1", Roots: pool(ca)}, "x.co", "Caddy tidak bisa dihubungi di port 443"},
+		"internal CA":  {caddy.Prober{Addr: addr, Roots: x509.NewCertPool(), LocalCA: func(context.Context) (*x509.Certificate, error) { return ca, nil }}, "x.co", "Sertifikat belum dipercaya"},
+		"without cert": {caddy.Prober{Addr: func() string { a, _ := tlsServer(t); return a }(), Roots: pool(ca)}, "startboom.app.co", "Caddy belum mendapat sertifikat untuk startboom.app.co. Pastikan port 80 dan 443 terbuka dan DNS menunjuk ke server ini. Bila ada nginx di depan, isi Proxy di depan Runova. (remote error: tls: internal error)"},
+	} {
+		ok, detail := p.prober.Probe(ctx, p.host, false)
+		if ok || !strings.HasPrefix(detail, p.want) {
+			t.Errorf("%s: ok=%v detail=%q, want prefix %q", name, ok, detail, p.want)
+		}
 	}
-	ok, detail = caddy.ProbeTLSAt(context.Background(), addr, "other.example.org", pool)
-	if ok || detail == "" {
-		t.Errorf("certificate for another name accepted: ok=%v detail=%q", ok, detail)
+}
+
+func TestProbeFrontProxy(t *testing.T) {
+	ctx := context.Background()
+	const host = "startboom.app.co"
+	local, internal := tlsServer(t, host)
+	localCA := func(context.Context) (*x509.Certificate, error) { return internal, nil }
+	public, publicCA := tlsServer(t, "*.app.co")
+	_, port, _ := net.SplitHostPort(public)
+	resolve := func(addrs ...string) func(context.Context, string) ([]string, error) {
+		return func(_ context.Context, h string) ([]string, error) {
+			if h != host {
+				t.Errorf("resolved %q", h)
+			}
+			if len(addrs) == 0 {
+				return nil, &net.DNSError{Err: "no such host", Name: h, IsNotFound: true}
+			}
+			return addrs, nil
+		}
 	}
-	ok, detail = caddy.ProbeTLSAt(context.Background(), "127.0.0.1:1", "example.com", pool)
-	if ok || detail == "" {
-		t.Errorf("closed port reported ok=%v detail=%q", ok, detail)
+	visitorRoots := pool(publicCA) // the system roots of a visitor; the internal CA is not among them
+	base := caddy.Prober{Addr: local, LocalCA: localCA, PublicPort: port, Roots: visitorRoots}
+
+	p := base
+	p.LookupHost = resolve("127.0.0.1")
+	if ok, detail := p.Probe(ctx, host, true); !ok {
+		t.Errorf("internal certificate at Caddy and a trusted one at the proxy: %s", detail)
+	}
+	p.LookupHost = resolve()
+	if ok, detail := p.Probe(ctx, host, true); !ok {
+		t.Errorf("no DNS yet must not fail the check of Caddy's certificate: %s", detail)
+	}
+	p.LookupHost, p.PublicPort = resolve("127.0.0.1"), "1"
+	if ok, detail := p.Probe(ctx, host, true); !ok {
+		t.Errorf("a public address unreachable from the server proves nothing: %s", detail)
+	}
+	if ok, _ := (caddy.Prober{Addr: local, Roots: visitorRoots}).Probe(ctx, host, false); ok {
+		t.Error("without front-proxy mode the internal CA must not be trusted")
+	}
+
+	wrong, wrongCA := tlsServer(t, "runova.prodak.id")
+	_, wrongPort, _ := net.SplitHostPort(wrong)
+	p = base
+	p.LookupHost, p.PublicPort, p.Roots = resolve("127.0.0.1"), wrongPort, pool(publicCA, wrongCA)
+	ok, detail := p.Probe(ctx, host, true)
+	if ok || !strings.HasPrefix(detail, "Proxy di depan (nginx) di 127.0.0.1 belum menyajikan sertifikat tepercaya untuk "+host+": sertifikat bukan untuk domain ini.") {
+		t.Errorf("proxy with a certificate for another name: ok=%v %q", ok, detail)
+	}
+
+	none, _ := tlsServer(t)
+	p = base
+	p.Addr, p.LookupHost = none, resolve("127.0.0.1")
+	ok, detail = p.Probe(ctx, host, true)
+	if ok || !strings.HasPrefix(detail, "Caddy belum punya sertifikat untuk "+host+" dari CA internalnya") {
+		t.Errorf("Caddy without a certificate: ok=%v %q", ok, detail)
+	}
+
+	p = base
+	p.LocalCA = func(context.Context) (*x509.Certificate, error) { return nil, errors.New("connection refused") }
+	if ok, detail := p.Probe(ctx, host, true); ok || !strings.Contains(detail, "CA internal Caddy") {
+		t.Errorf("unreadable internal CA: ok=%v %q", ok, detail)
+	}
+}
+
+func TestClientLocalCA(t *testing.T) {
+	_, ca := tlsServer(t, "x.co")
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/pki/ca/local" {
+			t.Errorf("path = %s", r.URL.Path)
+		}
+		root := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: ca.Raw})
+		_ = json.NewEncoder(w).Encode(map[string]string{"id": "local", "root_certificate": string(root)})
+	}))
+	defer srv.Close()
+	got, err := caddy.NewClient(srv.URL).LocalCA(context.Background())
+	if err != nil || !got.Equal(ca) {
+		t.Fatalf("LocalCA = %v, %v", got, err)
 	}
 }
