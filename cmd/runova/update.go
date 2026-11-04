@@ -58,52 +58,52 @@ func updateCmd(ctx context.Context, cfg config.Config, args []string, d updateDe
 		return checkForUpdate(ctx, src, installed, stdout, stderr)
 	}
 	if !d.IsRoot() {
-		fmt.Fprintln(stderr, "Jalankan dengan sudo: sudo runova update")
+		fmt.Fprintln(stderr, "Run with sudo: sudo runova update")
 		return 1
 	}
 
 	target := strings.TrimPrefix(*wanted, "v")
 	if *wanted != "" {
 		if !update.Valid(target) {
-			fmt.Fprintf(stderr, "Versi tidak valid: %s (contoh: --version 0.3.0)\n", *wanted)
+			fmt.Fprintf(stderr, "Invalid version: %s (example: --version 0.3.0)\n", *wanted)
 			return 1
 		}
 		if cmp, ok := update.Compare(target, installed); ok && cmp < 0 {
-			fmt.Fprintf(stderr, "Versi %s lebih lama dari yang terpasang (%s). Untuk kembali ke versi sebelumnya jalankan: sudo runova rollback\n", target, installed)
+			fmt.Fprintf(stderr, "Version %s is older than the installed one (%s). To go back to the previous version run: sudo runova rollback\n", target, installed)
 			return 1
 		}
 	} else {
 		latest, err := src.Latest(ctx)
 		if err != nil {
-			fmt.Fprintf(stderr, "Tidak bisa memeriksa rilis terbaru: %v\n", err)
+			fmt.Fprintf(stderr, "Could not check the latest release: %v\n", err)
 			return 1
 		}
 		cmp, ok := update.Compare(latest, installed)
 		if !ok {
-			fmt.Fprintf(stderr, "Versi terpasang (%s) tidak bisa dibandingkan. Pilih versi sendiri: sudo runova update --version %s\n", installed, latest)
+			fmt.Fprintf(stderr, "The installed version (%s) cannot be compared. Pick a version yourself: sudo runova update --version %s\n", installed, latest)
 			return 1
 		}
 		if cmp <= 0 {
-			fmt.Fprintf(stdout, "Runova %s sudah versi terbaru\n", installed)
+			fmt.Fprintf(stdout, "Runova %s is already the latest version\n", installed)
 			return 0
 		}
 		target = latest
 	}
 
-	fmt.Fprintf(stdout, "Runova %s -> %s\nCatatan rilis: %s\n", installed, target, src.ReleaseURL(target))
+	fmt.Fprintf(stdout, "Runova %s -> %s\nRelease notes: %s\n", installed, target, src.ReleaseURL(target))
 	ok, err := d.Console.confirm(stdout, *yes)
 	if err != nil {
 		fmt.Fprintln(stderr, err)
 		return 1
 	}
 	if !ok {
-		fmt.Fprintln(stderr, "Dibatalkan")
+		fmt.Fprintln(stderr, "Canceled")
 		return 1
 	}
 
 	dir, err := os.MkdirTemp("", "runova-update-")
 	if err != nil {
-		fmt.Fprintf(stderr, "Tidak bisa membuat folder sementara: %v\n", err)
+		fmt.Fprintf(stderr, "Could not create a temporary folder: %v\n", err)
 		return 1
 	}
 	defer os.RemoveAll(dir)
@@ -114,7 +114,7 @@ func updateCmd(ctx context.Context, cfg config.Config, args []string, d updateDe
 	}
 	err = d.Exec(ctx, d.Console.In, stdout, stderr, "bash", script, "--version", target, "--yes")
 	if err != nil {
-		fmt.Fprintf(stderr, "Pembaruan gagal: %v\n", err)
+		fmt.Fprintf(stderr, "Update failed: %v\n", err)
 		var exit interface{ ExitCode() int }
 		if errors.As(err, &exit) && exit.ExitCode() > 0 {
 			return exit.ExitCode()
@@ -127,15 +127,15 @@ func updateCmd(ctx context.Context, cfg config.Config, args []string, d updateDe
 func checkForUpdate(ctx context.Context, src update.Source, installed string, stdout, stderr io.Writer) int {
 	latest, err := src.Latest(ctx)
 	if err != nil {
-		fmt.Fprintf(stderr, "Tidak bisa memeriksa rilis terbaru: %v\n", err)
+		fmt.Fprintf(stderr, "Could not check the latest release: %v\n", err)
 		return 1
 	}
-	fmt.Fprintf(stdout, "Terpasang: %s\nTerbaru  : %s\n", installed, latest)
+	fmt.Fprintf(stdout, "Installed: %s\nLatest   : %s\n", installed, latest)
 	if cmp, ok := update.Compare(latest, installed); ok && cmp > 0 {
-		fmt.Fprintf(stdout, "Ada pembaruan. Catatan rilis: %s\nPerbarui dengan: sudo runova update\n", src.ReleaseURL(latest))
+		fmt.Fprintf(stdout, "An update is available. Release notes: %s\nUpdate with: sudo runova update\n", src.ReleaseURL(latest))
 		return exitUpdateAvailable
 	}
-	fmt.Fprintln(stdout, "Sudah versi terbaru")
+	fmt.Fprintln(stdout, "Already the latest version")
 	return 0
 }
 
@@ -144,23 +144,23 @@ func checkForUpdate(ctx context.Context, src update.Source, installed string, st
 func fetchInstaller(ctx context.Context, src update.Source, version, dir string) (string, error) {
 	script, err := httpGet(ctx, src.AssetURL(version, "get.sh"))
 	if err != nil {
-		return "", fmt.Errorf("Gagal mengunduh get.sh rilis %s: %w", version, err)
+		return "", fmt.Errorf("could not download get.sh of release %s: %w", version, err)
 	}
 	sums, err := httpGet(ctx, src.AssetURL(version, "SHA256SUMS"))
 	if err != nil {
-		return "", fmt.Errorf("Gagal mengunduh SHA256SUMS rilis %s: %w", version, err)
+		return "", fmt.Errorf("could not download SHA256SUMS of release %s: %w", version, err)
 	}
 	want, ok := checksumOf(sums, "get.sh")
 	if !ok {
-		return "", fmt.Errorf("SHA256SUMS rilis %s tidak memuat get.sh; pembaruan dibatalkan", version)
+		return "", fmt.Errorf("SHA256SUMS of release %s does not list get.sh; update canceled", version)
 	}
 	sum := sha256.Sum256(script)
 	if hex.EncodeToString(sum[:]) != want {
-		return "", errors.New("Checksum get.sh tidak cocok; unduhan rusak atau diubah, pembaruan dibatalkan")
+		return "", errors.New("get.sh checksum does not match; the download is corrupt or was changed, update canceled")
 	}
 	path := filepath.Join(dir, "get.sh")
 	if err := os.WriteFile(path, script, 0o700); err != nil {
-		return "", fmt.Errorf("Tidak bisa menyimpan get.sh: %w", err)
+		return "", fmt.Errorf("could not save get.sh: %w", err)
 	}
 	return path, nil
 }

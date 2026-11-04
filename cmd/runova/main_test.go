@@ -75,7 +75,7 @@ func TestAdminCreateAndReset(t *testing.T) {
 	}
 
 	r = runIn(t, env, "admin", "create", "budi")
-	if r.code != 1 || !strings.Contains(r.stderr, "pengguna sudah ada") || strings.Contains(r.stdout, "Password") {
+	if r.code != 1 || !strings.Contains(r.stderr, "user already exists") || strings.Contains(r.stdout, "Password") {
 		t.Fatalf("duplicate: %+v", r)
 	}
 
@@ -93,7 +93,7 @@ func TestAdminCreateAndReset(t *testing.T) {
 	}
 
 	r = runIn(t, env, "admin", "reset-password", "hantu")
-	if r.code != 1 || !strings.Contains(r.stderr, "tidak ditemukan") {
+	if r.code != 1 || !strings.Contains(r.stderr, "not found") {
 		t.Fatalf("reset unknown: %+v", r)
 	}
 }

@@ -23,8 +23,9 @@ type rollbackRig struct {
 	cfg     config.Config
 	dir     string
 	bin     string
-	schema  int // schema the old binary reports
-	current int // schema of the database on disk
+	schema  int  // schema the old binary reports
+	current int  // schema of the database on disk
+	legacy  bool // the old binary prints `db version` in Indonesian, like v0.3.0 and older
 	calls   []string
 	failOn  string
 	tty     bool
@@ -87,7 +88,11 @@ func (r *rollbackRig) run(args ...string) (int, string, string) {
 			call := name + " " + strings.Join(a, " ")
 			if name == filepath.Join(r.dir, "runova") {
 				call = "old-binary " + strings.Join(a, " ")
-				fmt.Fprintf(stdout, "Skema database: %d\nSkema tertinggi binary ini: %d\n", r.current, r.schema)
+				if r.legacy {
+					fmt.Fprintf(stdout, "Skema database: %d\nSkema tertinggi binary ini: %d\n", r.current, r.schema)
+				} else {
+					fmt.Fprintf(stdout, "Database schema: %d\nHighest schema of this binary: %d\n", r.current, r.schema)
+				}
 			}
 			if name == "runuser" {
 				if len(a) < 2 || a[0] != "-u" || a[1] != "runova" || a[len(a)-2] != r.bin {
@@ -125,7 +130,7 @@ func (r *rollbackRig) systemctlCalls() []string {
 func TestRollbackNeedsRoot(t *testing.T) {
 	r := newRollbackRig(t)
 	r.root = false
-	if code, _, errOut := r.run("--yes"); code != 1 || !strings.Contains(errOut, "Jalankan dengan sudo: sudo runova rollback") || len(r.calls) != 0 {
+	if code, _, errOut := r.run("--yes"); code != 1 || !strings.Contains(errOut, "Run with sudo: sudo runova rollback") || len(r.calls) != 0 {
 		t.Fatalf("code %d, err %q, calls %v", code, errOut, r.calls)
 	}
 }
@@ -134,7 +139,7 @@ func TestRollbackWithoutPreviousVersion(t *testing.T) {
 	r := newRollbackRig(t)
 	os.RemoveAll(r.dir)
 	code, _, errOut := r.run("--yes")
-	if code != 1 || !strings.Contains(errOut, "Tidak ada versi sebelumnya untuk dikembalikan") || len(r.calls) != 0 {
+	if code != 1 || !strings.Contains(errOut, "No previous version to roll back to") || len(r.calls) != 0 {
 		t.Fatalf("code %d, err %q, calls %v", code, errOut, r.calls)
 	}
 }
@@ -202,7 +207,7 @@ func TestRollbackRestoresDatabaseBackup(t *testing.T) {
 	if r.read(r.bin) != "old-binary" {
 		t.Error("binary not swapped")
 	}
-	for _, want := range []string{"PERINGATAN", "pengguna, aplikasi, domain, setelan", filepath.Base(newest), "PostgreSQL pengguna tidak disentuh"} {
+	for _, want := range []string{"WARNING", "users, apps, domains, settings", filepath.Base(newest), "users' PostgreSQL databases are not touched"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("summary lacks %q:\n%s", want, out)
 		}
@@ -215,7 +220,7 @@ func TestRollbackWithoutMatchingBackupChangesNothing(t *testing.T) {
 	r.addBackup(r.schema-1, rollbackNow-100, "wrong schema")
 	db := r.read(r.cfg.DBPath())
 	code, _, errOut := r.run("--yes")
-	if code != 1 || !strings.Contains(errOut, "tidak ada cadangan") {
+	if code != 1 || !strings.Contains(errOut, "no ") || !strings.Contains(errOut, "backup to restore") {
 		t.Fatalf("code %d, err %q", code, errOut)
 	}
 	if got := r.systemctlCalls(); len(got) != 0 {
@@ -232,7 +237,7 @@ func TestRollbackConfirmation(t *testing.T) {
 		t.Fatalf("no terminal: code %d, err %q", code, errOut)
 	}
 	r.tty, r.input = true, "n\n"
-	if code, out, _ := r.run(); code != 1 || !strings.Contains(out, "Lanjutkan? [y/N]") || len(r.systemctlCalls()) != 0 || r.read(r.bin) != "new-binary" {
+	if code, out, _ := r.run(); code != 1 || !strings.Contains(out, "Continue? [y/N]") || len(r.systemctlCalls()) != 0 || r.read(r.bin) != "new-binary" {
 		t.Fatalf("answer n: code %d, out %q", code, out)
 	}
 	r.input = "y\n"
@@ -260,7 +265,7 @@ func TestRollbackStopFailureChangesNothing(t *testing.T) {
 	r := newRollbackRig(t)
 	r.failOn = "systemctl stop runova"
 	code, _, errOut := r.run("--yes")
-	if code != 1 || !strings.Contains(errOut, "tidak ada yang diubah") || r.read(r.bin) != "new-binary" {
+	if code != 1 || !strings.Contains(errOut, "nothing was changed") || r.read(r.bin) != "new-binary" {
 		t.Fatalf("code %d, err %q", code, errOut)
 	}
 	if got := r.systemctlCalls(); len(got) != 1 {
@@ -281,7 +286,7 @@ func TestRollbackRestartsServiceWhenFilesFail(t *testing.T) {
 	}
 	db := r.read(r.cfg.DBPath())
 	code, _, errOut := r.run("--yes")
-	if code != 1 || !strings.Contains(errOut, "Rollback gagal") {
+	if code != 1 || !strings.Contains(errOut, "Rollback failed") {
 		t.Fatalf("code %d, err %q", code, errOut)
 	}
 	if r.read(r.cfg.DBPath()) != db {
@@ -294,7 +299,38 @@ func TestRollbackRestartsServiceWhenFilesFail(t *testing.T) {
 
 func TestRollbackUsage(t *testing.T) {
 	r := newRollbackRig(t)
-	if code, _, errOut := r.run("--nope"); code != 2 || !strings.Contains(errOut, "Penggunaan:") {
+	if code, _, errOut := r.run("--nope"); code != 2 || !strings.Contains(errOut, "Usage:") {
 		t.Fatalf("code %d, err %q", code, errOut)
+	}
+}
+
+// An old binary (v0.3.0 and older) prints `db version` in Indonesian; rollback
+// must read both that and the current English format.
+func TestRollbackReadsOldAndNewDBVersionOutput(t *testing.T) {
+	for _, legacy := range []bool{false, true} {
+		r := newRollbackRig(t)
+		r.legacy = legacy
+		r.schema = r.current - 1
+		r.addBackup(r.schema, rollbackNow-100, "backup")
+		if code, out, errOut := r.run("--yes"); code != 0 || r.read(r.cfg.DBPath()) != "backup" {
+			t.Errorf("legacy=%v: code %d, out %q, err %q", legacy, code, out, errOut)
+		}
+	}
+}
+
+func TestHighestSchemaLine(t *testing.T) {
+	for _, tc := range []struct{ in, want string }{
+		{"Database schema: 3\nHighest schema of this binary: 7\n", "7"},
+		{"Skema database: 3\nSkema tertinggi binary ini: 7\n", "7"},
+		{"Highest schema of this binary: 7 extra\n", ""},
+		{"Highest schema: 7\n", ""},
+	} {
+		got := ""
+		if m := highestSchemaLine.FindStringSubmatch(tc.in); m != nil {
+			got = m[1]
+		}
+		if got != tc.want {
+			t.Errorf("%q: got %q, want %q", tc.in, got, tc.want)
+		}
 	}
 }

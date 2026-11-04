@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Runova installer for Ubuntu Server 26.04 (amd64).
 #
-#   sudo ./install.sh [--domain panel.contoh.id | --port 8443] [--public-ip IP] [--yes]
+#   sudo ./install.sh [--domain panel.example.com | --port 8443] [--public-ip IP] [--yes]
 #
 # Every step checks first whether it is already done, so running the same
 # command again updates the binary and the unit and leaves data, keys and the
@@ -43,26 +43,150 @@ VERSION=""
 SKIP_FIREWALL=0
 PUT_CHANGED=0
 
+# Progress display. Each step's output goes to LOG_FILE; the terminal gets one
+# line per step, with a spinner while it runs when stdout is a terminal.
+# RUNOVA_PROGRESS=tty|plain forces the mode (the tests use it).
+LOG_FILE="${RUNOVA_LOG:-$ROOT/var/log/runova-install.log}"
+LOG_TAIL_LINES=30
+PROGRESS="${RUNOVA_PROGRESS:-auto}"
+# UI_OUT and UI_ERR are the real terminal streams; run_steps points them at
+# duplicates so that messages stay visible while a step's own output is logged.
+UI_OUT=1
+UI_ERR=2
+USE_SPINNER=0
+SPINNER_PID=""
+TOTAL_STEPS=0
+STEP_N=0
+STEP_LABEL=""
+STEP_START=0
+STEP_ACTIVE=0
+STEP_SKIPPED=0
+MISSING=()
+
 log() { printf '==> %s\n' "$*"; }
-warn() { printf 'Peringatan: %s\n' "$*" >&2; }
+
+# clear_line wipes the spinner line so that a message does not land on it.
+clear_line() {
+	if [[ -n $SPINNER_PID ]]; then
+		printf '\r\033[K' >&"$UI_OUT"
+	fi
+}
+
+# notice prints to the terminal even while a step's output goes to the log.
+notice() {
+	clear_line
+	printf '%s\n' "$*" >&"$UI_OUT"
+}
+
+warn() {
+	clear_line
+	printf 'Warning: %s\n' "$*" >&"$UI_ERR"
+}
+
 die() {
-	printf 'Galat: %s\n' "$*" >&2
+	fail_step
+	printf 'Error: %s\n' "$*" >&"$UI_ERR"
 	exit 1
+}
+
+# fmt_elapsed SECONDS VAR: stores "42s" or "1m12s" in VAR.
+fmt_elapsed() {
+	if (($1 >= 60)); then
+		printf -v "$2" '%dm%02ds' $(($1 / 60)) $(($1 % 60))
+	else
+		printf -v "$2" '%ds' "$1"
+	fi
+}
+
+utf8_locale() {
+	[[ ${LC_ALL:-${LC_CTYPE:-${LANG:-}}} == *[Uu][Tt][Ff]-8* || ${LC_ALL:-${LC_CTYPE:-${LANG:-}}} == *[Uu][Tt][Ff]8* ]]
+}
+
+# spinner_loop PREFIX runs in the background until it is killed.
+spinner_loop() {
+	local prefix=$1 i=0 t frames
+	if utf8_locale; then
+		frames=('⠋' '⠙' '⠹' '⠸' '⠼' '⠴' '⠦' '⠧' '⠇' '⠏')
+	else
+		frames=('|' '/' '-' "\\")
+	fi
+	while :; do
+		fmt_elapsed $((SECONDS - STEP_START)) t
+		printf '\r\033[K%s %s  %s' "$prefix" "${frames[i % ${#frames[@]}]}" "$t" >&"$UI_OUT"
+		i=$((i + 1))
+		sleep 0.1
+	done
+}
+
+spinner_start() {
+	((USE_SPINNER)) || return 0
+	spinner_loop "[$STEP_N/$TOTAL_STEPS] $STEP_LABEL" &
+	SPINNER_PID=$!
+}
+
+spinner_stop() {
+	if [[ -n $SPINNER_PID ]]; then
+		kill "$SPINNER_PID" 2>/dev/null || true
+		wait "$SPINNER_PID" 2>/dev/null || true
+		SPINNER_PID=""
+		printf '\r\033[K' >&"$UI_OUT"
+	fi
+}
+
+# finish_step done|failed prints the step's final line.
+finish_step() {
+	local t line
+	fmt_elapsed $((SECONDS - STEP_START)) t
+	line="[$STEP_N/$TOTAL_STEPS] $STEP_LABEL ..."
+	if [[ $1 == "done" ]] && ((STEP_SKIPPED)); then
+		line+=" already done"
+	else
+		line+=" $1 ($t)"
+	fi
+	printf '%s\n' "$line" >&"$UI_OUT"
+	STEP_ACTIVE=0
+}
+
+# fail_step ends the running step as failed: the spinner stops, the final line
+# says "failed", and the end of the log follows. It does nothing between steps.
+fail_step() {
+	((STEP_ACTIVE)) || return 0
+	spinner_stop
+	finish_step failed
+	if [[ -s $LOG_FILE ]]; then
+		printf '\nLast %d lines of %s:\n' "$LOG_TAIL_LINES" "$LOG_FILE" >&"$UI_ERR"
+		tail -n "$LOG_TAIL_LINES" "$LOG_FILE" >&"$UI_ERR" || true
+		printf '\nFull log: %s\n\n' "$LOG_FILE" >&"$UI_ERR"
+	fi
+}
+
+# run_step FUNCTION LABEL runs one step with its output in the log. A failure
+# exits through set -e or die; on_exit then reports it via fail_step.
+run_step() {
+	STEP_N=$((STEP_N + 1))
+	STEP_LABEL=$2
+	STEP_START=$SECONDS
+	STEP_ACTIVE=1
+	STEP_SKIPPED=0
+	spinner_start
+	"$1" >>"$LOG_FILE" 2>&1
+	spinner_stop
+	finish_step "done"
 }
 
 usage() {
 	cat <<'EOF'
-Penggunaan: sudo ./install.sh [opsi]
+Usage: sudo ./install.sh [options]
 
-  --domain <host>    panel di https://<host> (HTTPS otomatis)
-  --port <n>         panel di https://<IP server>:<n> (bawaan bila tanpa opsi: 8443)
-  --public-ip <ip>   IP publik server, disimpan ke setelan Runova
-  --yes, -y          jangan bertanya (untuk instalasi tanpa terminal)
-  --skip-firewall    jangan menyentuh ufw (untuk server yang firewall-nya diatur di tempat lain)
-  --help, -h         tampilkan bantuan ini
+  --domain <host>    serve the panel at https://<host> (automatic HTTPS)
+  --port <n>         serve the panel at https://<server IP>:<n> (default without options: 8443)
+  --public-ip <ip>   the server's public IP, stored in the Runova settings
+  --yes, -y          do not ask questions (for installs without a terminal)
+  --skip-firewall    do not touch ufw (for servers whose firewall is managed elsewhere)
+  --help, -h         show this help
 
---domain dan --port tidak bisa dipakai bersamaan. Tanpa keduanya pada
-pemasangan ulang, alamat panel yang sudah ada tidak diubah.
+--domain and --port cannot be combined. When reinstalling without either,
+the existing panel address is left unchanged.
 EOF
 }
 
@@ -97,15 +221,15 @@ set_option() {
 	case "$name" in
 	--domain)
 		value=${value,,}
-		valid_domain "$value" || die "Domain tidak valid: $value"
+		valid_domain "$value" || die "Invalid domain: $value"
 		DOMAIN=$value
 		;;
 	--port)
-		valid_port "$value" || die "Port panel tidak valid: $value (pakai 1024-65535, bukan 2019, 5432, 7070, atau 20000-20999)"
+		valid_port "$value" || die "Invalid panel port: $value (use 1024-65535, but not 2019, 5432, 7070, or 20000-20999)"
 		PORT=$value
 		;;
 	--public-ip)
-		valid_ip "$value" || die "IP publik tidak valid: $value"
+		valid_ip "$value" || die "Invalid public IP: $value"
 		PUBLIC_IP=$value
 		;;
 	esac
@@ -116,7 +240,7 @@ parse_args() {
 	while (($# > 0)); do
 		case "$1" in
 		--domain | --port | --public-ip)
-			(($# >= 2)) || die "Opsi $1 butuh nilai"
+			(($# >= 2)) || die "Option $1 needs a value"
 			set_option "$1" "$2"
 			shift 2
 			;;
@@ -136,11 +260,15 @@ parse_args() {
 			usage
 			exit 0
 			;;
-		*) die "Opsi tidak dikenal: $1 (lihat --help)" ;;
+		--plan)
+			print_plan
+			exit 0
+			;;
+		*) die "Unknown option: $1 (see --help)" ;;
 		esac
 	done
 	if [[ -n $DOMAIN && -n $PORT ]]; then
-		die "--domain dan --port tidak bisa dipakai bersamaan: panel dibuka lewat domain atau lewat IP:port"
+		die "--domain and --port cannot be combined: the panel is reached by domain or by IP:port"
 	fi
 	if [[ -n $DOMAIN || -n $PORT ]]; then
 		PANEL_EXPLICIT=1
@@ -154,10 +282,18 @@ check_os() {
 	# shellcheck disable=SC1091
 	version=$(. "$ROOT/etc/os-release" 2>/dev/null && printf '%s' "${VERSION_ID:-}")
 	if [[ $id != ubuntu || $version != 26.04 ]]; then
-		die "Runova hanya mendukung Ubuntu Server 26.04 (terdeteksi: ${id:-tidak diketahui} ${version})"
+		die "Runova only supports Ubuntu Server 26.04 (detected: ${id:-unknown} ${version})"
 	fi
 	arch=$(uname -m)
-	[[ $arch == x86_64 ]] || die "Runova hanya mendukung arsitektur amd64 (x86_64); terdeteksi: $arch"
+	[[ $arch == x86_64 ]] || die "Runova only supports the amd64 (x86_64) architecture; detected: $arch"
+}
+
+print_plan() {
+	cat <<'EOF'
+The installer will install docker.io, caddy, postgresql-18, ufw, jq, and curl from
+Ubuntu's apt, create the "runova" user, configure Caddy and PostgreSQL, open ports
+in ufw (and enable ufw if it is not active; SSH is allowed first), and start Runova.
+EOF
 }
 
 confirm_plan() {
@@ -165,14 +301,10 @@ confirm_plan() {
 	if ((ASSUME_YES)); then
 		return 0
 	fi
-	[[ -t 0 ]] || die "Tidak ada terminal untuk bertanya; tambahkan --yes untuk instalasi tanpa tanya"
-	cat <<'EOF'
-Installer akan memasang docker.io, caddy, postgresql-18, ufw, jq, dan curl dari apt Ubuntu,
-membuat user "runova", mengatur Caddy dan PostgreSQL, membuka port di ufw (dan
-mengaktifkan ufw bila belum aktif, SSH diizinkan lebih dulu), lalu menjalankan Runova.
-EOF
-	read -r -p "Lanjutkan? [y/N] " answer
-	[[ $answer == [yY]* ]] || die "Dibatalkan"
+	[[ -t 0 ]] || die "No terminal to ask on; add --yes for an unattended install"
+	print_plan
+	read -r -p "Continue? [y/N] " answer
+	[[ $answer == [yY]* ]] || die "Canceled"
 }
 
 # wait_for TRIES COMMAND...: runs the command once a second until it succeeds.
@@ -214,32 +346,39 @@ package_installed() {
 	[[ $(dpkg-query -W -f="\${Status}" "$1" 2>/dev/null) == "install ok installed" ]]
 }
 
-step_packages() {
-	local missing=() p
+# missing_packages fills MISSING with the packages that are not installed yet.
+missing_packages() {
+	local p
+	MISSING=()
 	for p in "${PACKAGES[@]}"; do
 		if ! package_installed "$p"; then
-			missing+=("$p")
+			MISSING+=("$p")
 		fi
 	done
-	if ((${#missing[@]} == 0)); then
-		log "Paket sudah terpasang"
+}
+
+step_packages() {
+	missing_packages
+	if ((${#MISSING[@]} == 0)); then
+		log "Packages already installed"
+		STEP_SKIPPED=1
 		return 0
 	fi
-	log "Memasang paket: ${missing[*]}"
+	log "Installing packages: ${MISSING[*]}"
 	apt-get update
-	DEBIAN_FRONTEND=noninteractive apt-get install -y "${missing[@]}"
+	DEBIAN_FRONTEND=noninteractive apt-get install -y "${MISSING[@]}"
 }
 
 step_user_dirs() {
 	local groups
-	getent group docker >/dev/null || die "Grup docker tidak ada; apakah paket docker.io terpasang?"
+	getent group docker >/dev/null || die "The docker group does not exist; is the docker.io package installed?"
 	if groups=$(id -nG "$SERVICE_USER" 2>/dev/null); then
 		case " $groups " in
 		*" docker "*) ;;
 		*) usermod -aG docker "$SERVICE_USER" ;;
 		esac
 	else
-		log "Membuat user $SERVICE_USER"
+		log "Creating user $SERVICE_USER"
 		useradd --system --user-group --groups docker --home-dir /var/lib/runova \
 			--no-create-home --shell /usr/sbin/nologin "$SERVICE_USER"
 	fi
@@ -263,42 +402,44 @@ save_rollback() {
 		install -m 0755 "$BIN" "$tmp" &&
 		mv -f "$tmp" "$ROLLBACK_DIR/runova" &&
 		printf '%s\n' "$old" >"$ROLLBACK_DIR/VERSION"; }; then
-		warn "Binary $old tidak bisa disimpan untuk runova rollback"
+		warn "Could not keep binary $old for runova rollback"
 		return 0
 	fi
-	log "Binary runova $old disimpan untuk runova rollback"
+	log "Binary runova $old kept for runova rollback"
 }
 
 step_binary() {
 	local src="$SRC_DIR/runova" tmp
-	[[ -f $src ]] || die "$src tidak ditemukan; jalankan install.sh dari folder hasil ekstrak rilis"
-	VERSION=$("$src" version) || die "$src tidak bisa dijalankan di server ini"
+	[[ -f $src ]] || die "$src not found; run install.sh from the extracted release folder"
+	VERSION=$("$src" version) || die "$src cannot run on this server"
 	VERSION=${VERSION#runova }
 	install -d -m 0755 "$(dirname "$BIN")"
 	save_rollback
 	tmp=$(mktemp "$BIN.new.XXXXXX")
 	if ! install -m 0755 "$src" "$tmp"; then
 		rm -f "$tmp"
-		die "Gagal menyalin binary ke $(dirname "$BIN")"
+		die "Could not copy the binary to $(dirname "$BIN")"
 	fi
 	mv -f "$tmp" "$BIN"
-	log "Binary runova $VERSION terpasang di /usr/local/bin/runova"
+	log "Binary runova $VERSION installed at /usr/local/bin/runova"
 }
 
 step_secret() {
 	if [[ -e $SECRET_KEY ]]; then
-		log "Kunci enkripsi sudah ada"
+		log "Encryption key already exists"
+		STEP_SKIPPED=1
 		return 0
 	fi
-	log "Membuat kunci enkripsi"
+	log "Creating the encryption key"
 	as_runova keygen
 }
 
 step_env_file() {
 	if [[ -e $ENV_FILE ]]; then
-		log "Konfigurasi $ENV_FILE sudah ada, tidak diubah"
+		log "Configuration $ENV_FILE already exists, left unchanged"
+		STEP_SKIPPED=1
 	else
-		log "Menulis $ENV_FILE"
+		log "Writing $ENV_FILE"
 		put_file "$ENV_FILE" 0640 <<EOF
 RUNOVA_LISTEN=$DEFAULT_LISTEN
 RUNOVA_DATA=/var/lib/runova
@@ -314,10 +455,10 @@ step_docker_daemon() {
 	install -d -m 0755 "$(dirname "$DOCKER_DAEMON_JSON")"
 	if [[ -s $DOCKER_DAEMON_JSON ]]; then
 		jq -e 'type == "object"' "$DOCKER_DAEMON_JSON" >/dev/null 2>&1 ||
-			die "$DOCKER_DAEMON_JSON bukan objek JSON yang valid; perbaiki dulu lalu jalankan ulang"
+			die "$DOCKER_DAEMON_JSON is not a valid JSON object; fix it and run again"
 		if jq -e '."default-address-pools" != null' "$DOCKER_DAEMON_JSON" >/dev/null; then
 			if ! jq -e --arg base "$DOCKER_POOL_BASE" '."default-address-pools" | any(.base == $base)' "$DOCKER_DAEMON_JSON" >/dev/null; then
-				warn "$DOCKER_DAEMON_JSON sudah punya default-address-pools sendiri; dibiarkan. Pastikan tidak tumpang tindih dengan $RUNOVA_SUBNET (jaringan pengguna Runova)."
+				warn "$DOCKER_DAEMON_JSON already has its own default-address-pools; left as is. Make sure they do not overlap $RUNOVA_SUBNET (the Runova user network)."
 			fi
 			return 0
 		fi
@@ -327,7 +468,7 @@ step_docker_daemon() {
 	fi
 	put_file "$DOCKER_DAEMON_JSON" 0644 <<<"$merged"
 	if ((PUT_CHANGED)); then
-		log "Jaringan bawaan Docker dipindah ke $DOCKER_POOL_BASE; Docker dijalankan ulang"
+		log "Docker default network moved to $DOCKER_POOL_BASE; restarting Docker"
 		systemctl restart docker
 	fi
 }
@@ -350,14 +491,14 @@ step_caddy() {
 	install -d -m 0755 "$(dirname "$CADDYFILE")" "$(dirname "$CADDY_DROPIN")"
 	if [[ -f $CADDYFILE ]] && ! caddyfile_wanted | cmp -s - "$CADDYFILE" && ! caddyfile_pristine "$CADDYFILE"; then
 		if ((!ASSUME_YES)); then
-			die "$CADDYFILE sudah diubah dan bukan bawaan paket. Runova mengatur Caddy lewat API dan memerlukan Caddyfile yang hanya berisi '{ admin localhost:2019 }'. Pindahkan situs Anda dulu, atau jalankan ulang dengan --yes untuk menyalin cadangan ke $CADDYFILE.runova-backup lalu menggantinya."
+			die "$CADDYFILE has been modified and is not the package default. Runova configures Caddy through its API and needs a Caddyfile that only contains '{ admin localhost:2019 }'. Move your sites elsewhere first, or run again with --yes to back it up to $CADDYFILE.runova-backup and replace it."
 		fi
 		backup="$CADDYFILE.runova-backup"
 		if [[ -e $backup ]]; then
 			backup="$backup.$(date +%s)"
 		fi
 		cp -p "$CADDYFILE" "$backup"
-		warn "Caddyfile lama disalin ke $backup"
+		warn "Old Caddyfile copied to $backup"
 	fi
 	put_file "$CADDYFILE" 0644 < <(caddyfile_wanted)
 	changed=$((changed | PUT_CHANGED))
@@ -379,7 +520,7 @@ EOF
 
 step_postgres() {
 	local conf_changed=0 hba_changed=0 hba="$PG_ETC/pg_hba.conf" hba_d="$PG_ETC/pg_hba.d"
-	[[ -f $hba ]] || die "$hba tidak ada; cluster PostgreSQL 18/main belum dibuat"
+	[[ -f $hba ]] || die "$hba does not exist; the PostgreSQL 18/main cluster has not been created"
 
 	install -d -m 0755 "$PG_ETC/conf.d"
 	put_file "$PG_ETC/conf.d/runova.conf" 0644 <<'EOF'
@@ -415,7 +556,7 @@ EOF
 		fi
 	fi
 
-	wait_for 30 pg_query 'SELECT 1' || die "PostgreSQL tidak menjawab dalam 30 detik"
+	wait_for 30 pg_query 'SELECT 1' || die "PostgreSQL did not respond within 30 seconds"
 	pg_script <<'EOF'
 DO $$
 BEGIN
@@ -456,7 +597,7 @@ sshd_ports() {
 step_firewall() {
 	local p status
 	if ((SKIP_FIREWALL)); then
-		log "ufw dilewati (--skip-firewall); buka sendiri port SSH, 80, 443, 20000-20999, 5432 (opsional), dan port panel"
+		notice "ufw skipped (--skip-firewall); open SSH, 80, 443, 20000-20999, 5432 (optional), and the panel port yourself"
 		return 0
 	fi
 	for p in $(sshd_ports); do
@@ -471,7 +612,7 @@ step_firewall() {
 	fi
 	status=$(ufw status)
 	if [[ $status == *"Status: inactive"* ]]; then
-		log "Mengaktifkan ufw (SSH sudah diizinkan)"
+		log "Enabling ufw (SSH is already allowed)"
 		ufw --force enable
 	fi
 }
@@ -482,9 +623,9 @@ step_panel() {
 		# Without --domain/--port a rerun keeps the address chosen at the first install.
 		as_runova admin exists || rc=$?
 		case $rc in
-		0) log "Alamat panel tidak diubah" ;;
+		0) log "Panel address left unchanged" ;;
 		1) PORT=$DEFAULT_PORT ;;
-		*) die "Tidak bisa membaca database Runova (kode $rc)" ;;
+		*) die "Could not read the Runova database (code $rc)" ;;
 		esac
 	fi
 	if [[ -n $DOMAIN ]]; then
@@ -507,15 +648,16 @@ step_admin() {
 	as_runova admin exists || rc=$?
 	case $rc in
 	0)
-		log "Admin sudah ada"
+		log "Admin already exists"
+		STEP_SKIPPED=1
 		return 0
 		;;
 	1) ;;
-	*) die "Tidak bisa membaca database Runova (kode $rc)" ;;
+	*) die "Could not read the Runova database (code $rc)" ;;
 	esac
-	out=$(as_runova admin create admin) || die "Gagal membuat admin"
+	out=$(as_runova admin create admin) || die "Could not create the admin"
 	ADMIN_PASSWORD=$(printf '%s\n' "$out" | sed -n 's/^Password: //p')
-	[[ -n $ADMIN_PASSWORD ]] || die "Admin dibuat tetapi password tidak terbaca dari keluaran runova"
+	[[ -n $ADMIN_PASSWORD ]] || die "The admin was created but the password could not be read from the runova output"
 }
 
 panel_listen() {
@@ -529,7 +671,7 @@ panel_listen() {
 }
 
 step_service() {
-	[[ -f $SRC_DIR/runova.service ]] || die "$SRC_DIR/runova.service tidak ditemukan"
+	[[ -f $SRC_DIR/runova.service ]] || die "$SRC_DIR/runova.service not found"
 	install -d -m 0755 "$(dirname "$UNIT")"
 	put_file "$UNIT" 0644 <"$SRC_DIR/runova.service"
 	systemctl daemon-reload
@@ -537,27 +679,61 @@ step_service() {
 	# Restart, not start: a running service must pick up the new binary.
 	systemctl restart runova
 	wait_for 30 curl -s -o /dev/null "http://$(panel_listen)/api/me" ||
-		die "Layanan runova tidak menjawab dalam 30 detik. Lihat: journalctl -u runova -n 50"
+		die "The runova service did not respond within 30 seconds. See: journalctl -u runova -n 50"
 }
 
 step_verify() {
-	as_runova check || die "Pemeriksaan runova gagal (baris 'fail' di atas). Lihat: journalctl -u runova -n 50"
+	as_runova check || die "The runova check failed (see the 'fail' lines above). See also: journalctl -u runova -n 50"
 }
 
 run_steps() {
-	step_packages
-	step_user_dirs
-	step_binary
-	step_secret
-	step_env_file
-	step_docker_daemon
-	step_caddy
-	step_postgres
-	step_panel
-	step_admin
-	step_firewall
-	step_service
-	step_verify
+	local list entry label
+	local -a steps=(
+		"step_packages|"
+		"step_user_dirs|Creating user and folders"
+		"step_binary|Installing the runova binary"
+		"step_secret|Creating the encryption key"
+		"step_env_file|Writing the configuration"
+		"step_docker_daemon|Configuring Docker"
+		"step_caddy|Configuring Caddy"
+		"step_postgres|Configuring PostgreSQL"
+		"step_panel|Setting the panel address"
+		"step_admin|Creating the admin user"
+		"step_firewall|Configuring the firewall"
+		"step_service|Starting the Runova service"
+		"step_verify|Verifying the installation (runova check)"
+	)
+	TOTAL_STEPS=${#steps[@]}
+	STEP_N=0
+
+	install -d -m 0755 "$(dirname "$LOG_FILE")"
+	(umask 077 && : >"$LOG_FILE")
+	chmod 0600 "$LOG_FILE"
+	exec {UI_OUT}>&1 {UI_ERR}>&2
+	case $PROGRESS in
+	tty) USE_SPINNER=1 ;;
+	plain) USE_SPINNER=0 ;;
+	*) if [[ -t 1 ]]; then USE_SPINNER=1; else USE_SPINNER=0; fi ;;
+	esac
+	# Ctrl+C and kill go through exit, so on_exit stops the spinner.
+	trap 'exit 130' INT
+	trap 'exit 143' TERM
+	notice "Details: $LOG_FILE"
+
+	for entry in "${steps[@]}"; do
+		label=${entry#*|}
+		if [[ -z $label ]]; then
+			# Only the package step has a label that depends on the machine.
+			missing_packages
+			if ((${#MISSING[@]} == 0)); then
+				label="Checking packages"
+			else
+				list=$(printf '%s, ' "${MISSING[@]}")
+				label="Installing packages (${list%, })"
+			fi
+		fi
+		run_step "${entry%%|*}" "$label"
+	done
 }
 
 detect_ip() {
@@ -575,26 +751,26 @@ summary() {
 		public=1
 	fi
 
-	printf '\nRunova %s siap.\n' "${VERSION:-}"
+	printf '\nRunova %s is ready.\n' "${VERSION:-}"
 	if [[ -n $ADMIN_PASSWORD ]]; then
 		if [[ -n $DOMAIN ]]; then
-			printf '\nAlamat panel : https://%s\n' "$DOMAIN"
-			printf 'Arahkan DNS %s ke IP server ini; Caddy menerbitkan sertifikat HTTPS sendiri.\n' "$DOMAIN"
+			printf '\nPanel address: https://%s\n' "$DOMAIN"
+			printf 'Point the DNS of %s at this server'"'"'s IP; Caddy issues the HTTPS certificate itself.\n' "$DOMAIN"
 		else
-			host=${ip:-<IP server>}
-			printf '\nAlamat panel : https://%s:%s\n' "$host" "$PORT"
-			printf 'Sertifikat dibuat Caddy sendiri, jadi peramban memberi peringatan; lanjutkan saja.\n'
+			host=${ip:-<server IP>}
+			printf '\nPanel address: https://%s:%s\n' "$host" "$PORT"
+			printf 'Caddy creates the certificate itself, so the browser will show a warning; just continue.\n'
 		fi
 		printf 'Username     : admin\n'
 		printf 'Password     : %s\n' "$ADMIN_PASSWORD"
-		printf '\nPassword ini hanya ditampilkan sekali. Bila hilang: sudo -u runova env RUNOVA_DATA=/var/lib/runova runova admin reset-password admin\n'
+		printf '\nThis password is shown only once. If you lose it: sudo -u runova env RUNOVA_DATA=/var/lib/runova runova admin reset-password admin\n'
 	else
-		printf 'Runova diperbarui. Data, kunci, admin, dan alamat panel tidak diubah.\n'
+		printf 'Runova was updated. Data, keys, admin, and panel address are unchanged.\n'
 	fi
 	if ((!public)); then
-		printf '\nServer ini tampaknya tidak punya IP publik (IP: %s). Panel hanya terjangkau dari jaringan yang sama.\n' "${ip:-tidak terdeteksi}"
-		printf 'Untuk memberi domain ke aplikasi tanpa IP publik, pakai Cloudflare Tunnel (lihat README).\n'
-		printf 'Bila server punya IP publik lewat NAT, jalankan ulang dengan --public-ip <ip>.\n'
+		printf '\nThis server does not seem to have a public IP (IP: %s). The panel is only reachable from the same network.\n' "${ip:-not detected}"
+		printf 'To give an app a domain without a public IP, use a Cloudflare Tunnel (see the README).\n'
+		printf 'If the server has a public IP behind NAT, run again with --public-ip <ip>.\n'
 	fi
 }
 
@@ -602,14 +778,16 @@ INSTALL_DONE=0
 
 on_exit() {
 	local status=$?
+	spinner_stop
 	if ((status != 0 && !INSTALL_DONE)); then
-		printf '\nPemasangan berhenti sebelum selesai. Perbaiki masalah di atas lalu jalankan ulang perintah yang sama; langkah yang sudah selesai dilewati.\n' >&2
+		fail_step
+		printf '\nThe installation stopped before finishing. Fix the problem above and run the same command again; steps that are already done are skipped.\n' >&"$UI_ERR"
 	fi
 }
 
 main() {
 	parse_args "$@"
-	((EUID == 0)) || die "Jalankan sebagai root: sudo ./install.sh"
+	((EUID == 0)) || die "Run as root: sudo ./install.sh"
 	check_os
 	confirm_plan
 	trap on_exit EXIT

@@ -24,22 +24,22 @@ import (
 	"runova/web"
 )
 
-const usage = `Penggunaan: runova <perintah>
+const usage = `Usage: runova <command>
 
-  serve                          jalankan panel
-  version                        cetak versi
-  check                          periksa Docker, Caddy, PostgreSQL, kunci, dan izin folder
-  admin create <username>        buat admin dengan password acak
-  admin reset-password <user>    buat password acak baru
-  admin exists                   keluar 0 bila sudah ada admin, 1 bila belum
-  db version                     cetak versi skema database dan versi tertinggi binary ini
+  serve                          run the panel
+  version                        print the version
+  check                          check Docker, Caddy, PostgreSQL, the key and folder permissions
+  admin create <username>        create an admin with a random password
+  admin reset-password <user>    set a new random password
+  admin exists                   exit 0 if an admin exists, 1 if none does
+  db version                     print the database schema version and the newest one this binary knows
   update [--version X.Y.Z] [--check] [--yes]
-                                 perbarui Runova ke rilis terbaru (butuh sudo; --check hanya memeriksa)
-  rollback [--yes]               kembali ke versi sebelumnya beserta databasenya (butuh sudo)
-  keygen                         buat kunci enkripsi rahasia
-  panel set --domain <domain>    alamat panel di domain (HTTPS otomatis)
-  panel set --port <port>        alamat panel di IP:port (HTTPS)
-  panel set --public-ip <ip>     IP publik server (boleh bersama --domain/--port)
+                                 update Runova to the latest release (needs sudo; --check only checks)
+  rollback [--yes]               go back to the previous version and its database (needs sudo)
+  keygen                         create the secret encryption key
+  panel set --domain <domain>    serve the panel at a domain (automatic HTTPS)
+  panel set --port <port>        serve the panel at IP:port (HTTPS)
+  panel set --public-ip <ip>     the server's public IP (may be combined with --domain/--port)
 `
 
 // version is set at build time with -ldflags "-X main.version=<versi>".
@@ -75,10 +75,10 @@ func run(args []string, getenv func(string) string, stdout, stderr io.Writer) in
 		return panel(cfg, args[1:], stdout, stderr)
 	case "keygen":
 		if err := secret.GenerateKey(cfg.SecretKeyPath); err != nil {
-			fmt.Fprintf(stderr, "Gagal membuat kunci: %v\n", err)
+			fmt.Fprintf(stderr, "Could not create the key: %v\n", err)
 			return 1
 		}
-		fmt.Fprintf(stdout, "Kunci dibuat: %s\n", cfg.SecretKeyPath)
+		fmt.Fprintf(stdout, "Key created: %s\n", cfg.SecretKeyPath)
 		return 0
 	default:
 		fmt.Fprint(stderr, usage)
@@ -96,12 +96,12 @@ func serve(cfg config.Config, stderr io.Writer) int {
 	}
 	box, err := secret.LoadKey(cfg.SecretKeyPath)
 	if err != nil {
-		fmt.Fprintf(stderr, "Tidak bisa memuat kunci rahasia: %v\nBuat dengan `runova keygen`.\n", err)
+		fmt.Fprintf(stderr, "Could not load the secret key: %v\nCreate it with `runova keygen`.\n", err)
 		return 1
 	}
 	st, err := store.Open(cfg.DBPath())
 	if err != nil {
-		fmt.Fprintf(stderr, "Tidak bisa membuka database: %v\n", err)
+		fmt.Fprintf(stderr, "Could not open the database: %v\n", err)
 		return 1
 	}
 	defer st.Close()
@@ -112,7 +112,7 @@ func serve(cfg config.Config, stderr io.Writer) int {
 	engine, dockerCheck := newEngine(cfg)
 	caddyClient, caddyCheck := newCaddyLoader(cfg)
 	if err := engine.Ping(ctx); err != nil {
-		fmt.Fprintf(stderr, "Docker tidak bisa diakses: %v\n", err)
+		fmt.Fprintf(stderr, "Cannot reach Docker: %v\n", err)
 		return 1
 	}
 	panelUpstream, err := apps.PanelUpstream(cfg.Listen)
@@ -145,7 +145,7 @@ func serve(cfg config.Config, stderr io.Writer) int {
 		dbSvc, closePG, err = openDatabases(ctx, cfg, st, box)
 	}
 	if err != nil {
-		fmt.Fprintf(stderr, "Konfigurasi PostgreSQL tidak valid: %v\n", err)
+		fmt.Fprintf(stderr, "Invalid PostgreSQL configuration: %v\n", err)
 		return 1
 	}
 	defer closePG()

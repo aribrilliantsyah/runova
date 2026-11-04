@@ -2,7 +2,7 @@
 # shellcheck disable=SC2029 # the remote command is built on this side on purpose (quoted with %q)
 # Builds a release and installs (or updates) Runova on an Ubuntu 26.04 server over SSH.
 #
-#   scripts/deploy.sh [opsi] user@host [opsi install.sh...]
+#   scripts/deploy.sh [options] user@host [install.sh options...]
 #
 # Run it from the developer machine. Everything after user@host that this script
 # does not know is handed to install.sh on the server (--domain, --port, --yes, ...).
@@ -10,7 +10,7 @@
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
 die() {
-	printf 'Galat: %s\n' "$*" >&2
+	printf 'Error: %s\n' "$*" >&2
 	exit 1
 }
 
@@ -18,23 +18,22 @@ log() { printf '==> %s\n' "$*"; }
 
 usage() {
 	cat <<'EOF'
-Penggunaan: scripts/deploy.sh [opsi] user@host [opsi install.sh...]
+Usage: scripts/deploy.sh [options] user@host [install.sh options...]
 
-Membangun rilis, menyalinnya ke server lewat SSH, memeriksa checksum, lalu
-menjalankan install.sh di server dengan sudo. Perintah yang sama dipakai untuk
-pembaruan.
+Builds a release, copies it to the server over SSH, verifies the checksum, and
+runs install.sh on the server with sudo. The same command is used to update.
 
-Opsi deploy (sebelum atau sesudah user@host):
-  --version <x.y.z>     versi rilis (bawaan: dari "git describe --tags --always --dirty")
-  -p, --ssh-port <n>    port SSH server (bawaan: 22)
-  -i, --identity <file> kunci privat SSH
-  -h, --help            tampilkan bantuan ini
+Deploy options (before or after user@host):
+  --version <x.y.z>     release version (default: from "git describe --tags --always --dirty")
+  -p, --ssh-port <n>    SSH port of the server (default: 22)
+  -i, --identity <file> SSH private key
+  -h, --help            show this help
 
-Opsi SSH tambahan lewat variabel RUNOVA_SSH_OPTS, misalnya:
+Extra SSH options go in the RUNOVA_SSH_OPTS variable, for example:
   RUNOVA_SSH_OPTS="-o ProxyJump=bastion" scripts/deploy.sh admin@10.0.0.5
 
-Opsi lain diteruskan ke install.sh (lihat ./install.sh --help), misalnya:
-  scripts/deploy.sh admin@203.0.113.5 --domain panel.contoh.id
+Other options are passed on to install.sh (see ./install.sh --help), for example:
+  scripts/deploy.sh admin@203.0.113.5 --domain panel.example.com
   scripts/deploy.sh admin@203.0.113.5 --port 8443 --public-ip 203.0.113.5
 EOF
 }
@@ -42,7 +41,7 @@ EOF
 # default_version derives a version release.sh accepts (X.Y.Z[-suffix]) from git.
 default_version() {
 	local raw
-	raw=$(cd "$root" && git describe --tags --always --dirty 2>/dev/null) || die "Versi tidak bisa ditentukan dari git; beri --version x.y.z"
+	raw=$(cd "$root" && git describe --tags --always --dirty 2>/dev/null) || die "Could not determine the version from git; pass --version x.y.z"
 	raw=${raw#v}
 	if [[ $raw =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
 		printf '%s\n' "$raw"
@@ -64,7 +63,7 @@ parse_args() {
 			exit 0
 			;;
 		--version | -p | --ssh-port | -i | --identity)
-			(($# >= 2)) || die "Opsi $1 butuh nilai"
+			(($# >= 2)) || die "Option $1 needs a value"
 			case "$1" in
 			--version) version=$2 ;;
 			-p | --ssh-port) ssh_port=$2 ;;
@@ -85,7 +84,7 @@ parse_args() {
 			shift
 			;;
 		-*)
-			[[ -n $target ]] || die "Opsi tidak dikenal sebelum user@host: $1 (lihat --help)"
+			[[ -n $target ]] || die "Unknown option before user@host: $1 (see --help)"
 			install_args=("$@")
 			return 0
 			;;
@@ -113,14 +112,14 @@ parse_args "$@"
 	usage >&2
 	exit 2
 }
-[[ $target == *@* && $target != @* && $target != *@ ]] || die "Tujuan harus berbentuk user@host, misalnya admin@203.0.113.5"
-[[ -z $ssh_port || $ssh_port =~ ^[0-9]+$ ]] || die "Port SSH tidak valid: $ssh_port"
-[[ -z $identity || -f $identity ]] || die "Berkas kunci tidak ditemukan: $identity"
+[[ $target == *@* && $target != @* && $target != *@ ]] || die "The target must look like user@host, for example admin@203.0.113.5"
+[[ -z $ssh_port || $ssh_port =~ ^[0-9]+$ ]] || die "Invalid SSH port: $ssh_port"
+[[ -z $identity || -f $identity ]] || die "Key file not found: $identity"
 version=${version:-$(default_version)}
-[[ $version =~ ^[0-9]+\.[0-9]+\.[0-9]+([-.][0-9A-Za-z.]+)?$ ]] || die "Versi tidak valid: $version (contoh: 0.1.0)"
+[[ $version =~ ^[0-9]+\.[0-9]+\.[0-9]+([-.][0-9A-Za-z.]+)?$ ]] || die "Invalid version: $version (example: 0.1.0)"
 
 for cmd in ssh scp sha256sum go; do
-	command -v "$cmd" >/dev/null || die "Perintah '$cmd' tidak ditemukan di mesin ini"
+	command -v "$cmd" >/dev/null || die "Command '$cmd' not found on this machine"
 done
 
 work=$(mktemp -d "${TMPDIR:-/tmp}/runova-deploy.XXXXXX")
@@ -159,7 +158,7 @@ cleanup() {
 }
 trap cleanup EXIT
 
-log "Memeriksa server $target"
+log "Checking server $target"
 info=""
 rc=0
 info=$(
@@ -180,9 +179,9 @@ EOF
 ) || rc=$?
 if ((rc != 0)); then
 	if ((rc == 255)); then
-		die "Tidak bisa tersambung ke $target lewat SSH. Periksa alamat/IP, port (pakai -p bila bukan 22), kunci (pakai -i), dan firewall penyedia server. Coba dulu: ssh ${ssh_port:+-p $ssh_port }$target"
+		die "Could not connect to $target over SSH. Check the address/IP, the port (use -p if it is not 22), the key (use -i), and the provider's firewall. Try first: ssh ${ssh_port:+-p $ssh_port }$target"
 	fi
-	die "Pemeriksaan di server gagal (kode $rc). Pastikan $target punya shell bash"
+	die "The check on the server failed (code $rc). Make sure $target has a bash shell"
 fi
 
 field() { sed -n "s/^$1=//p" <<<"$info" | head -n 1; }
@@ -193,42 +192,42 @@ remote_uid=$(field UID)
 sudo_mode=$(field SUDO)
 
 if [[ $os_id != ubuntu || $os_version != 26.04 ]]; then
-	die "Server memakai ${os_id:-OS tidak dikenal} ${os_version}, sedangkan Runova hanya mendukung Ubuntu Server 26.04. Pasang ulang server dengan Ubuntu Server 26.04 LTS."
+	die "The server runs ${os_id:-an unknown OS} ${os_version}, but Runova only supports Ubuntu Server 26.04. Reinstall the server with Ubuntu Server 26.04 LTS."
 fi
 if [[ $os_arch != x86_64 ]]; then
-	die "Server berarsitektur $os_arch, sedangkan Runova hanya mendukung amd64 (x86_64). Pakai server amd64."
+	die "The server architecture is $os_arch, but Runova only supports amd64 (x86_64). Use an amd64 server."
 fi
 sudo_cmd="sudo"
 if [[ $remote_uid == 0 ]]; then
 	sudo_cmd=""
 elif [[ $sudo_mode == none ]]; then
-	die "User ${target%@*} tidak punya hak sudo di server. Di server, jalankan sebagai root: usermod -aG sudo ${target%@*}; lalu masuk ulang dan ulangi perintah ini."
+	die "User ${target%@*} has no sudo rights on the server. On the server, as root, run: usermod -aG sudo ${target%@*}; then log in again and repeat this command."
 fi
 
-log "Membangun rilis $version"
-(cd "$root" && scripts/release.sh "$version") >/dev/null || die "Pembangunan rilis gagal; jalankan scripts/release.sh $version untuk melihat sebabnya"
+log "Building release $version"
+(cd "$root" && scripts/release.sh "$version") >/dev/null || die "Building the release failed; run scripts/release.sh $version to see why"
 archive="runova-$version-linux-amd64.tar.gz"
-[[ -f $root/dist/$archive && -f $root/dist/SHA256SUMS ]] || die "dist/$archive atau dist/SHA256SUMS tidak ada setelah pembangunan"
+[[ -f $root/dist/$archive && -f $root/dist/SHA256SUMS ]] || die "dist/$archive or dist/SHA256SUMS is missing after the build"
 
 remote_dir=$(remote_sh "$version" <<'EOF'
 mktemp -d "/tmp/runova-$1.XXXXXX"
 EOF
-) || die "Gagal membuat folder sementara di server"
-[[ $remote_dir == /tmp/runova-* ]] || die "Folder sementara di server tidak terduga: $remote_dir"
+) || die "Could not create a temporary folder on the server"
+[[ $remote_dir == /tmp/runova-* ]] || die "Unexpected temporary folder on the server: $remote_dir"
 
-log "Menyalin $archive dan SHA256SUMS ke $target:$remote_dir"
+log "Copying $archive and SHA256SUMS to $target:$remote_dir"
 scp -q "${scp_args[@]}" "$root/dist/$archive" "$root/dist/SHA256SUMS" "$target:$remote_dir/" ||
-	die "Penyalinan ke server gagal. Pastikan scp/sftp diizinkan untuk ${target%@*} dan disk /tmp server cukup"
+	die "Copying to the server failed. Make sure scp/sftp is allowed for ${target%@*} and the server's /tmp has enough space"
 
-log "Memeriksa checksum dan mengekstrak di server"
-remote_sh "$remote_dir" "$archive" <<'EOF' || die "Checksum tidak cocok atau arsip rusak; ulangi perintah ini. Bila tetap gagal, bangun ulang dengan scripts/release.sh."
+log "Verifying the checksum and extracting on the server"
+remote_sh "$remote_dir" "$archive" <<'EOF' || die "Checksum mismatch or corrupt archive; repeat this command. If it keeps failing, rebuild with scripts/release.sh."
 set -e
 cd "$1"
 sha256sum -c SHA256SUMS
 tar xzf "$2"
 EOF
 
-log "Menjalankan install.sh di server (sudo bisa meminta password $(printf '%s' "${target%@*}"))"
+log "Running install.sh on the server (sudo may ask for the password of $(printf '%s' "${target%@*}"))"
 tty_flag=-t
 [[ -t 0 ]] || tty_flag=-tt
 install_cmd="cd $(printf '%q' "$remote_dir/runova-$version-linux-amd64") && $sudo_cmd ./install.sh"
@@ -239,5 +238,5 @@ fi
 rc=0
 ssh "$tty_flag" "${ssh_args[@]}" "$target" "$install_cmd" || rc=$?
 if ((rc != 0)); then
-	die "install.sh di server berhenti dengan kode $rc. Baca pesan di atas, perbaiki, lalu jalankan ulang perintah yang sama; langkah yang sudah selesai dilewati."
+	die "install.sh on the server stopped with code $rc. Read the messages above, fix the problem, and run the same command again; steps that are already done are skipped."
 fi

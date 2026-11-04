@@ -76,7 +76,7 @@ func findDockerInit(cfg config.Config) (string, error) {
 			return p, nil
 		}
 	}
-	return "", errors.New("docker-init tidak ditemukan (paket docker.io menyediakannya)")
+	return "", errors.New("docker-init not found (the docker.io package provides it)")
 }
 
 func postgresVersion(ctx context.Context, cfg config.Config) (string, error) {

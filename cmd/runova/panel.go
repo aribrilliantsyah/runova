@@ -44,7 +44,7 @@ func panel(cfg config.Config, args []string, stdout, stderr io.Writer) int {
 
 	st, err := store.Open(cfg.DBPath())
 	if err != nil {
-		fmt.Fprintf(stderr, "Tidak bisa membuka database: %v\n", err)
+		fmt.Fprintf(stderr, "Could not open the database: %v\n", err)
 		return 1
 	}
 	defer st.Close()
@@ -52,7 +52,7 @@ func panel(cfg config.Config, args []string, stdout, stderr io.Writer) int {
 	ctx := context.Background()
 	settings, err := st.Settings(ctx)
 	if err != nil {
-		fmt.Fprintf(stderr, "Gagal membaca setelan: %v\n", err)
+		fmt.Fprintf(stderr, "Could not read settings: %v\n", err)
 		return 1
 	}
 	if domainSet || portSet {
@@ -61,7 +61,7 @@ func panel(cfg config.Config, args []string, stdout, stderr io.Writer) int {
 	if ipSet {
 		addr, err := netip.ParseAddr(*publicIP)
 		if err != nil {
-			fmt.Fprintf(stderr, "IP publik tidak valid: %q\n", *publicIP)
+			fmt.Fprintf(stderr, "Invalid public IP: %q\n", *publicIP)
 			return 1
 		}
 		settings.PublicIP = addr.String()
@@ -74,18 +74,18 @@ func panel(cfg config.Config, args []string, stdout, stderr io.Writer) int {
 		}
 		taken, err := st.DomainHostTaken(ctx, host)
 		if err != nil {
-			fmt.Fprintf(stderr, "Gagal memeriksa domain: %v\n", err)
+			fmt.Fprintf(stderr, "Could not check the domain: %v\n", err)
 			return 1
 		}
 		if taken {
-			fmt.Fprintln(stderr, "Domain sudah dipakai aplikasi")
+			fmt.Fprintln(stderr, "Domain is already used by an app")
 			return 1
 		}
 		settings.PanelDomain = host
 	} else if portSet {
 		n, err := strconv.Atoi(*port)
 		if err != nil {
-			fmt.Fprintf(stderr, "Port tidak valid: %q\n", *port)
+			fmt.Fprintf(stderr, "Invalid port: %q\n", *port)
 			return 1
 		}
 		settings.PanelPort = n
@@ -96,11 +96,11 @@ func panel(cfg config.Config, args []string, stdout, stderr io.Writer) int {
 	}
 	switch {
 	case domainSet:
-		fmt.Fprintf(stdout, "Alamat panel: https://%s\n", settings.PanelDomain)
+		fmt.Fprintf(stdout, "Panel address: https://%s\n", settings.PanelDomain)
 	case portSet:
-		fmt.Fprintf(stdout, "Alamat panel: https://<IP server>:%d\n", settings.PanelPort)
+		fmt.Fprintf(stdout, "Panel address: https://<server IP>:%d\n", settings.PanelPort)
 	default:
-		fmt.Fprintf(stdout, "IP publik: %s\n", settings.PublicIP)
+		fmt.Fprintf(stdout, "Public IP: %s\n", settings.PublicIP)
 	}
 	return 0
 }

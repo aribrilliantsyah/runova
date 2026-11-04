@@ -20,7 +20,7 @@ func TestDBVersion(t *testing.T) {
 	}
 
 	r := runIn(t, env, "db", "version")
-	if r.code != 0 || !strings.Contains(r.stdout, "Skema database: 0 (belum dibuat)\n") || !strings.Contains(r.stdout, "Skema tertinggi binary ini: ") {
+	if r.code != 0 || !strings.Contains(r.stdout, "Database schema: 0 (not created yet)\n") || !strings.Contains(r.stdout, "Highest schema of this binary: ") {
 		t.Fatalf("missing database: %+v", r)
 	}
 	if _, err := os.Stat(dbPath); !os.IsNotExist(err) {
@@ -31,7 +31,7 @@ func TestDBVersion(t *testing.T) {
 		t.Fatalf("create: %+v", r)
 	}
 	r = runIn(t, env, "db", "version")
-	want := "Skema database: " + strconv.Itoa(latest) + "\nSkema tertinggi binary ini: " + strconv.Itoa(latest) + "\n"
+	want := "Database schema: " + strconv.Itoa(latest) + "\nHighest schema of this binary: " + strconv.Itoa(latest) + "\n"
 	if r.code != 0 || r.stdout != want {
 		t.Fatalf("stdout = %q, want %q (code %d, stderr %q)", r.stdout, want, r.code, r.stderr)
 	}
@@ -49,7 +49,7 @@ func TestDBVersionOfPreMigrationDatabase(t *testing.T) {
 	legacy.Close()
 
 	r := runIn(t, env, "db", "version")
-	if r.code != 0 || !strings.Contains(r.stdout, "Skema database: 0 (belum dimigrasi; dimigrasi saat Runova dibuka)\n") {
+	if r.code != 0 || !strings.Contains(r.stdout, "Database schema: 0 (not migrated yet; migrated when Runova opens it)\n") {
 		t.Fatalf("stdout = %q, code %d", r.stdout, r.code)
 	}
 }
@@ -57,7 +57,7 @@ func TestDBVersionOfPreMigrationDatabase(t *testing.T) {
 func TestDBUsage(t *testing.T) {
 	env := map[string]string{"RUNOVA_DATA": t.TempDir()}
 	for _, args := range [][]string{{"db"}, {"db", "nope"}, {"db", "version", "extra"}} {
-		if r := runIn(t, env, args...); r.code != 2 || !strings.Contains(r.stderr, "Penggunaan:") {
+		if r := runIn(t, env, args...); r.code != 2 || !strings.Contains(r.stderr, "Usage:") {
 			t.Errorf("%v: %+v", args, r)
 		}
 	}
