@@ -34,6 +34,8 @@ type Settings struct {
 	PanelPort   int    `json:"panel_port"`
 	// PGAllowedNets lists extra CIDRs allowed to reach PostgreSQL from outside Docker.
 	PGAllowedNets []string `json:"pg_allowed_nets"`
+	// UpdateCheck lets the server look for a newer Runova release.
+	UpdateCheck bool `json:"update_check"`
 }
 
 func defaultSettings() Settings {
@@ -49,6 +51,7 @@ func defaultSettings() Settings {
 		PortMax:           20999,
 		Runtimes:          rt,
 		PGAllowedNets:     []string{},
+		UpdateCheck:       true,
 	}
 }
 

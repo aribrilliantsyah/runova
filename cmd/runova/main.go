@@ -153,6 +153,8 @@ func serve(cfg config.Config, stderr io.Writer) int {
 	go svc.WatchDomains(ctx)
 	go cleanupLoop(ctx, st, cfg.DataDir)
 	go dbSvc.RunSchedule(ctx)
+	updates := newUpdateChecker(cfg, st)
+	go updates.Run(ctx)
 
 	var deploys sync.WaitGroup
 	srv := &http.Server{
@@ -161,6 +163,7 @@ func serve(cfg config.Config, stderr io.Writer) int {
 			Store: st, Now: time.Now, DataDir: cfg.DataDir, Apps: svc, DBs: dbSvc, Context: ctx, Deploys: &deploys,
 			Static: web.FS,
 			Health: api.Health{Docker: dockerCheck, Caddy: caddyCheck, Postgres: postgresCheck(dbSvc)},
+			Update: updates,
 		}),
 		ReadHeaderTimeout: 10 * time.Second,
 	}

@@ -2,6 +2,7 @@ package store_test
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"path/filepath"
 	"reflect"
@@ -226,6 +227,41 @@ func TestSettingsPersist(t *testing.T) {
 	want.PortMin = 10
 	if err := s.SetSettings(ctx, want); err == nil {
 		t.Fatal("SetSettings accepted invalid settings")
+	}
+}
+
+func TestSettingsUpdateCheck(t *testing.T) {
+	ctx := context.Background()
+	path := filepath.Join(t.TempDir(), "runova.db")
+	s, err := store.Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	if got, _ := s.Settings(ctx); !got.UpdateCheck {
+		t.Fatal("update_check is off on a fresh database")
+	}
+
+	// Settings saved by a version that had no update_check key keep the default.
+	raw, err := sql.Open("sqlite", path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer raw.Close()
+	if _, err := raw.Exec(`INSERT INTO settings(id, value) VALUES(1, ?)`, `{"upload_limit_mb":80}`); err != nil {
+		t.Fatal(err)
+	}
+	got, err := s.Settings(ctx)
+	if err != nil || got.UploadLimitMB != 80 || !got.UpdateCheck {
+		t.Fatalf("old settings = %+v, %v; want upload 80 and update_check on", got, err)
+	}
+
+	got.UpdateCheck = false
+	if err := s.SetSettings(ctx, got); err != nil {
+		t.Fatal(err)
+	}
+	if got, _ := s.Settings(ctx); got.UpdateCheck {
+		t.Fatal("update_check=false did not persist")
 	}
 }
 
