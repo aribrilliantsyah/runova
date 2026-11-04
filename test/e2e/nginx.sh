@@ -28,8 +28,12 @@ NGINX=runova-e2e-nginx
 CLIENT_A=runova-e2e-client-a
 CLIENT_B=runova-e2e-client-b
 PANEL_NAME=panel.localhost
-HOSTING_NAME=lab.localhost
-SUB_NAME=cv-lab.$HOSTING_NAME
+# Not under .localhost: Caddy issues *.localhost names from its internal CA on
+# its own, which hides what happens to a real name. Caddy behind nginx can never
+# answer a public CA's challenge (and this lab is not reachable anyway).
+HOSTING_NAME=app.runova-lab.test
+SUB_LABEL=startboom
+SUB_NAME=$SUB_LABEL.$HOSTING_NAME
 CONF="$REPO/docs/examples/nginx-runova.conf"
 CLIENT_PASSWORD_WRONG="salah-salah-salah"
 
@@ -123,8 +127,9 @@ HOSTING_ID=$(jq -r .id <<<"$BODY")
 HELLO=$(build_hello nginx)
 upload "$ADMIN_JAR" "$HELLO"
 create_app "$ADMIN_JAR" "$UP" hello-lab '{}'
-req "$ADMIN_JAR" POST "/api/apps/$APP_ID/domains" "$(jq -nc --argjson h "$HOSTING_ID" '{hosting_domain_id: $h, label: "cv-lab"}')"
+req "$ADMIN_JAR" POST "/api/apps/$APP_ID/domains" "$(jq -nc --argjson h "$HOSTING_ID" --arg l "$SUB_LABEL" '{hosting_domain_id: $h, label: $l}')"
 expect 201
+DOMAIN_ID=$(jq -r .id <<<"$BODY")
 pass "domain panel $PANEL_NAME, proxy tepercaya $NGINX_IP, domain hosting $HOSTING_NAME, aplikasi hello-lab (id $APP_ID)"
 
 # ---------------------------------------------------------------------------
@@ -180,14 +185,23 @@ grep -aq 'listening' <<<"$ws" || fail "WebSocket tidak mengirim baris log aplika
 pass "WebSocket log: 101 Switching Protocols dan baris log mengalir"
 
 # ---------------------------------------------------------------------------
-scenario "8 hosting subdomain"
+scenario "8 new hosting subdomain"
 sub=""
 for ((i = 0; i < 60; i++)); do
 	sub=$(client "$CLIENT_A" "https://$SUB_NAME/" 2>/dev/null) && [[ $sub == "hello nginx" ]] && break
 	sleep 1
 done
-[[ $sub == "hello nginx" ]] || fail "https://$SUB_NAME/ lewat nginx = '$sub' (diharapkan hello nginx)"
-pass "$SUB_NAME menjawab hello nginx lewat sertifikat wildcard nginx"
+if [[ $sub != "hello nginx" ]]; then
+	code=$(client "$CLIENT_A" -o /dev/null -w '%{http_code}' "https://$SUB_NAME/") || code=000
+	req "$ADMIN_JAR" POST "/api/apps/$APP_ID/domains/$DOMAIN_ID/check"
+	fail "https://$SUB_NAME/ lewat nginx = $code (diharapkan 200 hello nginx); status domain: $(jq -c '{status, detail}' <<<"$BODY")"
+fi
+issuer=$(docker exec "$NGINX" sh -c "echo | openssl s_client -connect $GATEWAY:443 -servername $SUB_NAME 2>/dev/null | openssl x509 -noout -issuer" 2>/dev/null) || true
+[[ $issuer == *"Caddy Local Authority"* ]] || fail "sertifikat Caddy untuk $SUB_NAME: '$issuer' (diharapkan CA internal Caddy)"
+req "$ADMIN_JAR" POST "/api/apps/$APP_ID/domains/$DOMAIN_ID/check"
+expect 200
+[[ $(jq -r .status <<<"$BODY") == active ]] || fail "status domain $SUB_NAME: $BODY (diharapkan active)"
+pass "$SUB_NAME menjawab hello nginx lewat sertifikat wildcard nginx; Caddy memakai CA internal; status domain active"
 
 # ---------------------------------------------------------------------------
 scenario "9 activity records the client IP"
