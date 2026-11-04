@@ -107,7 +107,6 @@ func New(cfg Config) http.Handler {
 	mux.HandleFunc("PUT /api/settings", admin(s.putSettings))
 	mux.HandleFunc("GET /api/server", admin(s.serverStatus))
 	mux.HandleFunc("GET /api/info", user(s.info))
-	mux.HandleFunc("GET /api/usage", admin(s.usage))
 	if s.update != nil {
 		mux.HandleFunc("GET /api/update", admin(s.updateStatus))
 	}
