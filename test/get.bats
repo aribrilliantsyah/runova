@@ -49,6 +49,8 @@ make_release() {
 	mkdir -p "$stage" "$dir"
 	cat >"$stage/install.sh" <<EOF
 #!/usr/bin/env bash
+if [[ \$1 == --plan ]]; then echo "PLAN $v"; exit 0; fi
+[[ -t 0 ]] && echo "installer stdin is a terminal" >&2
 printf '%s|%s\n' "$v" "\$*" >"\$OUT"
 EOF
 	chmod +x "$stage/install.sh"
@@ -65,12 +67,39 @@ EOF
 }
 
 @test "--version picks a release, with or without the v" {
-	run bash "$GET" --version v0.1.0 --port 8443
+	run bash "$GET" --version v0.1.0 --port 8443 --yes
 	[ "$status" -eq 0 ]
-	[ "$(cat "$OUT")" = "0.1.0|--port 8443" ]
-	run bash "$GET" --version=0.1.0
+	[ "$(cat "$OUT")" = "0.1.0|--port 8443 --yes" ]
+	run bash "$GET" --version=0.1.0 -y
 	[ "$status" -eq 0 ]
-	[ "$(cat "$OUT")" = "0.1.0|" ]
+	[ "$(cat "$OUT")" = "0.1.0|-y" ]
+}
+
+@test "without --yes and without a terminal it refuses before installing" {
+	run setsid bash "$GET" --port 8443
+	[ "$status" -ne 0 ]
+	[[ $output == *"No terminal to ask on"* ]]
+	[ ! -e "$OUT" ]
+}
+
+@test "asks on the terminal, then runs the installer with --yes and no terminal on stdin" {
+	command -v script >/dev/null || skip "script(1) is needed for a pseudo-terminal"
+	# The answer goes to the pseudo-terminal, like a user typing it; stdin of
+	# bash is the script itself, as under `curl | sudo bash`.
+	run bash -c "{ sleep 1; printf 'y\n'; } | script -qec 'bash -s -- --port 8443 <\"$GET\"' /dev/null"
+	[ "$status" -eq 0 ]
+	[[ $output == *"PLAN 0.2.0"* ]]
+	[[ $output == *"Continue? [y/N]"* ]]
+	[[ $output != *"installer stdin is a terminal"* ]]
+	[ "$(cat "$OUT")" = "0.2.0|--port 8443 --yes" ]
+}
+
+@test "answering no on the terminal installs nothing" {
+	command -v script >/dev/null || skip "script(1) is needed for a pseudo-terminal"
+	run bash -c "{ sleep 1; printf 'n\n'; } | script -qec 'bash -s -- --port 8443 <\"$GET\"' /dev/null"
+	[ "$status" -ne 0 ]
+	[[ $output == *"Canceled"* ]]
+	[ ! -e "$OUT" ]
 }
 
 @test "works when piped into bash, like curl | bash" {

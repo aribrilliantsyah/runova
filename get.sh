@@ -62,13 +62,34 @@ main() {
 	tar -xzf "$work/$name.tar.gz" -C "$work"
 	(cd "$work/$name" && sha256sum -c SHA256SUMS >/dev/null) || die "Checksum of the archive contents does not match"
 
-	# install.sh asks for confirmation on a terminal; under `curl | bash` stdin is the
-	# script, so give it the real terminal when there is one.
-	if [[ -t 1 && -r /dev/tty ]] && { : </dev/tty; } 2>/dev/null; then
-		"$work/$name/install.sh" "${args[@]}" </dev/tty
-	else
-		"$work/$name/install.sh" "${args[@]}"
+	# Under `curl | sudo bash`, stdin is the script. Ask here, reading the answer
+	# from /dev/tty, then run the installer with --yes and stdin from /dev/null.
+	# Handing /dev/tty to a child instead stops it on sudo-rs, Ubuntu 26.04's
+	# default sudo: sudo-rs runs the command on its own pty, whose foreground
+	# process group is the bash reading the script, so the child's terminal read
+	# gets SIGTTIN (observed; classic sudo 1.9.17 does not do this).
+	local installer="$work/$name/install.sh"
+	if ! has_yes "${args[@]}" && ! has_help "${args[@]}"; then
+		{ : </dev/tty; } 2>/dev/null || die "No terminal to ask on; add --yes for an unattended install"
+		"$installer" --plan
+		local answer
+		read -r -p "Continue? [y/N] " answer </dev/tty || answer=""
+		[[ $answer == [yY]* ]] || die "Canceled"
+		args+=(--yes)
 	fi
+	"$installer" "${args[@]}" </dev/null
+}
+
+has_yes() {
+	local a
+	for a in "$@"; do [[ $a == --yes || $a == -y ]] && return 0; done
+	return 1
+}
+
+has_help() {
+	local a
+	for a in "$@"; do [[ $a == --help || $a == -h ]] && return 0; done
+	return 1
 }
 
 # download URL FILE: fetches URL into FILE, with a progress bar when stdout is

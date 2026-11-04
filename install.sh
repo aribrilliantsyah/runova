@@ -260,6 +260,10 @@ parse_args() {
 			usage
 			exit 0
 			;;
+		--plan)
+			print_plan
+			exit 0
+			;;
 		*) die "Unknown option: $1 (see --help)" ;;
 		esac
 	done
@@ -284,17 +288,21 @@ check_os() {
 	[[ $arch == x86_64 ]] || die "Runova only supports the amd64 (x86_64) architecture; detected: $arch"
 }
 
+print_plan() {
+	cat <<'EOF'
+The installer will install docker.io, caddy, postgresql-18, ufw, jq, and curl from
+Ubuntu's apt, create the "runova" user, configure Caddy and PostgreSQL, open ports
+in ufw (and enable ufw if it is not active; SSH is allowed first), and start Runova.
+EOF
+}
+
 confirm_plan() {
 	local answer
 	if ((ASSUME_YES)); then
 		return 0
 	fi
 	[[ -t 0 ]] || die "No terminal to ask on; add --yes for an unattended install"
-	cat <<'EOF'
-The installer will install docker.io, caddy, postgresql-18, ufw, jq, and curl from
-Ubuntu's apt, create the "runova" user, configure Caddy and PostgreSQL, open ports
-in ufw (and enable ufw if it is not active; SSH is allowed first), and start Runova.
-EOF
+	print_plan
 	read -r -p "Continue? [y/N] " answer
 	[[ $answer == [yY]* ]] || die "Canceled"
 }

@@ -42,3 +42,10 @@ This password is shown only once. If you lose it: sudo -u runova env RUNOVA_DATA
 ```
 
 Prompt: `Continue? [y/N]`. Rerun: `[1/13] Checking packages ... already done`, final line `Runova was updated. Data, keys, admin, and panel address are unchanged.` On failure: `[7/13] Configuring Caddy ... failed (1s)`, `Last 30 lines of /var/log/runova-install.log:`, the log, `Error: …`, `The installation stopped before finishing. …`.
+
+## Koordinator: instalasi interaktif di sudo-rs (Ubuntu 26.04)
+
+- **Bug (ada sejak v0.1.0):** `curl … | sudo bash -s` lalu menjawab `y` membuat installer berhenti diam (proses `T`, stopped) di Ubuntu 26.04. Bawaan `sudo` di Ubuntu 26.04 adalah **sudo-rs** 0.2.13 (`/etc/alternatives/sudo` → `/usr/lib/cargo/bin/sudo`; `sudo.ws` 1.9.17 ikut terpasang tetapi tidak dipakai). sudo-rs menjalankan perintah di pty sendiri; proses `bash` yang membaca skrip dari pipe adalah grup foreground pty itu, jadi child (`install.sh`) yang membaca dari `/dev/tty` mendapat SIGTTIN dan berhenti. Uji sebelumnya memakai `--yes` atau sudo klasik, jadi tidak menangkapnya.
+- Matriks yang diukur (container Ubuntu 26.04 baru, login `su - deploy`, password sudo, jawaban di pty): child dengan `</dev/tty` → sudo klasik OK, sudo-rs berhenti; `setsid -w … </dev/tty` → sudo-rs OK, sudo klasik berhenti; **membaca jawaban di proses bash itu sendiri (`read </dev/tty`) lalu child tanpa membaca terminal → keduanya OK**, dan stdout child tetap terminal (spinner jalan).
+- **Perbaikan:** `get.sh` sendiri yang menampilkan rencana (`install.sh --plan`), bertanya `Continue? [y/N]` dari `/dev/tty`, lalu menjalankan `install.sh … --yes </dev/null`. Tanpa terminal dan tanpa `--yes` → berhenti dengan pesan, tanpa memasang apa pun.
+- **Bukti:** `test/get.bats` (bertanya di pty, jawaban `y`/`n`, tanpa terminal ditolak, installer tidak menerima terminal di stdin); instalasi sungguhan lewat `curl … | sudo bash -s -- --port 8443` dengan password dan `y` di pty, dari rilis lokal, berhasil di sudo-rs dan sudo klasik (`runova` 4 layanan aktif).
