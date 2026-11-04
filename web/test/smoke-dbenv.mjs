@@ -25,13 +25,12 @@ try {
   execFileSync("tar", ["czf", tgz, "-C", tmp, "server", ".env.example"]);
   await login(page, srv.url, "admin", srv.adminPassword);
 
-  step("wizard: upload the tar.gz, step 3 without a database asks for everything");
+  step("wizard: upload the tar.gz, without a database the review page asks for everything");
   await page.goto(`${srv.url}/#/deploy`);
   await page.setInputFiles("#upload-file", tgz);
   await page.waitForSelector(".fileok");
-  await page.click(".steps button[data-step='3']");
-  await page.waitForSelector("text=Isi DB_PASSWORD");
-  await page.waitForSelector("text=Isi REDIS_URL");
+  await page.waitForSelector(".dmiss button:has-text('Isi DB_PASSWORD')");
+  await page.waitForSelector(".dmiss button:has-text('Isi REDIS_URL')");
 
   step("choose a new database: DB_* lock, REDIS_URL stays required");
   await page.click(".dbopt[data-db='new']");
@@ -43,8 +42,8 @@ try {
     check((await row.innerText()).includes("admin_billing"), `${n} should name the database: ${await row.innerText()}`);
   }
   check((await page.locator("[data-env='REDIS_URL'] input").count()) === 1, "REDIS_URL should stay editable");
-  check((await page.locator(".todo").innerText()).includes("Isi REDIS_URL"), "REDIS_URL should still be required");
-  check(!(await page.locator(".todo").innerText()).includes("DB_PASSWORD"), "DB_PASSWORD must not be required");
+  check((await page.locator(".dmiss").innerText()).includes("Isi REDIS_URL"), "REDIS_URL should still be required");
+  check(!(await page.locator(".dmiss").innerText()).includes("DB_PASSWORD"), "DB_PASSWORD must not be required");
   const hostTitle = await page.locator("[data-env='DB_URL'] .autoval").getAttribute("title");
   check((hostTitle || "").includes("localhost"), `DB_URL tooltip explains the local host: ${hostTitle}`);
   await page.screenshot({ path: path.join(shots, "wizard-db-env.png"), fullPage: true });
@@ -57,14 +56,13 @@ try {
 
   step("fill REDIS_URL and deploy");
   await page.fill("[data-env='REDIS_URL'] input", "redis://cache:6379");
-  await page.click(".steps button[data-step='4']");
-  check(!(await page.locator("#deploy").isDisabled()), `Deploy should be enabled: ${await page.locator(".todo").innerText()}`);
+  check(!(await page.locator("#deploy").isDisabled()), `Deploy should be enabled: ${await page.locator(".dmiss").innerText().catch(() => "")}`);
   let sent = null;
   page.on("request", (r) => {
     if (r.url().endsWith("/api/apps") && r.method() === "POST") sent = JSON.parse(r.postData());
   });
   await page.click("#deploy");
-  await page.waitForURL(/#\/apps\/\d+\/logs/);
+  await page.waitForURL(/#\/apps\/\d+\/deployments\/\d+/);
   const names = (sent?.env || []).map((e) => e.name);
   check(!names.includes("DB_URL") && !names.includes("DB_PASSWORD"), `database-filled names must not be sent: ${names}`);
   check(names.includes("REDIS_URL"), `REDIS_URL must be sent: ${names}`);

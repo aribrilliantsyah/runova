@@ -155,7 +155,8 @@ export function envForm({ detected, onChange, foldOptional = false }) {
   function paintFold() {
     let folded = 0;
     for (const r of rows) {
-      const hide = !unfolded && !r.custom && !isRequired(r) && r.valInput.value === "" && document.activeElement !== r.valInput;
+      // Rows the database fills (or the user overrides) stay in view: they show what the app gets.
+      const hide = !unfolded && !r.custom && !isRequired(r) && !autoKind(r) && r.valInput.value === "" && document.activeElement !== r.valInput;
       r.el.hidden = hide;
       if (hide) folded++;
     }
