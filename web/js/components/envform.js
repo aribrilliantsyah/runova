@@ -2,6 +2,17 @@ import { h, icon, randomHex, fill } from "/assets/js/dom.js";
 import { dialog } from "/assets/js/components/dialog.js";
 import { envNameError, isSecretName, parseDotenv } from "/assets/js/validate.js";
 
+/**
+ * keep(el, ...children) sets el's children like fill, but leaves el untouched when they are
+ * already the same nodes (strings compare by text), so a focused input inside keeps its caret.
+ */
+function keep(el, ...children) {
+  const want = children.filter((c) => c != null && c !== false);
+  const have = [...el.childNodes];
+  const same = want.length === have.length && want.every((c, i) => (typeof c === "string" ? have[i].nodeType === Node.TEXT_NODE && have[i].data === c : have[i] === c));
+  if (!same) fill(el, ...want);
+}
+
 /** What a database variable holds, as the user reads it. */
 export const DB_KIND_LABEL = {
   url: "URL koneksi",
@@ -77,6 +88,8 @@ export function envForm({ detected, onChange, foldOptional = false }) {
     const label = h("span", { class: "k" });
     const valCell = h("span", { class: "v" });
     const acts = h("span", { class: "acts" });
+    const reqMark = h("span", { class: "req", title: "Wajib diisi", "aria-label": "wajib" }, "*");
+    const scanChip = h("span", { class: "chip warn" }, "kemungkinan");
 
     const paint = () => {
       const nm = custom ? row.nameInput.value.trim().toUpperCase() : row.name;
@@ -85,16 +98,18 @@ export function envForm({ detected, onChange, foldOptional = false }) {
       if (!custom) valInput.setAttribute("aria-label", row.name);
       const locked = isAuto(row);
       row.el?.classList.toggle("auto", locked);
-      fill(
+      // Swap children only when they differ: moving the focused input out and back (replaceChildren)
+      // drops focus and the caret after every keystroke.
+      keep(
         label,
         ...(custom ? [row.nameInput] : [row.name]),
         row.secret ? keyIcon : null,
-        isRequired(row) ? h("span", { class: "req", title: "Wajib diisi", "aria-label": "wajib" }, "*") : null,
-        row.source === "scan" ? h("span", { class: "chip warn" }, "kemungkinan") : null,
+        isRequired(row) ? reqMark : null,
+        row.source === "scan" ? scanChip : null,
       );
-      fill(valCell, locked ? autoCell(auto.database, autoKind(row)) : valInput);
-      if (locked) fill(acts, own);
-      else fill(acts, row.secret ? reveal : null, row.secret ? gen : null, autoKind(row) ? back : null, custom ? remove : null);
+      if (locked) fill(valCell, autoCell(auto.database, autoKind(row)));
+      else keep(valCell, valInput);
+      keep(acts, ...(locked ? [own] : [row.secret ? reveal : null, row.secret ? gen : null, autoKind(row) ? back : null, custom ? remove : null]));
     };
     row.paint = paint;
     row.currentName = () => (custom ? row.nameInput.value.trim().toUpperCase() : row.name);

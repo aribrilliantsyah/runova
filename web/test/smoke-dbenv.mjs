@@ -55,7 +55,10 @@ try {
   check((await page.locator("[data-env='DB_USER'] .autoval").count()) === 1, "back to automatic");
 
   step("fill REDIS_URL and deploy");
-  await page.fill("[data-env='REDIS_URL'] input", "redis://cache:6379");
+  // Typed key by key (not fill): every keystroke repaints the form and must not steal the caret.
+  await page.click("[data-env='REDIS_URL'] input");
+  await page.keyboard.type("redis://cache:6379");
+  check((await page.inputValue("[data-env='REDIS_URL'] input")) === "redis://cache:6379", `typing keeps focus: ${await page.inputValue("[data-env='REDIS_URL'] input")}`);
   check(!(await page.locator("#deploy").isDisabled()), `Deploy should be enabled: ${await page.locator(".dmiss").innerText().catch(() => "")}`);
   let sent = null;
   page.on("request", (r) => {
