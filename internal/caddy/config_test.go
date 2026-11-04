@@ -300,3 +300,72 @@ func TestBuildTrustedProxies(t *testing.T) {
 		}
 	}
 }
+
+// policies returns the TLS automation policies of cfg, nil without a tls app.
+func policies(t *testing.T, cfg obj) []any {
+	t.Helper()
+	tlsApp, ok := cfg["apps"].(obj)["tls"].(obj)
+	if !ok {
+		return nil
+	}
+	return get(t, tlsApp, "automation", "policies").([]any)
+}
+
+func TestBuildFrontProxyUsesInternalIssuerForEveryHost(t *testing.T) {
+	state := caddy.State{
+		Sites:          []caddy.Site{{Host: "startboom.app.devkriyanesia.my.id", Upstream: "127.0.0.1:30001"}},
+		PanelDomain:    "runova.prodak.id",
+		PanelUpstream:  "127.0.0.1:7070",
+		TrustedProxies: []string{"10.81.20.1"},
+	}
+	cfg := decodeConfig(t, state)
+	list := policies(t, cfg)
+	if len(list) != 1 {
+		t.Fatalf("policies = %v, want one catch-all policy", list)
+	}
+	p := list[0].(obj)
+	if _, set := p["subjects"]; set {
+		t.Errorf("policy subjects = %v; it must cover every host, also ones added later", p["subjects"])
+	}
+	if issuers := p["issuers"].([]any); len(issuers) != 1 || get(t, issuers, 0, "module") != "internal" {
+		t.Errorf("issuers = %v, want only internal: a public CA cannot reach Caddy behind nginx", issuers)
+	}
+	if _, set := p["on_demand"]; set {
+		t.Error("on-demand TLS would let any client make Caddy issue certificates")
+	}
+	https := servers(t, cfg)["runova-https"].(obj)
+	if _, set := https["automatic_https"]; set {
+		t.Error("runova-https must keep automatic HTTPS: it manages the hosts' certificates and the HTTP redirect")
+	}
+
+	state.PanelIPPort, state.PublicIP = 8443, "203.0.113.5"
+	list = policies(t, decodeConfig(t, state))
+	if len(list) != 2 {
+		t.Fatalf("policies with a panel IP listener = %v", list)
+	}
+	if got := strs(t, get(t, list, 0, "subjects")); !slices.Equal(got, []string{"203.0.113.5"}) {
+		t.Errorf("first policy subjects = %v, want the panel IP", got)
+	}
+	if _, set := list[1].(obj)["subjects"]; set || get(t, list, 1, "issuers", 0, "module") != "internal" {
+		t.Errorf("second policy = %v, want the internal catch-all", list[1])
+	}
+}
+
+func TestBuildWithoutFrontProxyKeepsPublicIssuers(t *testing.T) {
+	cfg := decodeConfig(t, caddy.State{
+		Sites:       []caddy.Site{{Host: "b.co", Upstream: "127.0.0.1:30001"}},
+		PanelDomain: "panel.co", PanelUpstream: "127.0.0.1:7070",
+	})
+	if list := policies(t, cfg); list != nil {
+		t.Errorf("policies = %v; without a proxy in front Caddy keeps its default (public) issuers", list)
+	}
+	cfg = decodeConfig(t, caddy.State{
+		Sites:       []caddy.Site{{Host: "b.co", Upstream: "127.0.0.1:30001"}},
+		PanelIPPort: 8443, PanelUpstream: "127.0.0.1:7070", PublicIP: "203.0.113.5",
+	})
+	for _, p := range policies(t, cfg) {
+		if _, set := p.(obj)["subjects"]; !set {
+			t.Errorf("catch-all policy %v without a proxy in front: domains would lose their public certificates", p)
+		}
+	}
+}

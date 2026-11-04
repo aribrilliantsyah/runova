@@ -133,6 +133,9 @@ func serve(cfg config.Config, stderr io.Writer) int {
 		OnError: func(err error) { log.Error("sync caddy", "err", err) },
 	}
 	svc := &apps.Service{Store: st, Engine: engine, Box: box, DataDir: cfg.DataDir, Caddy: syncer}
+	if c, ok := caddyClient.(*caddy.Client); ok {
+		svc.Probe = caddy.Prober{LocalCA: c.LocalCA}.Probe
+	}
 	if cfg.DevChmod {
 		devChmod(svc)
 	}

@@ -71,8 +71,12 @@ type Service struct {
 	DNS interface {
 		Check(ctx context.Context, domain, publicIP string) hostdns.Result
 	}
-	// Probe checks a domain's HTTPS certificate; nil means caddy.ProbeTLS.
-	Probe func(ctx context.Context, host string) (ok bool, detail string)
+	// Probe checks a domain's HTTPS; frontProxy is front-proxy mode. nil means caddy.ProbeTLS.
+	Probe func(ctx context.Context, host string, frontProxy bool) (ok bool, detail string)
+	// RecheckDelay is the pause between probes of a failing domain after the proxy setting changed; 0 means 2 s.
+	RecheckDelay time.Duration
+	// Go runs background work; nil means a goroutine.
+	Go func(f func())
 
 	locks     sync.Map   // app ID → *sync.Mutex held while the app is being changed
 	createMu  sync.Mutex // serializes quota checks with the inserts they guard

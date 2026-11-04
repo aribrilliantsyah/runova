@@ -47,6 +47,8 @@ type State struct {
 	// TrustedProxies are the IPs and CIDRs of reverse proxies in front of
 	// Caddy. Caddy keeps X-Forwarded-For from them and appends their address;
 	// from anyone else it discards the header and sets the peer's address.
+	// A non-empty list is front-proxy mode: the proxy holds the public
+	// certificates, so Caddy issues every certificate from its internal CA.
 	TrustedProxies []string
 	// AdminListen is Caddy's admin address; empty means DefaultAdminListen.
 	AdminListen string
@@ -161,7 +163,9 @@ func Build(s State) ([]byte, error) {
 			"tls_connection_policies": []any{policy},
 			"routes":                  []any{s.proxyRoute("panel-ip", s.PanelUpstream)},
 		}
-		apps["tls"] = s.panelIPTLS()
+	}
+	if t := s.tlsApp(); t != nil {
+		apps["tls"] = t
 	}
 
 	admin := s.AdminListen
@@ -180,15 +184,37 @@ func Build(s State) ([]byte, error) {
 // serves its default_sni certificate; the internal CA is untrusted either way.
 const panelCertName = "localhost"
 
-// panelIPTLS makes the certificate of the panel's IP listener with Caddy's
-// internal CA, for the public IP when it is known. Domains keep Caddy's
-// default issuers.
-func (s State) panelIPTLS() obj {
-	name := cmp.Or(s.PublicIP, panelCertName)
-	return obj{
-		"certificates": obj{"automate": []string{name}},
-		"automation": obj{"policies": []any{
-			obj{"subjects": []string{name}, "issuers": []any{obj{"module": "internal"}}},
-		}},
+// FrontProxy reports front-proxy mode: a reverse proxy such as nginx holds
+// the public certificates and forwards to Caddy over HTTPS.
+func (s State) FrontProxy() bool { return len(s.TrustedProxies) > 0 }
+
+// tlsApp returns Caddy's tls app, nil when Caddy's defaults do.
+//
+// The panel's IP listener gets a certificate from Caddy's internal CA, for
+// the public IP when it is known.
+//
+// In front-proxy mode every other host does too, through a catch-all policy
+// without subjects (what the Caddyfile's local_certs writes). A public CA
+// cannot validate a host behind the proxy: TLS-ALPN-01 ends at the proxy's
+// TLS and HTTP-01 only works while the proxy forwards port 80. Without a
+// certificate Caddy answers the handshake with an internal error alert and
+// the proxy shows 502. The internal certificate exists at once; the proxy
+// keeps TLS to Caddy encrypted. Outside that mode domains keep Caddy's
+// default public issuers. on_demand stays off in both.
+func (s State) tlsApp() obj {
+	var policies []any
+	out := obj{}
+	if s.PanelIPPort != 0 {
+		name := cmp.Or(s.PublicIP, panelCertName)
+		out["certificates"] = obj{"automate": []string{name}}
+		policies = append(policies, obj{"subjects": []string{name}, "issuers": []any{obj{"module": "internal"}}})
 	}
+	if s.FrontProxy() {
+		policies = append(policies, obj{"issuers": []any{obj{"module": "internal"}}})
+	}
+	if len(policies) == 0 {
+		return nil
+	}
+	out["automation"] = obj{"policies": policies}
+	return out
 }
