@@ -67,6 +67,7 @@ type ContainerState struct {
 	Status       string
 	Running      bool
 	ExitCode     int
+	OOMKilled    bool
 	RestartCount int
 	StartedAt    time.Time
 	FinishedAt   time.Time

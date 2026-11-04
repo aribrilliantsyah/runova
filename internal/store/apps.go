@@ -83,9 +83,15 @@ type Deployment struct {
 	ContainerID  string          `json:"container_id"`
 	Status       DeployStatus    `json:"status"`
 	FailureLog   string          `json:"failure_log"`
-	CreatedBy    *int64          `json:"created_by"`
-	CreatedAt    int64           `json:"created_at"`
-	FinishedAt   int64           `json:"finished_at"`
+	// Steps is the rollout timeline; Problem the diagnosis of a failed deploy
+	// or a crash; ContainerLog the container's last output, kept after the
+	// container is gone (served by its own endpoint, not in listings).
+	Steps        []DeployStep `json:"steps"`
+	Problem      *Problem     `json:"problem"`
+	ContainerLog string       `json:"-"`
+	CreatedBy    *int64       `json:"created_by"`
+	CreatedAt    int64        `json:"created_at"`
+	FinishedAt   int64        `json:"finished_at"`
 }
 
 const appCols = `id, user_id, name, kind, java_version, jvm_opts, internal_port, ip_port, ip_access, memory_mb, cpu_milli, status, current_deployment_id, deploy_mode, created_at, database_id`
@@ -263,20 +269,33 @@ func (s *Store) Env(ctx context.Context, appID int64) ([]EnvEntry, error) {
 	return out, nil
 }
 
-const deploymentCols = `id, app_id, number, artifact_path, file_name, sha256, report, env_snapshot, java_version, jvm_opts, internal_port, host_port, container_id, status, failure_log, created_by, created_at, finished_at`
+const deploymentCols = `id, app_id, number, artifact_path, file_name, sha256, report, env_snapshot, java_version, jvm_opts, internal_port, host_port, container_id, status, failure_log, created_by, created_at, finished_at, steps, problem, container_log`
 
 func scanDeployment(r scanner) (Deployment, error) {
 	var (
-		d   Deployment
-		raw string
+		d                 Deployment
+		raw, steps, probl string
 	)
 	err := r.Scan(&d.ID, &d.AppID, &d.Number, &d.ArtifactPath, &d.FileName, &d.SHA256, &raw, &d.EnvSnapshot, &d.JavaVersion, &d.JVMOpts,
-		&d.InternalPort, &d.HostPort, &d.ContainerID, &d.Status, &d.FailureLog, &d.CreatedBy, &d.CreatedAt, &d.FinishedAt)
+		&d.InternalPort, &d.HostPort, &d.ContainerID, &d.Status, &d.FailureLog, &d.CreatedBy, &d.CreatedAt, &d.FinishedAt,
+		&steps, &probl, &d.ContainerLog)
 	if err != nil {
 		return Deployment{}, err
 	}
 	if err := json.Unmarshal([]byte(raw), &d.Report); err != nil {
 		return Deployment{}, fmt.Errorf("decode deployment report: %w", err)
+	}
+	if err := json.Unmarshal([]byte(steps), &d.Steps); err != nil {
+		return Deployment{}, fmt.Errorf("decode deployment steps: %w", err)
+	}
+	if d.Steps == nil {
+		d.Steps = []DeployStep{}
+	}
+	if probl != "" {
+		d.Problem = new(Problem)
+		if err := json.Unmarshal([]byte(probl), d.Problem); err != nil {
+			return Deployment{}, fmt.Errorf("decode deployment problem: %w", err)
+		}
 	}
 	return d, nil
 }
@@ -339,6 +358,10 @@ type DeploymentPatch struct {
 	FailureLog   *string
 	FinishedAt   *int64
 	ArtifactPath *string
+	Steps        []DeployStep // nil means unchanged
+	// Problem replaces the diagnosis; a Problem with an empty Kind clears it.
+	Problem      *Problem
+	ContainerLog *string
 }
 
 func (s *Store) UpdateDeployment(ctx context.Context, id int64, p DeploymentPatch) error {
@@ -365,9 +388,33 @@ func (s *Store) UpdateDeployment(ctx context.Context, id int64, p DeploymentPatc
 		if p.ArtifactPath != nil {
 			d.ArtifactPath = *p.ArtifactPath
 		}
+		if p.Steps != nil {
+			d.Steps = p.Steps
+		}
+		if p.Problem != nil {
+			d.Problem = p.Problem
+			if p.Problem.Kind == "" {
+				d.Problem = nil
+			}
+		}
+		if p.ContainerLog != nil {
+			d.ContainerLog = *p.ContainerLog
+		}
+		steps, err := json.Marshal(d.Steps)
+		if err != nil {
+			return fmt.Errorf("encode deployment steps: %w", err)
+		}
+		problem := ""
+		if d.Problem != nil {
+			b, err := json.Marshal(d.Problem)
+			if err != nil {
+				return fmt.Errorf("encode deployment problem: %w", err)
+			}
+			problem = string(b)
+		}
 		if _, err := tx.ExecContext(ctx,
-			`UPDATE deployments SET status=?, host_port=?, container_id=?, failure_log=?, finished_at=?, artifact_path=? WHERE id=?`,
-			d.Status, d.HostPort, d.ContainerID, d.FailureLog, d.FinishedAt, d.ArtifactPath, id); err != nil {
+			`UPDATE deployments SET status=?, host_port=?, container_id=?, failure_log=?, finished_at=?, artifact_path=?, steps=?, problem=?, container_log=? WHERE id=?`,
+			d.Status, d.HostPort, d.ContainerID, d.FailureLog, d.FinishedAt, d.ArtifactPath, string(steps), problem, d.ContainerLog, id); err != nil {
 			return fmt.Errorf("update deployment: %w", err)
 		}
 		return nil

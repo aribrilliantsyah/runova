@@ -143,35 +143,59 @@ func (s *Service) handleEvent(ctx context.Context, ev docker.Event) {
 	if s.consumeStop(app.ID) {
 		return
 	}
-	// The restart policy is on-failure: a clean exit is not restarted, and
-	// the app would stay "running" with a dead container.
 	if ev.Labels["exitCode"] == "0" {
 		if err := s.Store.SetAppStatus(ctx, app.ID, store.AppStopped); err != nil {
 			slog.Error("monitor: set app stopped", "app", app.Name, "err", err)
 			return
 		}
+		code := 0
+		s.setProblem(ctx, d, store.Problem{Kind: "exited_clean", Title: "Aplikasi berhenti sendiri (exit 0)",
+			Hint: "Proses selesai tanpa error. Aplikasi server biasanya tidak berhenti sendiri; periksa apakah main() keluar setelah start.", ExitCode: &code, At: s.now().UnixMilli()})
 		s.notify(ctx, app, store.LevelInfo, fmt.Sprintf("Aplikasi %s berhenti sendiri (exit 0)", app.Name), "")
 		return
 	}
 	if s.countCrash(app.ID) < crashLimit {
 		return
 	}
-	s.giveUp(ctx, app, d)
+	s.giveUp(ctx, app, d, ev.Labels["exitCode"])
+}
+
+// setProblem records why the deployment's container stopped.
+func (s *Service) setProblem(ctx context.Context, d store.Deployment, p store.Problem) {
+	if err := s.Store.UpdateDeployment(context.WithoutCancel(ctx), d.ID, store.DeploymentPatch{Problem: &p}); err != nil {
+		slog.Error("record deployment problem", "deployment", d.ID, "err", err)
+	}
 }
 
 // giveUp stops a crash-looping app for good: Docker's restart policy would
-// otherwise keep starting it.
-func (s *Service) giveUp(ctx context.Context, app store.App, d store.Deployment) {
+// otherwise keep starting it. The reason of the last exit is kept on the
+// deployment with the container's last output.
+func (s *Service) giveUp(ctx context.Context, app store.App, d store.Deployment, exitLabel string) {
 	// Status first: the die that our own stop causes must find the app failed.
 	if err := s.Store.SetAppStatus(ctx, app.ID, store.AppFailed); err != nil {
 		slog.Error("monitor: set app failed", "app", app.Name, "err", err)
 	}
+	st, _ := s.Engine.InspectContainer(ctx, d.ContainerID)
 	if err := s.Engine.StopContainer(ctx, d.ContainerID, stopGrace); err != nil && !errors.Is(err, docker.ErrNotFound) {
 		slog.Error("monitor: stop crashing container", "app", app.Name, "err", err)
 	}
 	s.clearCrashes(app.ID)
+	lines := s.readLines(ctx, d.ContainerID, keptLogLines)
+	// The die event's exit code is the crash; the restart policy may have
+	// started the container again since, resetting the inspected one.
+	if n, err := strconv.Atoi(exitLabel); err == nil && st.ExitCode == 0 {
+		st.ExitCode = n
+	}
+	code := st.ExitCode
+	p := exitProblem(store.Problem{Kind: "crash_loop", ExitCode: &code, At: s.now().UnixMilli()}, app, st, lines)
+	p.Detail = fmt.Sprintf("Crash %d kali dalam 10 menit; terakhir exit code %d", crashLimit, st.ExitCode)
+	if st.OOMKilled {
+		p.Detail += " (OOMKilled)"
+	}
+	s.setProblem(ctx, d, p)
+	s.keepLog(ctx, d, lines)
 	s.notify(ctx, app, store.LevelError,
-		fmt.Sprintf("Aplikasi %s crash %d kali dalam 10 menit dan dihentikan", app.Name, crashLimit), "")
+		fmt.Sprintf("Aplikasi %s crash %d kali dalam 10 menit dan dihentikan", app.Name, crashLimit), p.Title)
 	slog.Warn("app crash loop, stopped", "app", app.Name)
 }
 
@@ -276,7 +300,8 @@ func (s *Service) reconcileApp(ctx context.Context, app store.App) (string, erro
 	if missing {
 		if cur.ID != 0 {
 			superseded := store.DeploySuperseded
-			if err := s.Store.UpdateDeployment(ctx, cur.ID, store.DeploymentPatch{Status: &superseded}); err != nil {
+			lost := store.Problem{Kind: "container_lost", Title: "Container aplikasi hilang dari Docker", Hint: "Container dihapus di luar Runova atau Docker direset. Deploy ulang untuk membuatnya lagi.", At: s.now().UnixMilli()}
+			if err := s.Store.UpdateDeployment(ctx, cur.ID, store.DeploymentPatch{Status: &superseded, Problem: &lost}); err != nil {
 				return "", err
 			}
 		}

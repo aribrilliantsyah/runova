@@ -90,24 +90,27 @@ func (s *Service) deployLocked(ctx context.Context, actor, owner store.User, app
 	if zero && hasOld {
 		failStatus = prevStatus
 	}
+	tr := s.newTracer(ctx, d, hasOld, !zero)
 
-	containerID, err := s.rollout(ctx, owner, app, &d, !zero)
+	containerID, err := s.rollout(ctx, owner, app, &d, !zero, tr)
 	if err != nil {
-		s.failDeployment(ctx, owner, app, d, containerID, err, failStatus)
+		s.failDeployment(ctx, owner, app, d, containerID, err, failStatus, tr)
 		return err
 	}
 
+	tr.begin(ctx, stepRoute, "")
 	if err := s.Store.ActivateDeployment(ctx, app.ID, d.ID); err != nil {
-		s.failDeployment(ctx, owner, app, d, containerID, err, failStatus)
+		s.failDeployment(ctx, owner, app, d, containerID, atStep(stepRoute, err), failStatus, tr)
 		return err
 	}
 	if zero && hasOld {
-		if err := s.switchTraffic(ctx, app, old); err != nil {
-			s.failDeployment(ctx, owner, app, d, containerID, err, failStatus)
+		if err := s.switchTraffic(ctx, app, old, tr); err != nil {
+			s.failDeployment(ctx, owner, app, d, containerID, atStep(stepRoute, err), failStatus, tr)
 			return err
 		}
 	} else {
 		s.refreshCaddy(ctx, app)
+		tr.done(ctx, stepRoute, "")
 	}
 	finished := s.now().UnixMilli()
 	if err := s.Store.UpdateDeployment(ctx, d.ID, store.DeploymentPatch{FinishedAt: &finished}); err != nil {
@@ -121,63 +124,78 @@ func (s *Service) deployLocked(ctx context.Context, actor, owner store.User, app
 // rollout does the container work of a deploy. With replaceFirst the active
 // container goes before the new one is created (stop-start); without it the
 // old one keeps serving. On failure it returns the ID of the new container,
-// if one was created, so the caller can collect its logs and remove it.
-func (s *Service) rollout(ctx context.Context, owner store.User, app store.App, d *store.Deployment, replaceFirst bool) (containerID string, err error) {
+// if one was created, so the caller can collect its logs and remove it. Each
+// step is recorded on tr; a failure carries its step (stepError).
+func (s *Service) rollout(ctx context.Context, owner store.User, app store.App, d *store.Deployment, replaceFirst bool, tr *tracer) (containerID string, err error) {
 	image := imageFor(app, *d)
+	tr.begin(ctx, stepImage, image)
 	if ok, err := s.Engine.ImageExists(ctx, image); err != nil {
-		return "", fmt.Errorf("check image %s: %w", image, err)
+		return "", atStep(stepImage, fmt.Errorf("check image %s: %w", image, err))
 	} else if !ok {
+		tr.progress(ctx, stepImage, "Mengunduh "+image)
+		tr.save(ctx)
 		if err := s.Engine.PullImage(ctx, image); err != nil {
-			return "", fmt.Errorf("pull image %s: %w", image, err)
+			return "", atStep(stepImage, fmt.Errorf("pull image %s: %w", image, err))
 		}
+		tr.done(ctx, stepImage, "Diunduh: "+image)
+	} else {
+		tr.done(ctx, stepImage, "Sudah ada: "+image)
 	}
 
+	tr.begin(ctx, stepPrepare, "")
 	idx, err := s.Store.NetIndex(ctx, owner.ID)
 	if errors.Is(err, store.ErrNoNetIndex) {
-		return "", overQuota("Jaringan pengguna habis")
+		return "", atStep(stepPrepare, overQuota("Jaringan pengguna habis"))
 	}
 	if err != nil {
-		return "", err
+		return "", atStep(stepPrepare, err)
 	}
 	subnet := fmt.Sprintf("172.30.%d.0/24", idx)
 	if err := s.Engine.EnsureNetwork(ctx, networkName(owner.ID), subnet); err != nil {
-		return "", fmt.Errorf("ensure network: %w", err)
+		return "", atStep(stepPrepare, fmt.Errorf("ensure network: %w", err))
 	}
 	if err := s.ensureDataDir(owner, app.Name); err != nil {
-		return "", err
+		return "", atStep(stepPrepare, err)
 	}
 
 	if d.HostPort, err = s.allocHostPort(ctx, d.ID); err != nil {
-		return "", err
+		return "", atStep(stepPrepare, err)
 	}
 	env, err := s.openSnapshot(d.EnvSnapshot)
 	if err != nil {
-		return "", err
+		return "", atStep(stepPrepare, err)
 	}
 	dbEnv, err := s.dbEnv(ctx, app)
 	if err != nil {
-		return "", fmt.Errorf("database env: %w", err)
+		return "", atStep(stepPrepare, fmt.Errorf("database env: %w", err))
 	}
 	spec := s.ContainerSpec(app, owner, *d, env, dbEnv)
+	tr.done(ctx, stepPrepare, fmt.Sprintf("Port aplikasi %d, port server %d", d.InternalPort, d.HostPort))
 
-	if replaceFirst {
+	if replaceFirst && tr.find(stepStopOld) != nil {
+		tr.begin(ctx, stepStopOld, "")
 		if err := s.removeActive(ctx, app); err != nil {
-			return "", err
+			return "", atStep(stepStopOld, err)
 		}
+		tr.done(ctx, stepStopOld, "")
 	}
 
+	tr.begin(ctx, stepCreate, "")
 	containerID, err = s.Engine.CreateContainer(ctx, containerName(owner, app, *d), spec)
 	if err != nil {
-		return "", fmt.Errorf("create container: %w", err)
+		return "", atStep(stepCreate, fmt.Errorf("create container: %w", err))
 	}
 	if err := s.Store.UpdateDeployment(ctx, d.ID, store.DeploymentPatch{ContainerID: &containerID}); err != nil {
-		return containerID, err
+		return containerID, atStep(stepCreate, err)
 	}
 	d.ContainerID = containerID
+	tr.done(ctx, stepCreate, containerName(owner, app, *d))
+	tr.begin(ctx, stepStart, "")
 	if err := s.Engine.StartContainer(ctx, containerID); err != nil {
-		return containerID, fmt.Errorf("start container: %w", err)
+		return containerID, atStep(stepStart, fmt.Errorf("start container: %w", err))
 	}
-	if err := s.waitHealthy(ctx, containerID, d.HostPort); err != nil {
+	tr.done(ctx, stepStart, "")
+	if err := s.waitHealthy(ctx, containerID, d.HostPort, d.InternalPort, tr); err != nil {
 		return containerID, err
 	}
 	return containerID, nil
@@ -199,48 +217,57 @@ func (s *Service) removeActive(ctx context.Context, app store.App) error {
 	return s.removeContainerOf(ctx, cur)
 }
 
-// removeContainerOf stops and deletes the container of deployment d.
+// removeContainerOf stops and deletes the container of deployment d, keeping
+// its last output on the deployment first.
 func (s *Service) removeContainerOf(ctx context.Context, d store.Deployment) error {
 	if err := s.Engine.StopContainer(ctx, d.ContainerID, stopGrace); err != nil && !errors.Is(err, docker.ErrNotFound) {
 		return fmt.Errorf("stop old container: %w", err)
 	}
+	s.keepLog(ctx, d, nil)
 	if err := s.Engine.RemoveContainer(ctx, d.ContainerID); err != nil {
 		return fmt.Errorf("remove old container: %w", err)
 	}
 	return nil
 }
 
-// waitHealthy polls 127.0.0.1:port until the app answers or the health
-// timeout passes. Docker's port proxy accepts connections even when nothing
-// listens in the container and then closes them at once, so a connect alone
-// proves nothing: a healthy app stays quiet (the read times out) or sends
-// data, while EOF or a reset means nobody is home. Every round also checks
-// that the container still runs; one that exited fails the deploy at once.
-func (s *Service) waitHealthy(ctx context.Context, containerID string, port int) error {
+// waitHealthy polls 127.0.0.1:hostPort (published from the container's
+// appPort) until the app answers or the health timeout passes. Docker's port
+// proxy accepts connections even when nothing listens in the container and
+// then closes them at once, so a connect alone proves nothing: a healthy app
+// stays quiet (the read times out) or sends data, while EOF or a reset means
+// nobody is home. Every round also checks that the container still runs; one
+// that exited fails the deploy at once. Errors name the container port, the
+// one the user configures.
+func (s *Service) waitHealthy(ctx context.Context, containerID string, hostPort, appPort int, tr *tracer) error {
 	dial := s.Dial
 	if dial == nil {
 		dial = net.DialTimeout
 	}
-	addr := net.JoinHostPort("127.0.0.1", strconv.Itoa(port))
+	addr := net.JoinHostPort("127.0.0.1", strconv.Itoa(hostPort))
 	timeout := s.healthTimeout()
-	deadline := time.Now().Add(timeout)
-	for {
+	start := time.Now()
+	deadline := start.Add(timeout)
+	tr.begin(ctx, stepHealth, fmt.Sprintf("Menunggu port %d", appPort))
+	for attempt := 1; ; attempt++ {
 		st, err := s.Engine.InspectContainer(ctx, containerID)
 		if err != nil {
-			return fmt.Errorf("inspect container: %w", err)
+			return atStep(stepHealth, fmt.Errorf("inspect container: %w", err))
 		}
 		if !st.Running {
-			return fmt.Errorf("aplikasi berhenti saat dijalankan (%s, exit code %d)", st.Status, st.ExitCode)
+			return &stepError{step: stepHealth, state: &st, err: fmt.Errorf("aplikasi berhenti saat dijalankan (%s, exit code %d)", st.Status, st.ExitCode)}
 		}
 		if s.accepts(dial, addr) {
+			tr.done(ctx, stepHealth, fmt.Sprintf("Port %d menerima koneksi setelah %s", appPort, time.Since(start).Round(100*time.Millisecond)))
 			return nil
 		}
 		if time.Now().After(deadline) {
-			return fmt.Errorf("aplikasi tidak menerima koneksi di port %d dalam %s", port, timeout.Round(time.Millisecond))
+			return &stepError{step: stepHealth, waited: timeout, port: appPort,
+				err: fmt.Errorf("aplikasi tidak menerima koneksi di port %d dalam %s (%d percobaan)", appPort, timeout.Round(time.Second), attempt)}
 		}
+		tr.progress(ctx, stepHealth, fmt.Sprintf("Menunggu port %d: %d detik, percobaan %d", appPort, int(time.Since(start)/time.Second), attempt))
 		select {
 		case <-ctx.Done():
-			return ctx.Err()
+			return atStep(stepHealth, ctx.Err())
 		case <-time.After(s.healthInterval()):
 		}
 	}
@@ -261,52 +288,59 @@ func (s *Service) accepts(dial func(network, addr string, timeout time.Duration)
 	return err == nil || errors.Is(err, os.ErrDeadlineExceeded)
 }
 
-// failDeployment records a failed deploy: the last log lines of the failed
-// container go on the deployment, the container is removed, the app gets
-// appStatus (failed, or the status it had when the old version still serves)
-// and its owner is notified. The deployment that was active before stays on
-// record.
-func (s *Service) failDeployment(ctx context.Context, owner store.User, app store.App, d store.Deployment, containerID string, cause error, appStatus store.AppStatus) {
+// failDeployment records a failed deploy: the step that failed, a plain
+// diagnosis, the failed container's last output (kept on the deployment), the
+// container is removed, the app gets appStatus (failed, or the status it had
+// when the old version still serves) and its owner is notified. The
+// deployment that was active before stays on record.
+func (s *Service) failDeployment(ctx context.Context, owner store.User, app store.App, d store.Deployment, containerID string, cause error, appStatus store.AppStatus, tr *tracer) {
 	ctx = context.WithoutCancel(ctx)
+	var lines []docker.LogLine
 	log := cause.Error()
 	if containerID != "" {
-		if lines := s.tailLogs(ctx, containerID); lines != "" {
-			log += "\n\n" + lines
+		lines = s.readLines(ctx, containerID, keptLogLines)
+		if tail := tailText(lines, failureLogLines); tail != "" {
+			log += "\n\n" + tail
 		}
 		s.noteStop(app.ID)
 		if err := s.Engine.RemoveContainer(ctx, containerID); err != nil {
 			slog.Error("remove failed container", "container", containerID, "err", err)
 		}
 	}
-	status, finished := store.DeployFailed, s.now().UnixMilli()
-	if err := s.Store.UpdateDeployment(ctx, d.ID, store.DeploymentPatch{Status: &status, FailureLog: &log, FinishedAt: &finished}); err != nil {
+	now := s.now().UnixMilli()
+	problem := diagnose(app, d, cause, lines, now)
+	if appStatus != store.AppFailed {
+		problem.Kind = "deploy_kept_old"
+	}
+	if failed := tr.failRunning(problem.Title); problem.Step == "" {
+		problem.Step = failed
+	}
+	status := store.DeployFailed
+	patch := store.DeploymentPatch{Status: &status, FailureLog: &log, FinishedAt: &now, Steps: tr.steps, Problem: &problem}
+	if lines != nil {
+		saved := encodeLog(lines)
+		patch.ContainerLog = &saved
+	}
+	if err := s.Store.UpdateDeployment(ctx, d.ID, patch); err != nil {
 		slog.Error("record failed deployment", "deployment", d.ID, "err", err)
 	}
 	if err := s.Store.SetAppStatus(ctx, app.ID, appStatus); err != nil {
 		slog.Error("set app status after failed deploy", "app", app.Name, "err", err)
 	}
-	s.notify(ctx, app, store.LevelError, fmt.Sprintf("Deploy %s #%d gagal", app.Name, d.Number), cause.Error())
+	s.notify(ctx, app, store.LevelError, fmt.Sprintf("Deploy %s #%d gagal", app.Name, d.Number), problem.Title)
 	slog.Warn("deploy failed", "app", app.Name, "deployment", d.Number, "err", cause)
 }
 
-// tailLogs returns the last lines of a container's output as plain text.
-func (s *Service) tailLogs(ctx context.Context, containerID string) string {
-	rc, err := s.Engine.Logs(ctx, containerID, failureLogLines, false)
-	if err != nil {
-		return ""
+// tailText returns the last n lines as plain text.
+func tailText(lines []docker.LogLine, n int) string {
+	if len(lines) > n {
+		lines = lines[len(lines)-n:]
 	}
-	defer rc.Close()
-	var lines []string
-	if err := docker.ReadLogs(rc, func(l docker.LogLine) error {
-		lines = append(lines, l.Text)
-		return nil
-	}); err != nil {
-		slog.Warn("read container logs", "container", containerID, "err", err)
+	out := make([]string, len(lines))
+	for i, l := range lines {
+		out[i] = l.Text
 	}
-	if len(lines) > failureLogLines {
-		lines = lines[len(lines)-failureLogLines:]
-	}
-	return strings.Join(lines, "\n")
+	return strings.Join(out, "\n")
 }
 
 // prune keeps the newest deployments and deletes the files of the rest.
@@ -441,6 +475,7 @@ func (s *Service) stopContainer(ctx context.Context, app store.App, id string) e
 
 func (s *Service) startContainer(ctx context.Context, app store.App, id string) error {
 	s.clearCrashes(app.ID)
+	s.markActive(ctx, app, store.Problem{})
 	if err := s.Engine.StartContainer(ctx, id); err != nil {
 		if errors.Is(err, docker.ErrNotFound) {
 			return invalid("Container aplikasi tidak ada; deploy ulang")
@@ -499,6 +534,7 @@ func (s *Service) Stop(ctx context.Context, user store.User, appID int64) error 
 	if err := s.Store.SetAppStatus(ctx, app.ID, store.AppStopped); err != nil {
 		return err
 	}
+	s.markActive(ctx, app, store.Problem{Kind: "stopped_user", Title: "Dihentikan oleh " + user.Username, At: s.now().UnixMilli()})
 	s.refreshCaddy(ctx, app)
 	s.logActivity(ctx, user, store.ActStop, app.Name, "")
 	return nil
@@ -565,4 +601,15 @@ func (s *Service) Delete(ctx context.Context, user store.User, appID int64) erro
 	s.refreshCaddy(ctx, app)
 	s.logActivity(ctx, user, store.ActAppDelete, app.Name, "")
 	return nil
+}
+
+// markActive sets (or with an empty Kind clears) the problem of the app's
+// active deployment: why it is not running right now.
+func (s *Service) markActive(ctx context.Context, app store.App, p store.Problem) {
+	if app.CurrentDeploymentID == nil {
+		return
+	}
+	if err := s.Store.UpdateDeployment(context.WithoutCancel(ctx), *app.CurrentDeploymentID, store.DeploymentPatch{Problem: &p}); err != nil {
+		slog.Error("record deployment problem", "app", app.Name, "err", err)
+	}
 }

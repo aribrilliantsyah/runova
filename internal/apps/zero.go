@@ -3,6 +3,7 @@ package apps
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"time"
 
@@ -39,13 +40,15 @@ func (s *Service) servingDeployment(ctx context.Context, app store.App) (store.D
 // is pointed at it, connections in flight get DrainDelay to finish, and
 // only then the old container goes. If Caddy refuses, the old deployment is
 // made the active one again, so nothing changes for visitors.
-func (s *Service) switchTraffic(ctx context.Context, app store.App, old store.Deployment) error {
+func (s *Service) switchTraffic(ctx context.Context, app store.App, old store.Deployment, tr *tracer) error {
 	if err := s.ApplyCaddy(ctx); err != nil {
 		if rbErr := s.Store.ActivateDeployment(context.WithoutCancel(ctx), app.ID, old.ID); rbErr != nil {
 			slog.Error("restore previous deployment", "app", app.Name, "deployment", old.ID, "err", rbErr)
 		}
 		return err
 	}
+	tr.done(ctx, stepRoute, "")
+	tr.begin(ctx, stepRetire, fmt.Sprintf("Menunggu %s untuk koneksi yang masih berjalan", s.drainDelay()))
 	select {
 	case <-time.After(s.drainDelay()):
 	case <-ctx.Done():
@@ -55,5 +58,6 @@ func (s *Service) switchTraffic(ctx context.Context, app store.App, old store.De
 	if err := s.removeContainerOf(context.WithoutCancel(ctx), old); err != nil {
 		slog.Error("remove replaced container", "app", app.Name, "container", old.ContainerID, "err", err)
 	}
+	tr.done(ctx, stepRetire, fmt.Sprintf("v%d dihentikan", old.Number))
 	return nil
 }

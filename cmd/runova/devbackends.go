@@ -5,9 +5,11 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"maps"
 	"net"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -129,6 +131,45 @@ func (f *fakeLoader) Config(context.Context) ([]byte, error) {
 	return append([]byte(nil), f.cfg...), nil
 }
 
+// fakeFail is the failure a fake container simulates, chosen with the app's
+// environment variable RUNOVA_FAKE_FAIL (see docs/superpowers/notes/ui-polish-logs-ip.md):
+// health (never opens its port), slow (opens it after 8 s), exit (stops with
+// a Spring start-up error), oom (killed for memory) and crash (crash-loops
+// after it started).
+func fakeFail(spec docker.ContainerSpec) string {
+	for _, e := range spec.Env {
+		if v, ok := strings.CutPrefix(e, "RUNOVA_FAKE_FAIL="); ok {
+			return v
+		}
+	}
+	return ""
+}
+
+// springLines is what a Spring Boot start looks like in a container log.
+func springLines(now time.Time, port int) []docker.LogLine {
+	at := func(i int) time.Time { return now.Add(time.Duration(i) * 37 * time.Millisecond) }
+	text := []string{
+		"",
+		"  .   ____          _            __ _ _",
+		" /\\\\ / ___'_ __ _ _(_)_ __  __ _ \\ \\ \\ \\",
+		"( ( )\\___ | '_ | '_| | '_ \\/ _` | \\ \\ \\ \\",
+		" \\\\/  ___)| |_)| | | | | || (_| |  ) ) ) )",
+		"  '  |____| .__|_| |_|_| |_\\__, | / / / /",
+		" =========|_|==============|___/=/_/_/_/",
+		" :: Spring Boot ::                (v4.1.2)",
+		"",
+		now.UTC().Format("2006-01-02T15:04:05.000Z") + "  INFO 7 --- [starboom] [           main] c.d.starboom.StarboomApplication         : Starting StarboomApplication v0.0.1 using Java 21.0.5 with PID 7 (/app/starboom.jar started by 100001 in /data)",
+		now.UTC().Format("2006-01-02T15:04:05.000Z") + "  INFO 7 --- [starboom] [           main] c.d.starboom.StarboomApplication         : No active profile set, falling back to 1 default profile: \"default\"",
+		now.UTC().Format("2006-01-02T15:04:05.000Z") + "  INFO 7 --- [starboom] [           main] o.s.b.w.embedded.tomcat.TomcatWebServer  : Tomcat initialized with port " + strconv.Itoa(port) + " (http)",
+		now.UTC().Format("2006-01-02T15:04:05.000Z") + "  WARN 7 --- [starboom] [           main] JpaBaseConfiguration$JpaWebConfiguration : spring.jpa.open-in-view is enabled by default.",
+	}
+	out := make([]docker.LogLine, len(text))
+	for i, t := range text {
+		out[i] = docker.LogLine{Stream: "stdout", Time: at(i), Text: t}
+	}
+	return out
+}
+
 // newFakeEngine is an in-memory Docker whose containers log a few lines when
 // they start and answer the terminal with a shell prompt.
 func newFakeEngine() *dockertest.Fake {
@@ -136,18 +177,56 @@ func newFakeEngine() *dockertest.Fake {
 	f.StatsResult = docker.Stats{MemoryBytes: 120 << 20, MemoryLimit: 512 << 20, CPUPercent: 18}
 	f.OnStart = func(c dockertest.Container) {
 		now := time.Now()
-		lines := []docker.LogLine{
-			{Stream: "stdout", Time: now, Text: "runova  menjalankan " + c.Spec.Image},
-			{Stream: "stdout", Time: now, Text: fmt.Sprintf("Listening on port %d", c.Spec.InternalPort)},
-			{Stream: "stderr", Time: now, Text: "WARN  slow connection acquire 812ms"},
-			{Stream: "stderr", Time: now, Text: "ERROR mailer: SMTP timed out"},
+		var lines []docker.LogLine
+		jar := strings.HasPrefix(c.Spec.Image, "eclipse-temurin")
+		if jar {
+			lines = springLines(now, c.Spec.InternalPort)
+		} else {
+			lines = []docker.LogLine{{Stream: "stdout", Time: now, Text: "runova  menjalankan " + c.Spec.Image}}
+		}
+		fail := fakeFail(c.Spec)
+		switch fail {
+		case "exit":
+			ts := now.UTC().Format("2006-01-02T15:04:05.000Z")
+			lines = append(lines,
+				docker.LogLine{Stream: "stdout", Time: now, Text: ts + " ERROR 7 --- [starboom] [           main] o.s.boot.SpringApplication               : Application run failed"},
+				docker.LogLine{Stream: "stdout", Time: now, Text: "org.springframework.beans.factory.BeanCreationException: Error creating bean with name 'jwtFilter': Could not resolve placeholder 'JWT_ISSUER' in value \"${JWT_ISSUER}\""},
+				docker.LogLine{Stream: "stdout", Time: now, Text: "\tat org.springframework.beans.factory.support.AbstractAutowireCapableBeanFactory.doCreateBean(AbstractAutowireCapableBeanFactory.java:579)"},
+				docker.LogLine{Stream: "stdout", Time: now, Text: "\tat org.springframework.boot.SpringApplication.run(SpringApplication.java:318)"},
+				docker.LogLine{Stream: "stdout", Time: now, Text: "Caused by: java.lang.IllegalArgumentException: Could not resolve placeholder 'JWT_ISSUER' in value \"${JWT_ISSUER}\""},
+				docker.LogLine{Stream: "stdout", Time: now, Text: "\t... 42 common frames omitted"},
+			)
+		case "oom":
+			lines = append(lines, docker.LogLine{Stream: "stderr", Time: now, Text: "Terminating due to java.lang.OutOfMemoryError: Java heap space"})
+		case "health":
+			if jar {
+				// The app listens on a port of its own: what a wrong server.port looks like.
+				lines = append(lines, docker.LogLine{Stream: "stdout", Time: now, Text: now.UTC().Format("2006-01-02T15:04:05.000Z") + "  INFO 7 --- [starboom] [           main] o.s.b.w.embedded.tomcat.TomcatWebServer  : Tomcat started on port 9090 (http) with context path '/'"})
+			}
+		default:
+			lines = append(lines,
+				docker.LogLine{Stream: "stdout", Time: now, Text: fmt.Sprintf("Listening on port %d", c.Spec.InternalPort)},
+				docker.LogLine{Stream: "stderr", Time: now, Text: "WARN  slow connection acquire 812ms"},
+				docker.LogLine{Stream: "stderr", Time: now, Text: "ERROR mailer: SMTP timed out"},
+			)
 		}
 		for _, e := range c.Spec.Env {
 			if v, ok := strings.CutPrefix(e, "LOG_ECHO="); ok {
 				lines = append(lines, docker.LogLine{Stream: "stdout", Time: now, Text: v})
 			}
 		}
-		f.Update(c.ID, func(c *dockertest.Container) { c.Logs = append(c.Logs, lines...) })
+		f.Update(c.ID, func(ct *dockertest.Container) {
+			ct.Logs = append(ct.Logs, lines...)
+			switch fail {
+			case "exit":
+				ct.State.Running, ct.State.Status, ct.State.ExitCode = false, "exited", 1
+			case "oom":
+				ct.State.Running, ct.State.Status, ct.State.ExitCode, ct.State.OOMKilled = false, "exited", 137, true
+			}
+		})
+		if fail == "crash" {
+			go fakeCrashLoop(f, c)
+		}
 	}
 	f.ExecHandler = func(_ string, _ []string, conn io.ReadWriteCloser) {
 		defer conn.Close()
@@ -166,12 +245,48 @@ func newFakeEngine() *dockertest.Fake {
 	return f
 }
 
+// fakeCrashLoop makes a started container die six times, as Docker's restart
+// policy would report an app that exits right after starting.
+func fakeCrashLoop(f *dockertest.Fake, c dockertest.Container) {
+	time.Sleep(3 * time.Second) // after the deploy saw it healthy
+	for i := range 6 {
+		now := time.Now()
+		f.Update(c.ID, func(ct *dockertest.Container) {
+			ct.Logs = append(ct.Logs, docker.LogLine{Stream: "stderr", Time: now, Text: fmt.Sprintf("panic: runtime error: invalid memory address or nil pointer dereference (restart %d)", i+1)})
+			ct.State.ExitCode = 2
+		})
+		labels := maps.Clone(c.Spec.Labels)
+		labels["exitCode"] = "2"
+		f.Emit(docker.Event{ContainerID: c.ID, Action: "die", Labels: labels, Time: now})
+		time.Sleep(200 * time.Millisecond)
+	}
+}
+
 // fakeApps adjusts the app service so deploys against the fake engine finish:
-// health probes succeed, ownership changes are skipped and domains starting
-// with "pending." never get a certificate.
-func fakeApps(svc *apps.Service) {
+// health probes succeed (except for containers simulating a failure, see
+// fakeFail), ownership changes are skipped and domains starting with
+// "pending." never get a certificate.
+func fakeApps(svc *apps.Service, engine docker.Engine) {
+	fake, _ := engine.(*dockertest.Fake)
 	svc.Chown = func(string, int) error { return nil }
-	svc.Dial = func(string, string, time.Duration) (net.Conn, error) {
+	svc.HealthTimeout = 15 * time.Second
+	svc.Dial = func(_, addr string, _ time.Duration) (net.Conn, error) {
+		if fake != nil {
+			_, port, _ := net.SplitHostPort(addr)
+			for _, c := range fake.Containers() {
+				if strconv.Itoa(c.Spec.HostPort) != port {
+					continue
+				}
+				switch fakeFail(c.Spec) {
+				case "health":
+					return nil, errors.New("connection refused")
+				case "slow":
+					if time.Since(c.State.StartedAt) < 8*time.Second {
+						return nil, errors.New("connection refused")
+					}
+				}
+			}
+		}
 		// The far end stays open and silent, which the health probe reads as a
 		// listening app (an immediately closed peer means "nothing listens").
 		a, b := net.Pipe()
