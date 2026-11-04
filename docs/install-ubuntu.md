@@ -96,7 +96,7 @@ Installer menampilkan ringkasan dan bertanya **Lanjutkan? [y/N]**; ketik `y`. In
 **Catat password admin yang tercetak di akhir.** Password itu hanya ditampilkan sekali. Contoh akhir keluaran:
 
 ```
-Runova 0.1.0 siap.
+Runova 0.3.0 siap.
 
 Alamat panel : https://203.0.113.15:8443
 Sertifikat dibuat Caddy sendiri, jadi peramban memberi peringatan; lanjutkan saja.
@@ -107,7 +107,7 @@ Password     : ••••••••••••••••••••
 ### Lebih hati-hati: periksa dulu sebelum menjalankan
 
 ```bash
-V=0.1.0
+V=0.3.0
 curl -fsSLO https://github.com/aribrilliantsyah/runova/releases/download/v$V/runova-$V-linux-amd64.tar.gz
 curl -fsSLO https://github.com/aribrilliantsyah/runova/releases/download/v$V/SHA256SUMS
 sha256sum -c SHA256SUMS --ignore-missing
