@@ -4,7 +4,7 @@
 #   curl -fsSL https://github.com/aribrilliantsyah/runova/releases/latest/download/get.sh | sudo bash -s -- [options]
 #
 # Options of its own: --version X.Y.Z (default: the latest release). Every other
-# option is passed to install.sh (--domain, --port, --public-ip, --yes, --skip-firewall).
+# option is passed to install.sh (--domain, --port, --public-ip, --trusted-proxy, --yes, --skip-firewall).
 # RUNOVA_REPO overrides the GitHub repository (owner/name); RUNOVA_GITHUB
 # overrides https://github.com (tests point it at a local server).
 set -euo pipefail

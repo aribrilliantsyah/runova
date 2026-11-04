@@ -237,6 +237,22 @@ line_of() { grep -n -m1 -- "$1" "$CALLS" | cut -d: -f1; }
 	grep -q 'runova panel set --domain panel.contoh.id --public-ip 203.0.113.5' "$CALLS"
 }
 
+@test "trusted proxies are passed to runova, one flag each" {
+	prepare
+	parse_args --yes --port 8443 --trusted-proxy 10.0.0.5 --trusted-proxy=192.168.0.0/24 --trusted-proxy 2001:db8::/32
+	step_panel
+	grep -q 'runova panel set --port 8443 --trusted-proxy 10.0.0.5 --trusted-proxy 192.168.0.0/24 --trusted-proxy 2001:db8::/32' "$CALLS"
+}
+
+@test "parse_args rejects bad trusted proxies" {
+	for bad in abc 10.0.0.0/0 ::/0 10.0.0.0/33 10.0.0.1/ 10.0.0.1/x 2001:db8::/129 999.1.1.1; do
+		run parse_args --trusted-proxy "$bad"
+		[ "$status" -ne 0 ]
+	done
+	run parse_args --trusted-proxy
+	[ "$status" -ne 0 ]
+}
+
 @test "rerun without options keeps the panel address" {
 	prepare
 	step_admin
