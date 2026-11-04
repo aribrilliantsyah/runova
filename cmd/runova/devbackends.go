@@ -182,7 +182,7 @@ func fakeApps(svc *apps.Service) {
 		return a, nil
 	}
 	svc.DNS = fakeDNS{}
-	svc.Probe = func(_ context.Context, host string) (bool, string) {
+	svc.Probe = func(_ context.Context, host string, _ bool) (bool, string) {
 		if strings.HasPrefix(host, "pending.") {
 			return false, "Caddy belum punya sertifikat untuk domain ini"
 		}

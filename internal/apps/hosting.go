@@ -98,7 +98,11 @@ func (s *Service) hostingViews(ctx context.Context, list []store.HostingDomain) 
 	groups := LEGroups(names, recent, settings.PanelDomain)
 	out := make([]HostingView, len(list))
 	for i, h := range list {
-		out[i] = HostingView{HostingDomain: h, Used: used[h.ID], LECount: groups[h.ID].Count, LELevel: groups[h.ID].Level}
+		out[i] = HostingView{HostingDomain: h, Used: used[h.ID]}
+		// Behind a front proxy Caddy takes no Let's Encrypt certificates.
+		if len(settings.TrustedProxies) == 0 {
+			out[i].LECount, out[i].LELevel = groups[h.ID].Count, groups[h.ID].Level
+		}
 	}
 	return out, nil
 }

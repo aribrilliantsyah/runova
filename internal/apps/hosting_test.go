@@ -390,7 +390,7 @@ func TestCheckDomainsSkipsDisabledBase(t *testing.T) {
 	u := e.addUser("budi", store.RoleUser, roomyQuota)
 	app, _ := e.createStatic(u, "cv-app")
 	probed := 0
-	e.svc.Probe = func(context.Context, string) (bool, string) { probed++; return false, "belum" }
+	e.svc.Probe = func(context.Context, string, bool) (bool, string) { probed++; return false, "belum" }
 	if _, err := e.addLabel(u, app.ID, h.ID, "abc"); err != nil {
 		t.Fatal(err)
 	}
@@ -484,6 +484,13 @@ func TestHostingListByRole(t *testing.T) {
 	byName := map[string]apps.HostingView{all[0].Name: all[0], all[1].Name: all[1]}
 	if byName["porto.ex.id"].Used != 1 || byName["porto.ex.id"].LECount != 1 || byName["lama.ex.id"].Enabled {
 		t.Fatalf("admin view = %+v", byName)
+	}
+	e.setSettings(func(s *store.Settings) { s.TrustedProxies = []string{"10.0.0.5"} })
+	all, _ = e.svc.HostingDomains(ctx, e.admin)
+	for _, v := range all {
+		if v.LECount != 0 || v.LELevel != apps.LEOK {
+			t.Errorf("%s behind a front proxy: LE %d %q; Caddy takes no Let's Encrypt certificates then", v.Name, v.LECount, v.LELevel)
+		}
 	}
 }
 

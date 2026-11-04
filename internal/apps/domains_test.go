@@ -148,7 +148,7 @@ func TestCheckDomainStatusTransitions(t *testing.T) {
 	u := e.addUser("budi", store.RoleAdmin, roomyQuota)
 	app, _ := e.createStatic(u, "billing")
 	ok, detail := false, "Sertifikat belum dipercaya"
-	e.svc.Probe = func(_ context.Context, host string) (bool, string) {
+	e.svc.Probe = func(_ context.Context, host string, _ bool) (bool, string) {
 		if host != "x.co" {
 			t.Errorf("probed %q", host)
 		}
@@ -201,7 +201,7 @@ func TestCheckDomainsProbesOnlyInactive(t *testing.T) {
 	app, _ := e.createStatic(u, "billing")
 	probed := map[string]int{}
 	working := map[string]bool{"ok.co": true}
-	e.svc.Probe = func(_ context.Context, host string) (bool, string) {
+	e.svc.Probe = func(_ context.Context, host string, _ bool) (bool, string) {
 		probed[host]++
 		return working[host], "belum"
 	}
@@ -343,5 +343,66 @@ func TestSaveSettingsAppliesCaddyOnTrustedProxyChange(t *testing.T) {
 	}
 	if got, _ := e.store.Settings(ctx); !slices.Equal(got.TrustedProxies, []string{"10.0.0.5"}) {
 		t.Fatalf("proxies after a refusal = %v, want the previous list", got.TrustedProxies)
+	}
+}
+
+// A change of the trusted proxies switches the issuer of every certificate, so
+// every served domain, active ones too, is checked again in the background in
+// the new mode; a failing one is retried while Caddy obtains its certificate.
+func TestTrustedProxyChangeRechecksDomains(t *testing.T) {
+	ctx := context.Background()
+	e := newTestEnv(t)
+	e.svc.Caddy = &fakeCaddy{}
+	e.svc.RecheckDelay = time.Millisecond
+	var jobs []func()
+	e.svc.Go = func(f func()) { jobs = append(jobs, f) }
+	u := e.addUser("budi", store.RoleAdmin, roomyQuota)
+	app, _ := e.createStatic(u, "billing")
+	type call struct {
+		host  string
+		front bool
+	}
+	var calls []call
+	failFirst := map[string]int{"late.co": 2}
+	e.svc.Probe = func(_ context.Context, host string, front bool) (bool, string) {
+		calls = append(calls, call{host, front})
+		if failFirst[host] > 0 {
+			failFirst[host]--
+			return false, "belum"
+		}
+		return true, ""
+	}
+	for _, h := range []string{"active.co", "late.co"} {
+		if _, err := e.svc.AddDomain(ctx, u, app.ID, apps.DomainInput{Host: h}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	ds := mustDomains(t, e, app.ID)
+	if _, err := e.svc.CheckDomain(ctx, u, app.ID, ds[0].ID); err != nil {
+		t.Fatal(err)
+	}
+	if calls[0] != (call{"active.co", false}) {
+		t.Fatalf("probe without proxies = %+v, want normal mode", calls[0])
+	}
+	calls = nil
+
+	v, _ := e.store.Settings(ctx)
+	v.UploadLimitMB = 90
+	if _, err := e.svc.SaveSettings(ctx, v); err != nil || len(jobs) != 0 {
+		t.Fatalf("unrelated change: %v, %d jobs; nothing to recheck", err, len(jobs))
+	}
+	v.TrustedProxies = []string{"10.0.0.5"}
+	if _, err := e.svc.SaveSettings(ctx, v); err != nil || len(jobs) != 1 {
+		t.Fatalf("proxy change: %v, %d jobs; want one background recheck", err, len(jobs))
+	}
+	jobs[0]()
+	want := []call{{"active.co", true}, {"late.co", true}, {"late.co", true}, {"late.co", true}}
+	if !slices.Equal(calls, want) {
+		t.Fatalf("probes = %+v, want %+v (active domains too, front-proxy mode, retry until it works)", calls, want)
+	}
+	for _, d := range mustDomains(t, e, app.ID) {
+		if d.Status != store.DomainActive {
+			t.Errorf("%s = %s %q after the recheck", d.Host, d.Status, d.Detail)
+		}
 	}
 }

@@ -1,6 +1,7 @@
 package apps
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
@@ -16,13 +17,23 @@ const (
 	// still counts as pending (Caddy is obtaining one) before it is an error.
 	domainPendingWindow = 10 * time.Minute
 	domainCheckInterval = 5 * time.Minute
+	// After the proxy setting changes, Caddy obtains certificates in the
+	// background; a failing domain is probed again this often, this many times.
+	defaultRecheckDelay = 2 * time.Second
+	recheckAttempts     = 10
 )
 
-func (s *Service) probe(ctx context.Context, host string) (bool, string) {
+func (s *Service) probe(ctx context.Context, host string, frontProxy bool) (bool, string) {
 	if s.Probe != nil {
-		return s.Probe(ctx, host)
+		return s.Probe(ctx, host, frontProxy)
 	}
-	return caddy.ProbeTLS(ctx, host)
+	return caddy.ProbeTLS(ctx, host, frontProxy)
+}
+
+// frontProxy reports front-proxy mode (see caddy.State.TrustedProxies).
+func (s *Service) frontProxy(ctx context.Context) (bool, error) {
+	v, err := s.Store.Settings(ctx)
+	return len(v.TrustedProxies) > 0, err
 }
 
 // AddDomain gives the app an address: a label under a registered hosting
@@ -135,14 +146,27 @@ func (s *Service) CheckDomain(ctx context.Context, user store.User, appID, domai
 	if err != nil {
 		return store.Domain{}, err
 	}
-	return s.checkDomain(ctx, app, d)
+	front, err := s.frontProxy(ctx)
+	if err != nil {
+		return store.Domain{}, err
+	}
+	return s.checkDomain(ctx, app, d, front, 1)
 }
 
-// checkDomain records the outcome of one probe. A domain that fails stays
-// pending while Caddy may still be obtaining its certificate and becomes an
-// error afterwards; the first success notifies the owner.
-func (s *Service) checkDomain(ctx context.Context, app store.App, d store.Domain) (store.Domain, error) {
-	ok, detail := s.probe(ctx, d.Host)
+// checkDomain probes up to attempts times, until one succeeds, and records
+// the outcome. A domain that fails stays pending while Caddy may still be
+// obtaining its certificate and becomes an error afterwards; the first
+// success notifies the owner.
+func (s *Service) checkDomain(ctx context.Context, app store.App, d store.Domain, front bool, attempts int) (store.Domain, error) {
+	ok, detail := s.probe(ctx, d.Host, front)
+	for i := 1; !ok && i < attempts; i++ {
+		select {
+		case <-ctx.Done():
+			return store.Domain{}, ctx.Err()
+		case <-time.After(cmp.Or(s.RecheckDelay, defaultRecheckDelay)):
+		}
+		ok, detail = s.probe(ctx, d.Host, front)
+	}
 	now := s.now()
 	status := store.DomainPending
 	switch {
@@ -164,6 +188,17 @@ func (s *Service) checkDomain(ctx context.Context, app store.App, d store.Domain
 // CheckDomains probes every domain that is not active yet, except subdomains
 // of a disabled hosting domain (Caddy does not serve them).
 func (s *Service) CheckDomains(ctx context.Context) error {
+	return s.checkDomains(ctx, false, 1)
+}
+
+// RecheckDomains probes every served domain, active ones too, after a change
+// of the certificates Caddy uses. A failing domain is retried for a while, as
+// Caddy obtains the new certificates in the background.
+func (s *Service) RecheckDomains(ctx context.Context) error {
+	return s.checkDomains(ctx, true, recheckAttempts)
+}
+
+func (s *Service) checkDomains(ctx context.Context, active bool, attempts int) error {
 	list, err := s.Store.AllDomains(ctx)
 	if err != nil {
 		return err
@@ -172,9 +207,13 @@ func (s *Service) CheckDomains(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
+	front, err := s.frontProxy(ctx)
+	if err != nil {
+		return err
+	}
 	var errs []error
 	for _, d := range list {
-		if d.Status == store.DomainActive || d.HostingDomainID != nil && off[*d.HostingDomainID] {
+		if d.Status == store.DomainActive && !active || d.HostingDomainID != nil && off[*d.HostingDomainID] {
 			continue
 		}
 		app, err := s.Store.App(ctx, d.AppID)
@@ -182,7 +221,7 @@ func (s *Service) CheckDomains(ctx context.Context) error {
 			errs = append(errs, err)
 			continue
 		}
-		if _, err := s.checkDomain(ctx, app, d); err != nil {
+		if _, err := s.checkDomain(ctx, app, d, front, attempts); err != nil {
 			errs = append(errs, fmt.Errorf("check %s: %w", d.Host, err))
 		}
 	}

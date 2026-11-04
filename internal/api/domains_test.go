@@ -57,7 +57,7 @@ func withCaddy(e *appEnv) *caddyLoader {
 			return apps.CaddyState(ctx, e.store, "127.0.0.1:7070")
 		},
 	}
-	e.svc.Probe = func(context.Context, string) (bool, string) { return false, "belum" }
+	e.svc.Probe = func(context.Context, string, bool) (bool, string) { return false, "belum" }
 	return loader
 }
 
@@ -197,7 +197,7 @@ func TestDomainEndpoints(t *testing.T) {
 	if r.status != 200 || checked.Status != store.DomainPending || checked.Detail != "belum" {
 		t.Fatalf("check = %d %s", r.status, r.body)
 	}
-	e.svc.Probe = func(context.Context, string) (bool, string) { return true, "" }
+	e.svc.Probe = func(context.Context, string, bool) (bool, string) { return true, "" }
 	r = c.do("POST", domainsPath(id)+"/"+did+"/check", nil)
 	r.into(t, &checked)
 	if r.status != 200 || checked.Status != store.DomainActive {
