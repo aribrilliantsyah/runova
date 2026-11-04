@@ -7,8 +7,7 @@
   /* Top bar: logo or back, page title, search, notifications */
   .top{height:52px;padding:0 8px;gap:2px;border-bottom:1px solid var(--line);background:var(--panel)}
   .ibtn{width:38px;height:38px;border-radius:9px}
-  .mlogo{display:grid;place-items:center;width:30px;height:30px;border-radius:8px;background:var(--text);margin:0 6px 0 4px;flex:none}
-  .mlogo{overflow:hidden}
+  .mlogo{display:grid;place-items:center;width:30px;height:30px;margin:0 6px 0 4px;flex:none}
   .msearch{display:grid}
   .app[data-view=app] .mlogo,.app[data-view=new] .mlogo{display:none}
   .app[data-view=app] .mback,.app[data-view=new] .mback{display:grid}

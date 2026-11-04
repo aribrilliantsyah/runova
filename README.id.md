@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="docs/brand/runova-symbol.svg" width="96" height="96" alt="">
+  <img src="docs/brand/runova-app-icon.svg" width="128" height="128" alt="Runova">
 </p>
 
 <h1 align="center">Runova</h1>
@@ -325,7 +325,7 @@ Membuat arsip rilis: `scripts/release.sh 0.4.0` menghasilkan `dist/runova-0.4.0-
 - Ikon antarmuka: [Lucide](https://lucide.dev), lisensi ISC.
 - Logo bahasa pemrograman: [Devicon](https://devicon.dev), lisensi MIT. Merek dagang milik pemiliknya masing-masing.
 - Font: [IBM Plex Sans dan IBM Plex Mono](https://www.ibm.com/plex/), SIL Open Font License.
-- Logo Runova: roket yang meluncur dengan jendela berupa slot rak server, digambar khusus untuk proyek ini. Master dan variannya di `docs/brand/`.
+- Logo Runova: roket yang meluncur dengan jendela berupa slot rak server, digambar khusus untuk proyek ini. Master dan variannya di `docs/brand/`; ikon app (`runova-app-icon.svg`, PNG 1024 px) menaruhnya di tile squircle gelap gaya macOS.
 
 ## Lisensi
 

@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="docs/brand/runova-symbol.svg" width="96" height="96" alt="">
+  <img src="docs/brand/runova-app-icon.svg" width="128" height="128" alt="Runova">
 </p>
 
 <h1 align="center">Runova</h1>
@@ -325,7 +325,7 @@ Building release archives: `scripts/release.sh 0.4.0` outputs `dist/runova-0.4.0
 - UI icons: [Lucide](https://lucide.dev), ISC license.
 - Programming language logos: [Devicon](https://devicon.dev), MIT license. Trademarks belong to their respective owners.
 - Fonts: [IBM Plex Sans and IBM Plex Mono](https://www.ibm.com/plex/), SIL Open Font License.
-- Runova logo: a launching rocket with a window shaped like a server rack slot, custom designed for this project. Master files and variants are in `docs/brand/`.
+- Runova logo: a launching rocket with a window shaped like a server rack slot, custom designed for this project. Master files and variants are in `docs/brand/`; the app icon (`runova-app-icon.svg`, 1024 px PNG) puts it on a macOS-style ink squircle.
 
 ## License
 
