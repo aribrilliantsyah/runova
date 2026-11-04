@@ -19,6 +19,9 @@ var RuntimeIDs = []string{"java8", "java11", "java17", "java21", "java25", "stat
 // MaxPGAllowedNets caps Settings.PGAllowedNets.
 const MaxPGAllowedNets = 20
 
+// MaxTrustedProxies caps Settings.TrustedProxies.
+const MaxTrustedProxies = 10
+
 type Settings struct {
 	DefaultQuota  Quota `json:"default_quota"`
 	UploadLimitMB int   `json:"upload_limit_mb"`
@@ -34,6 +37,9 @@ type Settings struct {
 	PanelPort   int    `json:"panel_port"`
 	// PGAllowedNets lists extra CIDRs allowed to reach PostgreSQL from outside Docker.
 	PGAllowedNets []string `json:"pg_allowed_nets"`
+	// TrustedProxies lists the IPs and CIDRs of reverse proxies in front of
+	// Runova (such as nginx) whose X-Forwarded-For is believed.
+	TrustedProxies []string `json:"trusted_proxies"`
 	// UpdateCheck lets the server look for a newer Runova release.
 	UpdateCheck bool `json:"update_check"`
 }
@@ -51,6 +57,7 @@ func defaultSettings() Settings {
 		PortMax:           20999,
 		Runtimes:          rt,
 		PGAllowedNets:     []string{},
+		TrustedProxies:    []string{},
 		UpdateCheck:       true,
 	}
 }
@@ -105,6 +112,26 @@ func (s Settings) Validate() error {
 			return fmt.Errorf("Jaringan PostgreSQL tidak valid: %s", n)
 		}
 	}
+	return s.validateTrustedProxies()
+}
+
+func (s Settings) validateTrustedProxies() error {
+	if len(s.TrustedProxies) > MaxTrustedProxies {
+		return fmt.Errorf("Proxy tepercaya maksimal %d", MaxTrustedProxies)
+	}
+	for _, n := range s.TrustedProxies {
+		p, err := netip.ParsePrefix(n)
+		if err != nil {
+			a, aerr := netip.ParseAddr(n)
+			if aerr != nil {
+				return fmt.Errorf("Proxy tepercaya tidak valid: %s", n)
+			}
+			p = netip.PrefixFrom(a, a.BitLen())
+		}
+		if p.Bits() == 0 {
+			return errors.New("Proxy tepercaya tidak boleh mencakup seluruh internet (0.0.0.0/0 atau ::/0)")
+		}
+	}
 	return nil
 }
 
@@ -137,6 +164,9 @@ func (s *Store) SetSettings(ctx context.Context, v Settings) error {
 	v.Runtimes = rt
 	if v.PGAllowedNets == nil {
 		v.PGAllowedNets = []string{}
+	}
+	if v.TrustedProxies == nil {
+		v.TrustedProxies = []string{}
 	}
 	raw, err := json.Marshal(v)
 	if err != nil {

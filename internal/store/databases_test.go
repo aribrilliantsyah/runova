@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"reflect"
+	"strings"
 	"testing"
 
 	"runova/internal/store"
@@ -112,5 +113,45 @@ func TestSettingsPGAllowedNets(t *testing.T) {
 	}
 	if err := s.SetSettings(ctx, v); err == nil {
 		t.Error("21 nets accepted")
+	}
+}
+
+func TestSettingsTrustedProxies(t *testing.T) {
+	s := newStore(t)
+	ctx := context.Background()
+	v, err := s.Settings(ctx)
+	if err != nil || v.TrustedProxies == nil || len(v.TrustedProxies) != 0 {
+		t.Fatalf("default proxies = %#v, %v", v.TrustedProxies, err)
+	}
+	v.TrustedProxies = []string{"10.0.0.1", "10.20.0.0/16", "2001:db8::/32"}
+	if err := s.SetSettings(ctx, v); err != nil {
+		t.Fatal(err)
+	}
+	if got, _ := s.Settings(ctx); !reflect.DeepEqual(got.TrustedProxies, v.TrustedProxies) {
+		t.Fatalf("proxies = %v", got.TrustedProxies)
+	}
+	v.TrustedProxies = nil
+	if err := s.SetSettings(ctx, v); err != nil {
+		t.Fatal(err)
+	}
+	if got, _ := s.Settings(ctx); got.TrustedProxies == nil || len(got.TrustedProxies) != 0 {
+		t.Fatalf("cleared proxies = %#v", got.TrustedProxies)
+	}
+	for _, bad := range [][]string{{"nope"}, {"10.0.0.0/33"}, {"0.0.0.0/0"}, {"::/0"}, {"0.0.0.0/00"}, {""}} {
+		v.TrustedProxies = bad
+		if err := s.SetSettings(ctx, v); err == nil {
+			t.Errorf("proxies %v accepted", bad)
+		}
+	}
+	v.TrustedProxies = make([]string, store.MaxTrustedProxies+1)
+	for i := range v.TrustedProxies {
+		v.TrustedProxies[i] = "10.0.0.1"
+	}
+	if err := s.SetSettings(ctx, v); err == nil {
+		t.Error("11 proxies accepted")
+	}
+	v.TrustedProxies = []string{"0.0.0.0/0"}
+	if err := s.SetSettings(ctx, v); err == nil || !strings.Contains(err.Error(), "seluruh internet") {
+		t.Errorf("0.0.0.0/0 error = %v, want a message about the whole internet", err)
 	}
 }

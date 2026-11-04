@@ -105,6 +105,8 @@ From a source checkout (for instance, to test unreleased changes), `scripts/depl
 
 `install.sh` options: `--domain <host>` or `--port <n>` (mutually exclusive; defaults to `--port 8443` without either), `--public-ip <ip>` (saved to settings; for servers behind NAT), `--skip-firewall` (do not touch `ufw`), `--yes` (non-interactive, for headless installations). For `--domain`, point that domain's DNS to the server first.
 
+`--trusted-proxy <ip/cidr>` (repeatable) is for servers behind an nginx that forwards to Runova; see [nginx in front of Runova](docs/nginx-front-proxy.md).
+
 At the end, the installer prints the panel address, username `admin`, and a random password **once only**. If lost: `sudo -u runova env RUNOVA_DATA=/var/lib/runova runova admin reset-password admin`.
 
 What the installer does: creates user `runova` (`docker` group), encryption key, `/etc/runova/runova.env`, and systemd unit `runova.service`; writes `/etc/caddy/Caddyfile` containing `{ admin localhost:2019 }` and runs Caddy with `--resume`; creates PostgreSQL role `runova` and enables `listen_addresses = '*'` and `include_dir pg_hba.d`; merges `default-address-pools` (`172.31.0.0/16`) into `/etc/docker/daemon.json`; opens ports 22 (or the actual `sshd` port), 80, 443, 20000-20999, 5432, and the panel port in `ufw`, then enables it if not already active.
@@ -214,6 +216,8 @@ When a domain is entered, Runova displays a setup guide prefilled with the subdo
 
 For Direct DNS and Proxy, certificates are issued by Caddy on the server. For Tunnel, HTTPS is handled by Cloudflare.
 
+A Runova server with only a local IP behind another server running nginx is covered by [nginx in front of Runova](docs/nginx-front-proxy.md), including wildcard certificates for the domain hosting.
+
 ## Interface
 
 <table>
@@ -315,6 +319,8 @@ Product flows (login, users, databases, deploying binaries and JARs, zero-downti
 ```bash
 test/e2e/stack.sh up && test/e2e/run.sh && test/e2e/stack.sh down
 ```
+
+With the stack up, `test/e2e/nginx.sh` puts nginx 1.18 in front of it with `docs/examples/nginx-runova.conf` (the file the guide embeds) and checks panel access without a redirect loop, the login limit per real client IP (two client containers, forged `X-Forwarded-For`), WebSocket, subdomains, and the IP in the activity log.
 
 `stack.sh up` uses panel port 8443, Caddy admin 2019, PostgreSQL 55432, and IP access ports 20000+ on this host, so stop other services using those ports. `RUNOVA_DEV_CHMOD=1` creates application data directories with 0777 permissions instead of `chown` (dev process is not root); rejected for `RUNOVA_DATA=/var/lib/runova`. Without `down`, leftover `runova-*` containers and `test/e2e/.cache/state` directory remain; `run.sh` requires a freshly started stack. On first run, `run.sh` builds the sample Spring Boot JAR in `maven:3-eclipse-temurin-21` and caches it in `test/e2e/.cache/`.
 

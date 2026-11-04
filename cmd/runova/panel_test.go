@@ -2,6 +2,8 @@ package main
 
 import (
 	"context"
+	"slices"
+	"strings"
 	"testing"
 
 	"runova/internal/config"
@@ -124,5 +126,47 @@ func TestPanelSetPublicIP(t *testing.T) {
 	}
 	if v := panelSettings(t, env); v.PublicIP != "2001:db8::1" || v.PanelDomain != "panel.a.co" {
 		t.Fatalf("a rejected command changed the settings: %+v", v)
+	}
+}
+
+func TestPanelSetTrustedProxy(t *testing.T) {
+	env := map[string]string{"RUNOVA_DATA": t.TempDir()}
+	if r := runIn(t, env, "panel", "set", "--port", "8443", "--public-ip", "203.0.113.5"); r.code != 0 {
+		t.Fatalf("set port: %+v", r)
+	}
+	r := runIn(t, env, "panel", "set", "--trusted-proxy", "10.0.0.5", "--trusted-proxy", "192.168.0.0/24")
+	if r.code != 0 || !strings.Contains(r.stdout, "Trusted proxies: 10.0.0.5, 192.168.0.0/24") {
+		t.Fatalf("set proxies: %+v", r)
+	}
+	v := panelSettings(t, env)
+	if !slices.Equal(v.TrustedProxies, []string{"10.0.0.5", "192.168.0.0/24"}) || v.PanelPort != 8443 || v.PublicIP != "203.0.113.5" {
+		t.Fatalf("settings = %+v; the proxies must not touch the panel address or the public IP", v)
+	}
+	if r := runIn(t, env, "panel", "set", "--domain", "panel.a.co", "--trusted-proxy", "10.0.0.9"); r.code != 0 {
+		t.Fatalf("set domain with proxy: %+v", r)
+	}
+	if v := panelSettings(t, env); !slices.Equal(v.TrustedProxies, []string{"10.0.0.9"}) || v.PanelDomain != "panel.a.co" {
+		t.Fatalf("settings = %+v; a new list replaces the old one", v)
+	}
+	if r := runIn(t, env, "panel", "set", "--public-ip", "203.0.113.6"); r.code != 0 {
+		t.Fatalf("set public ip: %+v", r)
+	}
+	if v := panelSettings(t, env); !slices.Equal(v.TrustedProxies, []string{"10.0.0.9"}) {
+		t.Fatalf("proxies = %v; an unrelated option must keep them", v.TrustedProxies)
+	}
+	for _, bad := range []string{"abc", "10.0.0.0/33", "0.0.0.0/0", "::/0"} {
+		if r := runIn(t, env, "panel", "set", "--trusted-proxy", bad); r.code != 1 || r.stderr == "" {
+			t.Fatalf("%q accepted: %+v", bad, r)
+		}
+	}
+	if v := panelSettings(t, env); !slices.Equal(v.TrustedProxies, []string{"10.0.0.9"}) {
+		t.Fatalf("a rejected command changed the proxies: %v", v.TrustedProxies)
+	}
+	r = runIn(t, env, "panel", "set", "--trusted-proxy", "")
+	if r.code != 0 || !strings.Contains(r.stdout, "Trusted proxies: none") {
+		t.Fatalf("clear: %+v", r)
+	}
+	if v := panelSettings(t, env); len(v.TrustedProxies) != 0 {
+		t.Fatalf("proxies after clear = %v", v.TrustedProxies)
 	}
 }

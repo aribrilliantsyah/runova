@@ -105,6 +105,8 @@ Dari checkout source (misalnya untuk mencoba perubahan yang belum dirilis), `scr
 
 Opsi `install.sh`: `--domain <host>` atau `--port <n>` (tidak bisa bersamaan; tanpa keduanya bawaannya `--port 8443`), `--public-ip <ip>` (disimpan ke setelan; untuk server di belakang NAT), `--skip-firewall` (jangan menyentuh `ufw`), `--yes` (tanpa tanya, untuk instalasi tanpa terminal). Untuk `--domain`, arahkan DNS domain itu ke server dulu.
 
+`--trusted-proxy <ip/cidr>` (bisa diulang) untuk server di belakang nginx yang meneruskan ke Runova; lihat [nginx di depan Runova](docs/nginx-front-proxy.id.md).
+
 Di akhir, installer mencetak alamat panel, username `admin`, dan password acak **sekali saja**. Bila hilang: `sudo -u runova env RUNOVA_DATA=/var/lib/runova runova admin reset-password admin`.
 
 Yang dilakukan installer: membuat user `runova` (grup `docker`), kunci enkripsi, `/etc/runova/runova.env`, dan unit systemd `runova.service`; menulis `/etc/caddy/Caddyfile` berisi `{ admin localhost:2019 }` dan menjalankan Caddy dengan `--resume`; membuat role PostgreSQL `runova` dan mengaktifkan `listen_addresses = '*'` serta `include_dir pg_hba.d`; menggabungkan `default-address-pools` (`172.31.0.0/16`) ke `/etc/docker/daemon.json`; membuka port 22 (atau port `sshd` sebenarnya), 80, 443, 20000-20999, 5432, dan port panel di `ufw`, lalu mengaktifkannya bila belum aktif.
@@ -214,6 +216,8 @@ Saat domain diisi, Runova menampilkan panduan yang sudah terisi subdomain, domai
 
 Untuk DNS langsung dan proxy, sertifikat diterbitkan Caddy di server. Untuk Tunnel, HTTPS diurus Cloudflare.
 
+Server Runova yang hanya punya IP lokal di belakang server lain ber-nginx dibahas di [nginx di depan Runova](docs/nginx-front-proxy.id.md), termasuk sertifikat wildcard untuk domain hosting.
+
 ## Tampilan
 
 <table>
@@ -315,6 +319,8 @@ Alur produk (login, pengguna, database, deploy binary dan JAR, deploy tanpa jeda
 ```bash
 test/e2e/stack.sh up && test/e2e/run.sh && test/e2e/stack.sh down
 ```
+
+Dengan stack menyala, `test/e2e/nginx.sh` menaruh nginx 1.18 di depannya dengan `docs/examples/nginx-runova.conf` (berkas yang dimuat panduan) dan memeriksa akses panel tanpa loop redirect, batas login per IP klien asli (dua container klien, `X-Forwarded-For` palsu), WebSocket, subdomain, dan IP di log aktivitas.
 
 `stack.sh up` memakai port panel 8443, Caddy admin 2019, PostgreSQL 55432, dan port akses IP 20000+ di mesin ini, jadi hentikan layanan lain yang memakainya. `RUNOVA_DEV_CHMOD=1` membuat folder data aplikasi 0777 sebagai pengganti `chown` (proses dev bukan root); ditolak untuk `RUNOVA_DATA=/var/lib/runova`. Tanpa `down`, sisa container `runova-*` dan folder `test/e2e/.cache/state` tertinggal; `run.sh` butuh stack yang baru dinaikkan. Pertama kali, `run.sh` membangun JAR Spring Boot contoh di `maven:3-eclipse-temurin-21` dan menyimpannya di `test/e2e/.cache/`.
 

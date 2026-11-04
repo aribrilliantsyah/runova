@@ -40,6 +40,9 @@ const usage = `Usage: runova <command>
   panel set --domain <domain>    serve the panel at a domain (automatic HTTPS)
   panel set --port <port>        serve the panel at IP:port (HTTPS)
   panel set --public-ip <ip>     the server's public IP (may be combined with --domain/--port)
+  panel set --trusted-proxy <ip/cidr>
+                                 trust X-Forwarded-For from a proxy in front of Runova, such as nginx
+                                 (repeat for several; "" clears; may be combined with the other options)
 `
 
 // version is set at build time with -ldflags "-X main.version=<versi>".

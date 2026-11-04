@@ -60,6 +60,12 @@ EOF
 	(cd "$dir" && sha256sum "$name.tar.gz" >SHA256SUMS)
 }
 
+@test "passes --trusted-proxy to install.sh unchanged" {
+	run bash "$GET" --trusted-proxy 10.0.0.5 --trusted-proxy 192.168.0.0/24 --yes
+	[ "$status" -eq 0 ]
+	[ "$(cat "$OUT")" = "0.2.0|--trusted-proxy 10.0.0.5 --trusted-proxy 192.168.0.0/24 --yes" ]
+}
+
 @test "installs the latest release and passes the options to install.sh" {
 	run bash "$GET" --domain panel.contoh.id --yes
 	[ "$status" -eq 0 ]

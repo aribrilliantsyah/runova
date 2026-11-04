@@ -68,6 +68,8 @@ Lewati bagian ini bila panel diakses lewat `https://IP:8443`.
 
 **Server tanpa IP publik** (di belakang NAT atau jaringan kantor): domain tidak bisa diarahkan langsung. Pakai **Cloudflare Tunnel**: di Cloudflare Zero Trust, Networking → Tunnels, pasang `cloudflared` di server, lalu tambahkan Published application dengan Service URL `http://localhost:80` (Caddy). HTTPS diurus Cloudflare. Panel tetap bisa dipakai lewat `https://IP-LAN:8443` dari jaringan yang sama.
 
+**IP lokal di belakang server lain ber-nginx:** nginx memegang sertifikat dan meneruskan ke Runova lewat HTTPS; ikuti [nginx di depan Runova](nginx-front-proxy.id.md) (juga menjelaskan `--trusted-proxy` agar batas login dan log aktivitas memakai IP asli pengunjung).
+
 ## 5. Menjalankan instalasi
 
 Masuk ke server lewat SSH, lalu jalankan **satu perintah** ini:
@@ -89,6 +91,7 @@ Installer menampilkan apa yang akan dilakukan dan bertanya **Continue? [y/N]** (
 | `--domain <host>` | panel di `https://<host>` |
 | `--port <n>` | panel di `https://<IP>:<n>` (bawaan 8443; bukan 2019, 5432, 7070, 20000-20999) |
 | `--public-ip <ip>` | IP publik server (dipakai panduan domain dan detail koneksi database) |
+| `--trusted-proxy <ip/cidr>` | IP nginx di depan Runova yang `X-Forwarded-For`-nya dipercaya; bisa diulang ([panduan](nginx-front-proxy.id.md)) |
 | `--skip-firewall` | jangan menyentuh `ufw` (firewall diatur di tempat lain) |
 | `--yes` | tanpa pertanyaan (untuk otomasi, misalnya cloud-init) |
 | `--version x.y.z` | pasang versi tertentu, bukan yang terbaru (opsi `get.sh`) |

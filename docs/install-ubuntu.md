@@ -68,6 +68,8 @@ Skip this section if the panel will be accessed via `https://IP:8443`.
 
 **Servers without a public IP** (behind NAT or in an office network): domains cannot be pointed directly. Use **Cloudflare Tunnel**: in Cloudflare Zero Trust, navigate to Networking → Tunnels, install `cloudflared` on the server, and add a Published application with Service URL `http://localhost:80` (Caddy). HTTPS is handled by Cloudflare. The panel remains accessible at `https://IP-LAN:8443` from the same local network.
 
+**Local IP behind another server running nginx:** nginx keeps the certificates and forwards to Runova over HTTPS; follow [nginx in front of Runova](nginx-front-proxy.md) (it also explains `--trusted-proxy`, which makes the login limit and the activity log use each visitor's real IP).
+
 ## 5. Running the installation
 
 Log in to the server via SSH, then run this **single command**:
@@ -89,6 +91,7 @@ The installer shows what it will do and asks **Continue? [y/N]**; type `y`. Each
 | `--domain <host>` | panel at `https://<host>` |
 | `--port <n>` | panel at `https://<IP>:<n>` (default 8443; not 2019, 5432, 7070, 20000-20999) |
 | `--public-ip <ip>` | server public IP (used in domain setup guide and database connection details) |
+| `--trusted-proxy <ip/cidr>` | IP of an nginx in front of Runova whose `X-Forwarded-For` is believed; repeatable ([guide](nginx-front-proxy.md)) |
 | `--skip-firewall` | do not touch `ufw` (firewall managed elsewhere) |
 | `--yes` | non-interactive without prompts (for automation, e.g. cloud-init) |
 | `--version x.y.z` | install specific version instead of latest (`get.sh` option) |

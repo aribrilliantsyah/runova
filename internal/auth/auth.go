@@ -12,6 +12,7 @@ import (
 	"net"
 	"net/http"
 	"net/netip"
+	"slices"
 	"strings"
 	"time"
 
@@ -74,20 +75,53 @@ func IsHTTPS(r *http.Request) bool {
 	return r.TLS != nil || (isLoopback(r) && r.Header.Get("X-Forwarded-Proto") == "https")
 }
 
-// ClientIP returns the peer address. X-Forwarded-For's first entry is trusted
-// only when the connection comes from loopback (the local reverse proxy).
-func ClientIP(r *http.Request) string {
+// ParseTrusted turns settings entries (IPs or CIDRs) into prefixes; invalid
+// entries are skipped, since the settings validation already rejects them.
+func ParseTrusted(nets []string) []netip.Prefix {
+	out := make([]netip.Prefix, 0, len(nets))
+	for _, n := range nets {
+		if p, err := netip.ParsePrefix(n); err == nil {
+			out = append(out, p.Masked())
+		} else if a, err := netip.ParseAddr(n); err == nil {
+			out = append(out, netip.PrefixFrom(a.Unmap(), a.Unmap().BitLen()))
+		}
+	}
+	return out
+}
+
+// ClientIP returns the client's address. Connections to Runova come from the
+// local Caddy, which appends the peer it saw to X-Forwarded-For (keeping the
+// incoming header only when that peer is a trusted proxy). So the header is
+// read from the right, skipping loopback and trusted proxies; the first other
+// address is the client, and anything left of it may be forged and is never
+// used. When every entry is a proxy, the leftmost is used. A connection from
+// outside loopback, or an unparsable entry on the way, yields the peer address.
+func ClientIP(r *http.Request, trusted []netip.Prefix) string {
 	host, _, err := net.SplitHostPort(r.RemoteAddr)
 	if err != nil {
 		host = r.RemoteAddr
 	}
-	if isLoopback(r) {
-		first, _, _ := strings.Cut(r.Header.Get("X-Forwarded-For"), ",")
-		if addr, err := netip.ParseAddr(strings.TrimSpace(first)); err == nil {
-			// One canonical spelling per client, or "::ffff:1.2.3.4" and "1.2.3.4"
-			// would get separate login-failure counters.
-			return addr.Unmap().WithZone("").String()
+	if !isLoopback(r) {
+		return host
+	}
+	entries := strings.Split(strings.Join(r.Header.Values("X-Forwarded-For"), ","), ",")
+	var leftmost netip.Addr
+	for i := len(entries) - 1; i >= 0; i-- {
+		addr, err := netip.ParseAddr(strings.TrimSpace(entries[i]))
+		if err != nil {
+			return host
 		}
+		// One canonical spelling per client, or "::ffff:1.2.3.4" and "1.2.3.4"
+		// would get separate login-failure counters.
+		addr = addr.Unmap().WithZone("")
+		if addr.IsLoopback() || slices.ContainsFunc(trusted, func(p netip.Prefix) bool { return p.Contains(addr) }) {
+			leftmost = addr
+			continue
+		}
+		return addr.String()
+	}
+	if leftmost.IsValid() {
+		return leftmost.String()
 	}
 	return host
 }

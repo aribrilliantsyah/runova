@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Runova installer for Ubuntu Server 26.04 (amd64).
 #
-#   sudo ./install.sh [--domain panel.example.com | --port 8443] [--public-ip IP] [--yes]
+#   sudo ./install.sh [--domain panel.example.com | --port 8443] [--public-ip IP]
+#                     [--trusted-proxy IP/CIDR] [--yes]
 #
 # Every step checks first whether it is already done, so running the same
 # command again updates the binary and the unit and leaves data, keys and the
@@ -36,6 +37,7 @@ PACKAGES=(docker.io caddy postgresql-18 ufw jq curl)
 DOMAIN=""
 PORT=""
 PUBLIC_IP=""
+TRUSTED_PROXIES=()
 ASSUME_YES=0
 PANEL_EXPLICIT=0
 ADMIN_PASSWORD=""
@@ -181,6 +183,9 @@ Usage: sudo ./install.sh [options]
   --domain <host>    serve the panel at https://<host> (automatic HTTPS)
   --port <n>         serve the panel at https://<server IP>:<n> (default without options: 8443)
   --public-ip <ip>   the server's public IP, stored in the Runova settings
+  --trusted-proxy <ip/cidr>
+                     a reverse proxy in front of Runova (such as nginx) whose
+                     X-Forwarded-For is believed; repeat for several
   --yes, -y          do not ask questions (for installs without a terminal)
   --skip-firewall    do not touch ufw (for servers whose firewall is managed elsewhere)
   --help, -h         show this help
@@ -216,6 +221,21 @@ valid_ip() {
 	[[ $ip == *:* && $ip =~ ^[0-9a-fA-F:.]+$ ]]
 }
 
+# valid_proxy accepts an IP or an IP/prefix, but not a prefix of length 0,
+# which would make every client a trusted proxy.
+valid_proxy() {
+	local addr=${1%%/*} bits=""
+	[[ $1 == */* ]] && bits=${1#*/}
+	valid_ip "$addr" || return 1
+	[[ $1 == */* ]] || return 0
+	[[ $bits =~ ^[0-9]+$ ]] || return 1
+	if [[ $addr == *:* ]]; then
+		((10#$bits >= 1 && 10#$bits <= 128))
+	else
+		((10#$bits >= 1 && 10#$bits <= 32))
+	fi
+}
+
 set_option() {
 	local name=$1 value=$2
 	case "$name" in
@@ -232,19 +252,23 @@ set_option() {
 		valid_ip "$value" || die "Invalid public IP: $value"
 		PUBLIC_IP=$value
 		;;
+	--trusted-proxy)
+		valid_proxy "$value" || die "Invalid trusted proxy: $value (use an IP or IP/prefix, not 0.0.0.0/0)"
+		TRUSTED_PROXIES+=("$value")
+		;;
 	esac
 }
 
 parse_args() {
-	DOMAIN="" PORT="" PUBLIC_IP="" ASSUME_YES=0 PANEL_EXPLICIT=0 SKIP_FIREWALL=0
+	DOMAIN="" PORT="" PUBLIC_IP="" TRUSTED_PROXIES=() ASSUME_YES=0 PANEL_EXPLICIT=0 SKIP_FIREWALL=0
 	while (($# > 0)); do
 		case "$1" in
-		--domain | --port | --public-ip)
+		--domain | --port | --public-ip | --trusted-proxy)
 			(($# >= 2)) || die "Option $1 needs a value"
 			set_option "$1" "$2"
 			shift 2
 			;;
-		--domain=* | --port=* | --public-ip=*)
+		--domain=* | --port=* | --public-ip=* | --trusted-proxy=*)
 			set_option "${1%%=*}" "${1#*=}"
 			shift
 			;;
@@ -618,7 +642,7 @@ step_firewall() {
 }
 
 step_panel() {
-	local args=() rc=0
+	local args=() rc=0 proxy
 	if ((!PANEL_EXPLICIT)); then
 		# Without --domain/--port a rerun keeps the address chosen at the first install.
 		as_runova admin exists || rc=$?
@@ -636,6 +660,9 @@ step_panel() {
 	if [[ -n $PUBLIC_IP ]]; then
 		args+=(--public-ip "$PUBLIC_IP")
 	fi
+	for proxy in "${TRUSTED_PROXIES[@]}"; do
+		args+=(--trusted-proxy "$proxy")
+	done
 	if ((${#args[@]} > 0)); then
 		as_runova panel set "${args[@]}"
 	fi

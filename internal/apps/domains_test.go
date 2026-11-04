@@ -262,7 +262,12 @@ func TestCaddyState(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	e.setSettings(func(s *store.Settings) { s.PanelDomain = "panel.co"; s.PanelPort = 8443; s.PublicIP = "203.0.113.5" })
+	e.setSettings(func(s *store.Settings) {
+		s.PanelDomain = "panel.co"
+		s.PanelPort = 8443
+		s.PublicIP = "203.0.113.5"
+		s.TrustedProxies = []string{"10.0.0.1"}
+	})
 
 	got, err := apps.CaddyState(ctx, e.store, "127.0.0.1:7070")
 	if err != nil {
@@ -276,9 +281,11 @@ func TestCaddyState(t *testing.T) {
 		PanelIPPort:   8443,
 		PanelUpstream: "127.0.0.1:7070",
 		PublicIP:      "203.0.113.5",
+
+		TrustedProxies: []string{"10.0.0.1"},
 	}
 	if !slices.Equal(got.Sites, want.Sites) || !slices.Equal(got.IPListeners, want.IPListeners) ||
-		got.PanelDomain != want.PanelDomain || got.PanelIPPort != want.PanelIPPort || got.PanelUpstream != want.PanelUpstream || got.PublicIP != want.PublicIP {
+		got.PanelDomain != want.PanelDomain || got.PanelIPPort != want.PanelIPPort || got.PanelUpstream != want.PanelUpstream || got.PublicIP != want.PublicIP || !slices.Equal(got.TrustedProxies, want.TrustedProxies) {
 		t.Fatalf("state = %+v\nwant   %+v\n(only the running app with an active deployment is routed; a stopped app and an app that never deployed are not)", got, want)
 	}
 }
@@ -309,5 +316,32 @@ func TestIPAccessToggleReverts(t *testing.T) {
 	got, _ := e.store.App(ctx, app.ID)
 	if !got.IPAccess || got.MemoryMB != 256 {
 		t.Fatalf("app = ip_access %v memory %d; a refused change must leave every setting as it was", got.IPAccess, got.MemoryMB)
+	}
+}
+
+func TestSaveSettingsAppliesCaddyOnTrustedProxyChange(t *testing.T) {
+	ctx := context.Background()
+	e := newTestEnv(t)
+	fc := &fakeCaddy{}
+	e.svc.Caddy = fc
+	v, err := e.store.Settings(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	v.UploadLimitMB = 80
+	if _, err := e.svc.SaveSettings(ctx, v); err != nil || fc.applied != 0 {
+		t.Fatalf("unrelated change: %v, applied %d; Caddy must not reload", err, fc.applied)
+	}
+	v.TrustedProxies = []string{"10.0.0.5"}
+	if _, err := e.svc.SaveSettings(ctx, v); err != nil || fc.applied != 1 {
+		t.Fatalf("trusted proxy change: %v, applied %d; Caddy must reload", err, fc.applied)
+	}
+	fc.err = errors.New("refused")
+	v.TrustedProxies = []string{"10.0.0.6"}
+	if _, err := e.svc.SaveSettings(ctx, v); err == nil {
+		t.Fatal("a refusal by Caddy must fail the save")
+	}
+	if got, _ := e.store.Settings(ctx); !slices.Equal(got.TrustedProxies, []string{"10.0.0.5"}) {
+		t.Fatalf("proxies after a refusal = %v, want the previous list", got.TrustedProxies)
 	}
 }

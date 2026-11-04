@@ -44,17 +44,22 @@ type State struct {
 	PanelIPPort   int
 	PanelUpstream string
 	PublicIP      string
+	// TrustedProxies are the IPs and CIDRs of reverse proxies in front of
+	// Caddy. Caddy keeps X-Forwarded-For from them and appends their address;
+	// from anyone else it discards the header and sets the peer's address.
+	TrustedProxies []string
 	// AdminListen is Caddy's admin address; empty means DefaultAdminListen.
 	AdminListen string
 }
 
 type obj = map[string]any
 
-func proxyRoute(id, upstream string, hosts ...string) obj {
-	route := obj{
-		"@id":    id,
-		"handle": []any{obj{"handler": "reverse_proxy", "upstreams": []any{obj{"dial": upstream}}}},
+func (s State) proxyRoute(id, upstream string, hosts ...string) obj {
+	handler := obj{"handler": "reverse_proxy", "upstreams": []any{obj{"dial": upstream}}}
+	if len(s.TrustedProxies) > 0 {
+		handler["trusted_proxies"] = slices.Sorted(slices.Values(s.TrustedProxies))
 	}
+	route := obj{"@id": id, "handle": []any{handler}}
 	if len(hosts) > 0 {
 		route["match"] = []any{obj{"host": hosts}}
 	}
@@ -127,7 +132,7 @@ func Build(s State) ([]byte, error) {
 	slices.SortFunc(hostRoutes, func(a, b hostRoute) int { return strings.Compare(a.host, b.host) })
 	httpsRoutes := make([]any, len(hostRoutes))
 	for i, r := range hostRoutes {
-		httpsRoutes[i] = proxyRoute(r.id, r.upstream, r.host)
+		httpsRoutes[i] = s.proxyRoute(r.id, r.upstream, r.host)
 	}
 	// Listening on :443 only is deliberate: Caddy adds the :80 server that
 	// redirects HTTP to HTTPS (and answers ACME challenges) by itself. With
@@ -143,7 +148,7 @@ func Build(s State) ([]byte, error) {
 		servers[ipServerPrefix+port] = obj{
 			"listen":          []string{":" + port},
 			"automatic_https": obj{"disable": true},
-			"routes":          []any{proxyRoute("ip:"+port, l.Upstream)},
+			"routes":          []any{s.proxyRoute("ip:"+port, l.Upstream)},
 		}
 	}
 
@@ -154,7 +159,7 @@ func Build(s State) ([]byte, error) {
 			"listen":                  []string{":" + strconv.Itoa(s.PanelIPPort)},
 			"automatic_https":         obj{"disable": true},
 			"tls_connection_policies": []any{policy},
-			"routes":                  []any{proxyRoute("panel-ip", s.PanelUpstream)},
+			"routes":                  []any{s.proxyRoute("panel-ip", s.PanelUpstream)},
 		}
 		apps["tls"] = s.panelIPTLS()
 	}

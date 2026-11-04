@@ -46,7 +46,7 @@ func (s *server) login(w http.ResponseWriter, r *http.Request) {
 	}
 	ctx := r.Context()
 	name := clip(body.Username, maxLoginName)
-	ip := auth.ClientIP(r)
+	ip := s.clientIP(r)
 
 	// Check and count the attempt before the slow password check, atomically:
 	// otherwise parallel guesses all pass the lock check, and a client that drops
