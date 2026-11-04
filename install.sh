@@ -20,6 +20,7 @@ DATA_DIR="$ROOT/var/lib/runova"
 ENV_FILE="$ETC_DIR/runova.env"
 SECRET_KEY="$ETC_DIR/secret.key"
 BIN="$ROOT/usr/local/bin/runova"
+ROLLBACK_DIR="$DATA_DIR/rollback"
 UNIT="$ROOT/etc/systemd/system/runova.service"
 CADDYFILE="$ROOT/etc/caddy/Caddyfile"
 CADDY_DROPIN="$ROOT/etc/systemd/system/caddy.service.d/runova.conf"
@@ -248,12 +249,33 @@ step_user_dirs() {
 	chown "$SERVICE_USER:$SERVICE_USER" "$ETC_DIR" "$DATA_DIR"
 }
 
+# save_rollback keeps the installed binary, when it is another version than the
+# one being installed, in rollback/ for `runova rollback`. Only the one version
+# before this one is kept. A failure only costs the rollback, never the install.
+save_rollback() {
+	local old tmp
+	[[ -x $BIN ]] || return 0
+	old=$("$BIN" version 2>/dev/null) || return 0
+	old=${old#runova }
+	[[ -n $old && $old != "$VERSION" ]] || return 0
+	if ! { install -d -m 0755 "$ROLLBACK_DIR" &&
+		tmp=$(mktemp "$ROLLBACK_DIR/runova.new.XXXXXX") &&
+		install -m 0755 "$BIN" "$tmp" &&
+		mv -f "$tmp" "$ROLLBACK_DIR/runova" &&
+		printf '%s\n' "$old" >"$ROLLBACK_DIR/VERSION"; }; then
+		warn "Binary $old tidak bisa disimpan untuk runova rollback"
+		return 0
+	fi
+	log "Binary runova $old disimpan untuk runova rollback"
+}
+
 step_binary() {
 	local src="$SRC_DIR/runova" tmp
 	[[ -f $src ]] || die "$src tidak ditemukan; jalankan install.sh dari folder hasil ekstrak rilis"
 	VERSION=$("$src" version) || die "$src tidak bisa dijalankan di server ini"
 	VERSION=${VERSION#runova }
 	install -d -m 0755 "$(dirname "$BIN")"
+	save_rollback
 	tmp=$(mktemp "$BIN.new.XXXXXX")
 	if ! install -m 0755 "$src" "$tmp"; then
 		rm -f "$tmp"

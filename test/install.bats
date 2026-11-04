@@ -272,6 +272,64 @@ line_of() { grep -n -m1 -- "$1" "$CALLS" | cut -d: -f1; }
 	[ -z "$(ls "$RUNOVA_ROOT"/usr/local/bin | grep -v '^runova$' || true)" ]
 }
 
+# set_src_version makes the release's binary report version $1.
+set_src_version() {
+	printf '#!/bin/sh\necho "runova %s"\n' "$1" >"$RUNOVA_SRC/runova"
+}
+
+@test "first install creates no rollback folder" {
+	prepare
+	[ ! -e "$RUNOVA_ROOT/var/lib/runova/rollback" ]
+}
+
+@test "an update keeps the old binary and its version in rollback/" {
+	prepare
+	set_src_version 0.1.0
+	step_binary
+	set_src_version 0.2.0
+	step_binary
+	local dir="$RUNOVA_ROOT/var/lib/runova/rollback"
+	[ "$("$dir/runova" version)" = "runova 0.1.0" ]
+	[ "$(cat "$dir/VERSION")" = "0.1.0" ]
+	[ "$(stat -c %a "$dir/runova")" = 755 ]
+	[ "$("$RUNOVA_ROOT/usr/local/bin/runova" version)" = "runova 0.2.0" ]
+	[ -z "$(ls "$dir" | grep -v -e '^runova$' -e '^VERSION$' || true)" ]
+}
+
+@test "reinstalling the same version leaves rollback/ alone" {
+	prepare
+	set_src_version 0.1.0
+	step_binary
+	set_src_version 0.2.0
+	step_binary
+	step_binary
+	local dir="$RUNOVA_ROOT/var/lib/runova/rollback"
+	[ "$("$dir/runova" version)" = "runova 0.1.0" ]
+	[ "$(cat "$dir/VERSION")" = "0.1.0" ]
+}
+
+@test "the next update replaces rollback/ with the version just left" {
+	prepare
+	set_src_version 0.1.0
+	step_binary
+	set_src_version 0.2.0
+	step_binary
+	set_src_version 0.3.0
+	step_binary
+	local dir="$RUNOVA_ROOT/var/lib/runova/rollback"
+	[ "$("$dir/runova" version)" = "runova 0.2.0" ]
+	[ "$(cat "$dir/VERSION")" = "0.2.0" ]
+}
+
+@test "an installed binary that cannot report its version is not kept" {
+	prepare
+	printf '#!/bin/sh\nexit 1\n' >"$RUNOVA_ROOT/usr/local/bin/runova"
+	set_src_version 0.2.0
+	step_binary
+	[ ! -e "$RUNOVA_ROOT/var/lib/runova/rollback" ]
+	[ "$("$RUNOVA_ROOT/usr/local/bin/runova" version)" = "runova 0.2.0" ]
+}
+
 @test "packages already installed are skipped" {
 	step_packages
 	: >"$CALLS"
