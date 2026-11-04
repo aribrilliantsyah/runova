@@ -159,6 +159,20 @@ try {
       }
       if (seen.size < 3) fail(`${where("focus")}: Tab reached only ${seen.size} controls`);
 
+      if (width > 760) {
+        // Collapsing the sidebar leaves the content filling the window, and opening it brings the sidebar back.
+        await page.goto(`${srv.url}/#/apps`);
+        await page.waitForSelector("#content");
+        await page.click("button[aria-label='Ciutkan sidebar']");
+        await page.waitForTimeout(400);
+        const cw = (await page.locator(".sheet").boundingBox())?.width || 0;
+        if (cw < width - 40) fail(`${where("collapse")}: content is ${Math.round(cw)} px wide with the sidebar collapsed`);
+        await page.click("button[aria-label='Tampilkan sidebar']");
+        await page.waitForTimeout(400);
+        const sx = (await page.locator(".sheet").boundingBox())?.x || 0;
+        if (sx < 200) fail(`${where("collapse")}: sidebar did not come back (content starts at ${Math.round(sx)})`);
+      }
+
       for (const p of problems) fail(`${width} ${theme}: ${p}`);
       await ctx.close();
     }

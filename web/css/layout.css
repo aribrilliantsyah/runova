@@ -1,7 +1,12 @@
 #root{height:100%}
-.app{position:relative;display:grid;grid-template-columns:232px minmax(0,1fr);height:100%;background:var(--canvas);color:var(--text)}
+.app{position:relative;display:grid;grid-template-columns:232px minmax(0,1fr);height:100%;background:var(--canvas);color:var(--text);transition:grid-template-columns .22s cubic-bezier(.2,.7,.2,1)}
+/* Collapsed: the sidebar keeps its grid cell (column 1) and only shrinks to 0, so the main area
+   never falls into the empty column; visibility hides it from focus once the slide ends. */
 .app.collapsed{grid-template-columns:0 minmax(0,1fr)}
-.app.collapsed .side{display:none}
+.app>.side{grid-column:1;min-width:0;overflow-x:hidden;transition:opacity .16s ease,visibility 0s linear 0s}
+.app>.main{grid-column:2}
+.app.collapsed>.side{opacity:0;visibility:hidden;padding-left:0;padding-right:0;transition:opacity .12s ease,visibility 0s linear .22s}
+@media (prefers-reduced-motion:reduce){.app,.app>.side{transition:none}}
 
 /* Sidebar */
 .side{display:flex;flex-direction:column;padding:10px;min-height:0;overflow-y:auto}
