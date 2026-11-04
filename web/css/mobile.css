@@ -16,6 +16,9 @@
   .crumb a{font-weight:600;font-size:15px;padding:0 4px}
   .crumb svg.lucide:not(.neutral){display:none}
   .sheet{border:0;border-radius:0}
+  .banner.upd{margin:8px 8px 0}
+  .banner.upd .r{margin-left:0;width:100%}
+  .banner.upd .r .btn{flex:1;justify-content:center}
 
   /* Bottom navigation */
   .bnav{display:grid;grid-template-columns:repeat(5,1fr);flex:none;height:64px;background:var(--panel);border-top:1px solid var(--line);padding:0 4px env(safe-area-inset-bottom)}

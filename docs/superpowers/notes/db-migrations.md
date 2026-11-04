@@ -10,6 +10,7 @@ Menggantikan skema "langsung ubah `schema`" (spec §11). Kode: `internal/store/m
 - Tiap migrasi = satu transaksi `BEGIN IMMEDIATE` (`_txlock=immediate`) berisi isi file + `PRAGMA foreign_key_check` + `PRAGMA user_version = N`. Gagal → rollback, error memuat nama file (`migration 0002_x.sql: ...`). Versi dibaca ulang di dalam transaksi, jadi dua `Open` bersamaan (service dan `runova admin create`) tidak menjalankan migrasi dua kali: yang kedua menunggu kunci tulis, lalu melihat versi sudah naik.
 - DB dengan `user_version` lebih besar dari migrasi tertinggi ditolak sebelum menyentuh apa pun: `database dibuat oleh versi Runova yang lebih baru (skema N, binary ini M)`. Tidak ada cadangan, tidak ada perubahan.
 - Cadangan: sebelum migrasi tertunda pertama pada DB yang sudah berisi (versi ≥ 1, atau DB pra-migrasi yang baru diadopsi), `VACUUM INTO` ke `runova.db.bak-v<versi lama>-<unix>` (0600), path dicatat di log. Hanya 3 cadangan terbaru (urut waktu unix di nama) yang disimpan; file lain berawalan `runova.db.bak-` yang tidak cocok pola dibiarkan. DB kosong baru tidak dicadangkan.
+- `runova rollback` memakai keluaran `db version` binary lama ("Skema tertinggi binary ini") dan cadangan `runova.db.bak-v<skema binary lama>-*` terbaru; lihat `update-rollback.md`.
 - `runova db version` → `store.SchemaVersion(path)`: membuka DB read-only, tidak pernah membuat atau mengubah file; DB belum ada dilaporkan sebagai versi 0.
 
 ## DB pra-migrasi (satu-satunya kode kompatibilitas)

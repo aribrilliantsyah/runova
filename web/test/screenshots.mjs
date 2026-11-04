@@ -29,6 +29,7 @@ try {
   const settings = (await call("GET", "/api/settings", undefined, cookie)).body;
   settings.public_ip = "203.0.113.15";
   settings.upload_limit_mb = 200;
+  settings.update_check = false; // the banner only belongs in the two update shots
   await call("PUT", "/api/settings", settings, cookie);
 
   const jar = buildSampleJar(tmp, { name: "billing-api-2.4.1.jar" });
@@ -82,6 +83,15 @@ try {
     console.log(`wrote ${name}`);
     await ctx.close();
   };
+
+  const withBanner = async (on) => {
+    const cur = (await call("GET", "/api/settings", undefined, cookie)).body;
+    await call("PUT", "/api/settings", { ...cur, update_check: on }, cookie);
+  };
+  await withBanner(true);
+  await shot("desktop-update-banner.png", { width: 1440, height: 900, scheme: "light", route: "/apps", wait: ".app > .main > .banner.upd:not([hidden])" });
+  await shot("mobile-update-banner-dark.png", { width: 390, height: 844, scheme: "dark", route: "/apps", wait: ".app > .main > .banner.upd:not([hidden])" });
+  await withBanner(false);
 
   await shot("desktop-apps.png", { width: 1440, height: 900, scheme: "light", route: "/apps", wait: ".acard:has-text('notif-relay')" });
   await shot("desktop-app-dark.png", {

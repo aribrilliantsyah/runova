@@ -107,13 +107,37 @@ Bila `/etc/caddy/Caddyfile` sudah Anda ubah (bukan bawaan paket), installer berh
 
 ## Pembaruan
 
-Jalankan perintah instalasi yang sama lagi (tanpa `--domain`/`--port` bila alamat panel tidak berubah):
+Admin diberi tahu di panel: bila ada rilis yang lebih baru, banner di bawah topbar semua halaman (hanya untuk admin, tidak bisa ditutup) berisi versi baru, perintah `sudo runova update` dengan tombol salin, dan tautan ke catatan rilis. Banner hilang sendiri setelah server diperbarui.
+
+Pengecekan dilakukan `runova serve` (bukan peramban), pertama 1 menit setelah start lalu tiap 6 jam, dengan mengikuti redirect `github.com/<repo>/releases/latest` seperti `get.sh` (tanpa `api.github.com`). Server tanpa internet tidak menampilkan apa-apa. Matikan di halaman **Server** (sakelar "Periksa pembaruan", setelan `update_check`). Build `dev` tidak pernah mengecek. `RUNOVA_REPO` mengganti repositori (bawaan `aribrilliantsyah/runova`) dan `RUNOVA_GITHUB` mengganti `https://github.com` (dipakai uji).
+
+Perbarui di server:
+
+```bash
+sudo runova update                 # ke rilis terbaru, bertanya dulu
+sudo runova update --yes           # tanpa tanya (wajib bila tanpa terminal)
+sudo runova update --version 0.3.0 # ke versi tertentu (tidak boleh lebih lama dari yang terpasang)
+runova update --check              # hanya memeriksa; keluar 0 = terbaru, 10 = ada pembaruan, 1 = gagal
+```
+
+`runova update` mengunduh `get.sh` dari rilis target beserta `SHA256SUMS`, mencocokkan checksum `get.sh`, lalu menjalankan `bash get.sh --version X --yes`. Semua logika pemasangan tetap satu tempat (`get.sh` → `install.sh`), jadi hasilnya sama dengan perintah `curl` di bawah. Alamat panel tidak berubah. Perintah `curl` tetap dipakai untuk instalasi pertama dan untuk server Runova 0.2.0 ke bawah yang belum punya `runova update`:
 
 ```bash
 curl -fsSL https://github.com/aribrilliantsyah/runova/releases/latest/download/get.sh | sudo bash -s --
 ```
 
 Installer idempoten: langkah yang sudah beres dilewati, binary dan unit diganti, layanan di-restart. Data, kunci, admin, aplikasi, dan alamat panel tidak disentuh, dan tidak ada password baru dicetak. Beri `--domain`/`--port` hanya bila ingin mengganti alamat panel.
+
+### Kembali ke versi sebelumnya
+
+Saat memasang versi lain, `install.sh` menyimpan binary yang sedang terpasang ke `/var/lib/runova/rollback/runova` (versinya di `rollback/VERSION`). Hanya satu versi sebelumnya yang disimpan.
+
+```bash
+sudo runova rollback          # bertanya dulu
+sudo runova rollback --yes
+```
+
+`rollback` menghentikan layanan, mengembalikan binary sebelumnya, lalu menjalankan `runova check`. Bila database sudah dimigrasi melebihi skema binary lama, ia memulihkan cadangan terbaru `runova.db.bak-v<skema binary lama>-*` (dibuat otomatis sebelum migrasi); tanpa cadangan yang cocok `rollback` berhenti tanpa mengubah apa pun. **Perubahan data panel sejak pembaruan (pengguna, aplikasi, domain, setelan) hilang** pada kasus itu; database sebelum rollback disimpan di `runova.db.before-rollback-<waktu unix>`. Container aplikasi dan database PostgreSQL pengguna tidak disentuh. Binary yang diganti disimpan di `rollback/`, jadi menjalankan `rollback` lagi (atau `runova update`) maju kembali.
 
 Skema database ikut diperbarui otomatis saat Runova dibuka. Sebelum migrasi pertama yang tertunda, Runova menyalin database ke `/var/lib/runova/runova.db.bak-v<versi lama>-<waktu unix>` (mode 0600; 3 cadangan terbaru disimpan) dan mencatat path-nya di log. Bila migrasi gagal, perubahan dibatalkan dan Runova tidak start. Database dari versi Runova yang lebih baru ditolak tanpa disentuh, jadi mundur ke binary lama harus disertai pemulihan dari cadangan. `runova db version` mencetak versi skema database dan versi tertinggi yang dikenal binary:
 
@@ -191,6 +215,13 @@ Untuk DNS langsung dan proxy, sertifikat diterbitkan Caddy di server. Untuk Tunn
   </tr>
 </table>
 
+<table>
+  <tr>
+    <td><img src="docs/screenshots/desktop-update-banner.png" alt="Banner pembaruan di bawah topbar, desktop terang"></td>
+    <td width="260"><img src="docs/screenshots/mobile-update-banner-dark.png" alt="Banner pembaruan di HP, mode gelap"></td>
+  </tr>
+</table>
+
 Tangkapan layar di atas diambil dari panel sungguhan (`node web/test/screenshots.mjs`), bukan dari preview.
 
 - Mode terang dan gelap mengikuti sistem, bisa dipaksa dari menu akun, padat seperti Dokploy dan Railway, tanpa gradien.
@@ -251,6 +282,7 @@ node web/test/smoke-app.mjs       # tab detail aplikasi, log, terminal
 node web/test/smoke-admin.mjs     # pengguna, database, aktivitas, server
 node web/test/smoke-layout.mjs    # 5 lebar layar, terang dan gelap, aksesibilitas
 node web/test/smoke-lifecycle.mjs # terminal, dialog, dan soket tidak melewati umur halaman/sesi
+node web/test/smoke-update.mjs    # banner pembaruan (admin ya, pengguna biasa tidak), sakelar, tanpa scroll horizontal
 ```
 
 Ikon dibuat dari `web/icons.txt` dengan `go run ./cmd/genicons` (hasilnya di-commit).
