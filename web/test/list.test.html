@@ -1,0 +1,86 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>list components</title>
+<body>
+<script type="module">
+import { test, assert, eq, run } from "/test/harness.js";
+import { tokens, toggle, without, has, words, fieldWords, format } from "/assets/js/components/query.js";
+import { stateHash } from "/assets/js/components/hashstate.js";
+import { timeWindow, toLocalInput } from "/assets/js/components/timerange.js";
+import { dataTable, pager } from "/assets/js/components/list.js";
+
+test("tokens parse words, phrases, exclusions and fields like the server", () => {
+  const t = tokens(`deploy "billing api" -staging aksi:db.* -pelaku:budi target:"my app" x:y`);
+  eq(t.map((x) => [x.neg, x.field, x.value]), [
+    [false, "", "deploy"], [false, "", "billing api"], [true, "", "staging"], [false, "aksi", "db.*"],
+    [true, "pelaku", "budi"], [false, "target", "my app"], [false, "", "x:y"],
+  ]);
+  eq(tokens(`- "" aksi:`), []);
+});
+
+test("toggle adds, flips and removes one field filter", () => {
+  let q = toggle("deploy", "aksi", "db.create");
+  eq(q, "deploy aksi:db.create");
+  q = toggle(q, "aksi", "db.create", true);
+  eq(q, "deploy -aksi:db.create", "the same value with the other sign replaces it");
+  q = toggle(q, "aksi", "db.create", true);
+  eq(q, "deploy", "the same filter again removes it");
+  eq(toggle("", "target", "my app"), `target:"my app"`);
+  eq(toggle("hasil:gagal", "hasil", "berhasil"), "hasil:berhasil", "only one outcome at a time");
+});
+
+test("without, has, words and fieldWords", () => {
+  eq(without("a -b aksi:c", 1), "a aksi:c");
+  eq(has("-pelaku:Budi", "pelaku", "budi"), "out");
+  eq(has("pelaku:budi", "pelaku", "budi"), "in");
+  eq(has("budi", "pelaku", "budi"), "");
+  eq(words(`deploy -x "a b" aksi:y`), ["deploy", "a b"]);
+  eq(fieldWords("aksi:db.* -aksi:login", "aksi"), ["db."]);
+  eq(format({ neg: true, field: "target", value: 'a "b"' }), `-target:"a b"`);
+});
+
+test("stateHash leaves defaults out of the URL", () => {
+  const d = { q: "", range: "24h", page: "1" };
+  eq(stateHash("/activity", { q: "", range: "24h", page: "1" }, d), "#/activity");
+  eq(stateHash("/activity", { q: "a b", range: "7d", page: "2" }, d), "#/activity?q=a+b&range=7d&page=2");
+});
+
+test("timeWindow: quick ranges, all, custom with an inclusive end minute, fallback", () => {
+  const now = 1_800_000_000_000;
+  eq(timeWindow({ range: "1h" }, now), { from: now - 3600e3, to: 0 });
+  eq(timeWindow({ range: "all" }, now), { from: 0, to: 0 });
+  const from = toLocalInput(now - 7200e3);
+  const to = toLocalInput(now);
+  const w = timeWindow({ range: "custom", from, to }, now);
+  eq(w.to - new Date(to).getTime(), 60e3);
+  eq(timeWindow({ range: "custom", from: to, to: from }, now), { from: now - 86400e3, to: 0 }, "a reversed custom range falls back");
+});
+
+test("dataTable: aria-sort follows the sort, clicking flips the order", () => {
+  const calls = [];
+  const t = dataTable({ columns: [{ key: "a", label: "A", sort: "a", cell: (r) => r.a }, { key: "b", label: "B", sort: "b", firstOrder: "desc", cell: (r) => r.b }], sort: "a", order: "asc", onSort: (s, o) => calls.push([s, o]) });
+  const [ta, tb] = t.el.querySelectorAll("th");
+  eq(ta.getAttribute("aria-sort"), "ascending");
+  eq(tb.getAttribute("aria-sort"), "none");
+  ta.querySelector("button").click();
+  tb.querySelector("button").click();
+  eq(calls, [["a", "desc"], ["b", "desc"]], "same column flips, another column starts at its first order");
+  t.set([{ a: "<b>x</b>", b: 2 }]);
+  assert(!t.tbody.querySelector("b"), "cells are text");
+  eq(t.tbody.querySelector("td").dataset.label, "A");
+});
+
+test("pager shows x–y of z and disables the ends", () => {
+  const p = pager({ onPage() {}, onSize() {} });
+  p.set({ total: 312, offset: 25, limit: 25 });
+  assert(p.el.textContent.includes("26–50 dari 312"), p.el.textContent);
+  const [prev, next] = p.el.querySelectorAll(".pg-nav button");
+  assert(!prev.disabled && !next.disabled);
+  p.set({ total: 312, offset: 300, limit: 25 });
+  assert(next.disabled, "last page");
+  p.set({ total: 0, offset: 0, limit: 25 });
+  assert(p.el.hidden, "no rows, no pager");
+});
+
+run();
+</script>

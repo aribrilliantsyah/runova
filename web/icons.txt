@@ -62,3 +62,13 @@ users
 x
 play
 refresh-cw
+chevron-up
+chevron-left
+funnel
+clock
+circle-plus
+circle-minus
+braces
+radio
+arrow-down-up
+log-in
