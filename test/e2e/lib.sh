@@ -1,4 +1,4 @@
-# shellcheck shell=bash
+# shellcheck shell=bash disable=SC2034
 # Helpers shared by run.sh and nginx.sh. The sourcing script has sourced env.sh
 # and set WORK (a scratch folder) and PANEL (the panel's base URL) first.
 
