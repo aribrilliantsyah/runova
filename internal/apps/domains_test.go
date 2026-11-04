@@ -318,3 +318,30 @@ func TestIPAccessToggleReverts(t *testing.T) {
 		t.Fatalf("app = ip_access %v memory %d; a refused change must leave every setting as it was", got.IPAccess, got.MemoryMB)
 	}
 }
+
+func TestSaveSettingsAppliesCaddyOnTrustedProxyChange(t *testing.T) {
+	ctx := context.Background()
+	e := newTestEnv(t)
+	fc := &fakeCaddy{}
+	e.svc.Caddy = fc
+	v, err := e.store.Settings(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	v.UploadLimitMB = 80
+	if _, err := e.svc.SaveSettings(ctx, v); err != nil || fc.applied != 0 {
+		t.Fatalf("unrelated change: %v, applied %d; Caddy must not reload", err, fc.applied)
+	}
+	v.TrustedProxies = []string{"10.0.0.5"}
+	if _, err := e.svc.SaveSettings(ctx, v); err != nil || fc.applied != 1 {
+		t.Fatalf("trusted proxy change: %v, applied %d; Caddy must reload", err, fc.applied)
+	}
+	fc.err = errors.New("refused")
+	v.TrustedProxies = []string{"10.0.0.6"}
+	if _, err := e.svc.SaveSettings(ctx, v); err == nil {
+		t.Fatal("a refusal by Caddy must fail the save")
+	}
+	if got, _ := e.store.Settings(ctx); !slices.Equal(got.TrustedProxies, []string{"10.0.0.5"}) {
+		t.Fatalf("proxies after a refusal = %v, want the previous list", got.TrustedProxies)
+	}
+}
