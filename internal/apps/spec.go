@@ -84,6 +84,11 @@ func (s *Service) ContainerSpec(app store.App, user store.User, d store.Deployme
 		}
 	}
 	set("PORT", strconv.Itoa(d.InternalPort))
+	if app.Kind == artifact.KindJar {
+		// Spring Boot binds server.port from SERVER_PORT and outranks the
+		// application files with it, so the app listens where Runova checks.
+		set("SERVER_PORT", strconv.Itoa(d.InternalPort))
+	}
 	set("RUNOVA_DATA_DIR", dataMount)
 	set("HOME", "/tmp")
 

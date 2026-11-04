@@ -16,7 +16,7 @@ export function quotaStats(usage) {
   return h(
     "div",
     { class: "stats three", id: "stats" },
-    stat("boxes", "Aplikasi", String(usage.apps), `dari ${q.apps}`, pct(usage.apps, q.apps)),
+    stat("package", "Aplikasi", String(usage.apps), `dari ${q.apps}`, pct(usage.apps, q.apps)),
     stat("memory-stick", "Memori", fmtMB(usage.memory_mb), `dari ${fmtMB(q.memory_mb)}`, pct(usage.memory_mb, q.memory_mb)),
     stat("cpu", "CPU", fmtNum(usage.cpu_milli / 1000), `dari ${fmtNum(q.cpu_milli / 1000)} core`, pct(usage.cpu_milli, q.cpu_milli)),
   );

@@ -50,7 +50,7 @@
 .top .right{margin-left:auto;display:flex;align-items:center;gap:6px}
 .sheet{flex:1;min-height:0;background:var(--panel);border:1px solid var(--line);border-radius:var(--r-lg);overflow:auto}
 .sheet:focus{outline:none}
-/* A page fills the sheet (the wizard's summary column runs to the bottom) and scrolls when it is taller. */
+/* A page fills the sheet and scrolls when it is taller. */
 .sheet{display:flex;flex-direction:column}
 .sheet > *{flex:1 0 auto;min-width:0}
 
@@ -67,7 +67,7 @@
 .loading{padding:40px;text-align:center;color:var(--faint)}
 
 /* Mobile-only parts */
-.mlogo,.mback,.msearch,.bnav,.mbar,.mstep,.msheet{display:none}
+.mlogo,.mback,.msearch,.bnav,.mbar,.msheet{display:none}
 
 /* Login */
 .login{min-height:100%;display:grid;place-items:center;padding:24px;background:var(--canvas)}

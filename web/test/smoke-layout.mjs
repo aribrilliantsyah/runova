@@ -109,24 +109,19 @@ try {
         }
       }
 
-      // Deploy wizard: every step with a real upload.
+      // Deploy page: the upload, then the review with every optional part opened.
       await page.goto(`${srv.url}/#/deploy`);
       await page.waitForSelector(".drop");
+      await measure(where("/deploy upload"));
       await page.setInputFiles("#upload-file", jar);
       await page.waitForSelector(".fileok");
-      for (let s = 1; s <= 4; s++) {
-        if (width > 760) await page.click(`.steps button[data-step='${s}']`);
-        else if (s > 1) await page.click(".mbar #mnext, .mbar button:has-text('Lanjut')").catch(() => {});
-        await measure(where(`/deploy step ${s}`));
-        if (s === 3) {
-          const hint = await page.locator("[data-env='GREETING']").count();
-          void hint;
-        }
-      }
+      await page.evaluate(() => document.querySelectorAll(".dpage details").forEach((d) => (d.open = true)));
+      await page.locator(".envfold").click().catch(() => {});
+      await measure(where("/deploy review"));
       if (width <= 760) {
         const vis = await page.evaluate(() => ({ bnav: getComputedStyle(document.querySelector(".bnav")).display, mbar: getComputedStyle(document.querySelector(".mbar")).display }));
-        if (vis.bnav !== "none") fail(`${where("/deploy")}: bottom nav should be replaced by the step bar`);
-        if (vis.mbar === "none") fail(`${where("/deploy")}: step action bar missing on phones`);
+        if (vis.bnav !== "none") fail(`${where("/deploy")}: bottom nav should be replaced by the deploy bar`);
+        if (vis.mbar === "none") fail(`${where("/deploy")}: deploy bar missing on phones`);
       }
 
       // The "Lainnya" sheet and the mobile chrome.

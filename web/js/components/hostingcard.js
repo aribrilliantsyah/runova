@@ -43,7 +43,7 @@ export function hostingCard() {
   const body = h("div", { class: "bd" });
   const node = h(
     "section",
-    { class: "card", id: "hostingcard", style: { "margin-top": "12px" } },
+    { class: "card", id: "hostingcard" },
     h("header", {}, h("div", {}, h("h3", {}, "Domain hosting"), h("p", {}, "Pengguna memberi aplikasinya alamat <nama>.<domain hosting> tanpa mengurus DNS, sebanyak kuota aplikasinya."))),
     body,
   );
@@ -74,7 +74,7 @@ export function hostingCard() {
       name.value = reserved.value = "";
       hint.hidden = true;
       await reload();
-      toast(d.dns_status === "ok" ? `${d.name} terdaftar, DNS sudah mengarah ke server` : `${d.name} terdaftar, tetapi DNS belum benar: ${d.dns_detail}`, d.dns_status === "ok" ? undefined : "err");
+      toast(d.dns_status === "ok" ? `${d.name} terdaftar, DNS sudah mengarah ke server` : `${d.name} terdaftar. DNS belum benar; detailnya ada di tabel.`, d.dns_status === "ok" ? undefined : "err");
     });
     void added;
   });
@@ -91,8 +91,30 @@ export function hostingCard() {
     const check = h("button", { class: "btn sm", type: "button", "aria-label": `Cek DNS ${d.name}`, title: "Cek DNS", onclick: (e) => act(e.currentTarget, async () => { await api.post(`/api/hosting-domains/${d.id}/check`); await reload(); }) }, icon("rotate-cw"));
     const edit = h("button", { class: "btn sm ghost", type: "button", "aria-label": `Nama cadangan ${d.name}`, onclick: () => reservedDialog(d) }, icon("pencil"));
     const del = h("button", { class: "btn sm ghost", type: "button", "aria-label": `Hapus ${d.name}`, onclick: () => confirm({ title: "Hapus domain hosting?", message: `${d.name} tidak lagi bisa dipilih pengguna.`, submit: "Hapus", danger: true, onSubmit: async () => { await api.del(`/api/hosting-domains/${d.id}`); await reload(); toast("Domain hosting dihapus"); } }) }, icon("trash-2"));
-    const dns = h("td", {}, dnsChip(d), d.dns_status === "error" ? h("div", { class: "muted dnsdetail" }, d.dns_detail) : null);
+    const dns = h("td", { class: "dnscell" }, dnsChip(d), d.dns_status === "error" ? dnsDetail(d) : null);
     return row(HEADS, [h("td", { class: "mono" }, d.name, d.reserved ? h("div", { class: "faint resv" }, `cadangan: ${d.reserved}`) : null), h("td", {}, sw), dns, h("td", {}, String(d.used)), h("td", { class: "num nowrap" }, check, " ", edit, " ", del)], { "data-hosting": d.name });
+  }
+
+  // The record points at an address that is not this server's. With no public IP set, the
+  // server may sit behind a proxy or NAT whose address that is: offer to use it.
+  function dnsDetail(d) {
+    const m = /^Record menunjuk ke ([0-9a-f.:]+)(?:,|\s)/i.exec(d.dns_detail || "");
+    const pointed = m?.[1];
+    const offer = pointed && !state.public_ip
+      ? h(
+          "div",
+          { class: "dnsfix" },
+          h("span", {}, "Server di belakang proxy/NAT? Isi IP publik dengan ", h("b", { class: "mono" }, pointed), "."),
+          h("button", { class: "btn sm", type: "button", onclick: (e) => act(e.currentTarget, async () => {
+            const cur = await api.get("/api/settings");
+            await api.put("/api/settings", { ...cur, public_ip: pointed });
+            await api.post(`/api/hosting-domains/${d.id}/check`);
+            await reload();
+            dispatchEvent(new Event("runova:settings"));
+          }, `IP publik diisi ${pointed}`) }, "Pakai IP ini"),
+        )
+      : null;
+    return h("div", {}, h("div", { class: "muted dnsdetail", title: d.dns_detail }, d.dns_detail), offer);
   }
 
   function reservedDialog(d) {

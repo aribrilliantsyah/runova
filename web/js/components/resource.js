@@ -2,7 +2,7 @@ import { h, icon, fmtMB, fmtNum } from "/assets/js/dom.js";
 import { memoryChoices, cpuChoices } from "/assets/js/validate.js";
 
 /**
- * resourceCards({usage, current}) → {node, memory(), cpu(), fits()}.
+ * resourceCards({usage, current}) → {node, memory(), cpu(), fits(), set(mb, milli)}.
  * Memory and CPU are chosen from what is left of the quota; current is the app's own
  * allocation when editing (it counts as free again).
  */
@@ -34,5 +34,13 @@ export function resourceCards({ usage, current = { memory_mb: 0, cpu_milli: 0 },
     memory: () => Number(memSel.value) || 0,
     cpu: () => Number(cpuSel.value) || 0,
     fits: () => memOpts.length > 0 && cpuOpts.length > 0,
+    memOpts,
+    cpuOpts,
+    /** set(mb, milli) picks the nearest choices at or below the values (presets). */
+    set(mb, milli) {
+      if (memOpts.length) memSel.value = String(pick(memOpts, mb));
+      if (cpuOpts.length) cpuSel.value = String(pick(cpuOpts, milli));
+      onChange?.();
+    },
   };
 }

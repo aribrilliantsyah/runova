@@ -334,6 +334,7 @@ func (c *Client) InspectContainer(ctx context.Context, id string) (ContainerStat
 			Status     string
 			Running    bool
 			ExitCode   int
+			OOMKilled  bool
 			StartedAt  time.Time
 			FinishedAt time.Time
 		}
@@ -343,7 +344,7 @@ func (c *Client) InspectContainer(ctx context.Context, id string) (ContainerStat
 		return ContainerState{}, err
 	}
 	return ContainerState{
-		ID: out.Id, Status: out.State.Status, Running: out.State.Running, ExitCode: out.State.ExitCode,
+		ID: out.Id, Status: out.State.Status, Running: out.State.Running, ExitCode: out.State.ExitCode, OOMKilled: out.State.OOMKilled,
 		RestartCount: out.RestartCount, StartedAt: out.State.StartedAt, FinishedAt: out.State.FinishedAt,
 		Labels: out.Config.Labels,
 	}, nil

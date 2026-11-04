@@ -81,7 +81,7 @@ export async function renderApps(root) {
       : null;
 
     const grid = shown.length
-      ? h("div", { class: "apps", id: "apps" }, shown.map((a) => appCard(a, data.summary[a.id], info.public_ip)))
+      ? h("div", { class: "apps", id: "apps" }, shown.map((a) => appCard(a, data.summary[a.id], info)))
       : h("div", { class: "empty" }, h("b", {}, "Tidak ada aplikasi yang cocok"), h("span", {}, "Ubah filter atau kata kunci."));
 
     body.replaceChildren(

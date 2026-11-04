@@ -43,13 +43,11 @@ try {
   await budi.goto(`${srv.url}/#/deploy`);
   await budi.setInputFiles("#upload-file", bin);
   await budi.waitForSelector(".fileok");
-  await budi.click(".steps button[data-step='4']");
   await budi.waitForSelector(".addr .anone:has-text('Belum ada domain hosting; hubungi admin')");
   check((await budi.locator(".addr select").count()) === 0, "no picker without domains for a user");
   await admin.goto(`${srv.url}/#/deploy`);
   await admin.setInputFiles("#upload-file", bin);
   await admin.waitForSelector(".fileok");
-  await admin.click(".steps button[data-step='4']");
   await admin.waitForSelector(".addr .anone a[href='#/server']");
 
   step("admin registers apps.contoh.id from the Server page; the DNS hint names *.apps");
@@ -78,7 +76,6 @@ try {
   await budi.reload();
   await budi.setInputFiles("#upload-file", bin);
   await budi.waitForSelector(".fileok");
-  await budi.click(".steps button[data-step='4']");
   await budi.waitForSelector(".addr select");
   const options = await budi.locator(".addr select option").allInnerTexts();
   check(options.length === 1 && options[0] === "apps.contoh.id", `budi's options: ${options}`);
@@ -93,7 +90,7 @@ try {
   check((await budi.locator(".addr .apreview").innerText()).includes("cv-budi.apps.contoh.id"), "preview");
   await budi.fill("#nm", "cv-budi");
   await budi.click("#deploy");
-  await budi.waitForURL(/#\/apps\/\d+\/logs/);
+  await budi.waitForURL(/#\/apps\/\d+\/deployments\/\d+/);
   const appId = Number(budi.url().match(/apps\/(\d+)/)[1]);
 
   step("the app has that address, and the control is locked at quota");

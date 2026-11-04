@@ -2,7 +2,9 @@ import * as api from "/assets/js/api.js";
 import { h, icon, poll, fill } from "/assets/js/dom.js";
 import { ctx } from "/assets/js/ctx.js";
 import * as session from "/assets/js/session.js";
-import { kindLogo, runtimeLabel, runtimeSub, statusOf } from "/assets/js/kinds.js";
+import { kindLogo, runtimeLabel, runtimeSub } from "/assets/js/kinds.js";
+import { appState } from "/assets/js/components/deploytrace.js";
+import { ipHost } from "/assets/js/components/iphost.js";
 import { renderGeneral } from "/assets/js/pages/app/general.js";
 import { renderDeployments } from "/assets/js/pages/app/deployments.js";
 import { renderDomains } from "/assets/js/pages/app/domains.js";
@@ -36,7 +38,8 @@ export async function renderApp(root, params) {
     id,
     me,
     info,
-    state: detail, // {app, owner, env, deployment, stats, busy}
+    state: detail, // {app, owner, env, deployment, latest, stats, busy}
+    sub: params.sub || null, // the tab's own sub-path, e.g. a deployment ID
     history: { mem: [], cpu: [] },
     get app() {
       return this.state.app;
@@ -71,6 +74,7 @@ export async function renderApp(root, params) {
   const logoBox = h("span", { class: "lgbox" });
   const deleteHeader = h("a", { class: "btn sm ghost danger", href: page.path("advanced"), "aria-label": "Hapus aplikasi" }, icon("trash-2"));
   const links = h("div", { class: "links" });
+  const why = h("div", { class: "appwhy", role: "status", "aria-live": "polite", hidden: true });
   const head = h("div", { class: "ph" }, h("div", { class: "dhead" }, logoBox, h("div", {}, title, subline)), h("div", { class: "acts" }, deleteHeader));
 
   const tabsEl = h(
@@ -79,29 +83,43 @@ export async function renderApp(root, params) {
     TABS.map(([key, slug, label]) => h("a", { role: "tab", href: page.path(slug), "data-tab": key, "aria-selected": "false" }, label)),
   );
   const panel = h("div", { class: "tab", role: "tabpanel" });
-  root.append(h("section", { id: "v-app" }, head, links, tabsEl, panel));
+  root.append(h("section", { id: "v-app" }, head, why, links, tabsEl, panel));
 
   let domainsCache = [];
   function paintHeader() {
     const { app, deployment, owner } = page.state;
-    const [cls, label] = statusOf(app.status);
+    const st = appState(page.state);
     const language = deployment?.report?.language;
     logoBox.replaceChildren(kindLogo(app.kind, language));
-    fill(title, app.name, " ", h("span", { class: `chip ${cls}` }, h("span", { class: `dot ${cls}` }), page.state.busy && app.status !== "deploying" ? "Sedang diproses" : label));
+    const busyOther = page.state.busy && !st.live;
+    fill(title, app.name, " ", h("span", { class: `chip ${st.cls}`, id: "appstatus" }, h("span", { class: `dot ${st.cls}` }), busyOther ? "Sedang diproses" : st.label));
+    why.hidden = !st.line;
+    if (st.line) {
+      const tone = st.live ? "warn" : st.warn ? "warn" : st.cls === "err" ? "err" : "";
+      why.className = "appwhy";
+      why.dataset.tone = tone;
+      fill(
+        why,
+        icon(st.live ? "loader-circle" : tone === "err" ? "circle-alert" : tone === "warn" ? "triangle-alert" : "info", st.live ? "spin" : ""),
+        h("span", { class: "t" }, st.line),
+        st.deployment ? h("a", { class: "btn sm ghost", href: page.path(`deployments/${st.deployment.id}`) }, st.live ? "Lihat progres" : "Lihat detail", icon("arrow-right")) : null,
+      );
+    }
     subline.textContent = deployment ? `v${deployment.number} · ${deployment.file_name} · ${runtimeSub(app, language)}` : `${runtimeLabel(app)} · belum ada deployment aktif`;
     if (!page.mine) subline.textContent += ` · milik ${owner}`;
-    const host = info.public_ip || location.hostname;
+    const ip = ipHost(info);
     fill(links,
       ...domainsCache.map((d) => h("a", { class: "link", href: `https://${d.host}`, target: "_blank", rel: "noopener noreferrer" }, icon("lock"), d.host, icon("external-link"))),
       h(
         app.ip_access ? "a" : "span",
-        { class: `link ${app.ip_access ? "" : "off"}`, ...(app.ip_access ? { href: `http://${host}:${app.ip_port}`, target: "_blank", rel: "noopener noreferrer" } : { title: "Akses IP ditutup" }) },
+        { class: `link ${app.ip_access ? "" : "off"}`, ...(app.ip_access ? { href: `http://${ip.host}:${app.ip_port}`, target: "_blank", rel: "noopener noreferrer", title: ip.title } : { title: "Akses IP ditutup" }) },
         icon("network"),
-        `${host}:${app.ip_port}`,
+        `${ip.host}:${app.ip_port}`,
+        ip.local ? h("span", { class: "lan" }, "LAN") : null,
         icon("external-link"),
       ),
     );
-    ctx.shell.setCrumb([["boxes", "Aplikasi", "/apps"], [kindLogo(app.kind, language), app.name, `/apps/${id}`]]);
+    ctx.shell.setCrumb([["package", "Aplikasi", "/apps"], [kindLogo(app.kind, language), app.name, `/apps/${id}`]]);
   }
   page.setDomains = (list) => {
     domainsCache = list;
@@ -116,7 +134,10 @@ export async function renderApp(root, params) {
   function show(slug) {
     const entry = tabFromSlug(slug) || TABS[0];
     const [key, , , render] = entry;
-    if (key === currentKey) return;
+    if (key === currentKey) {
+      current?.sub?.(page.sub);
+      return;
+    }
     current?.cleanup?.();
     currentKey = key;
     for (const a of tabsEl.children) a.setAttribute("aria-selected", String(a.dataset.tab === key));
@@ -131,14 +152,25 @@ export async function renderApp(root, params) {
   const stop = poll(async () => {
     await page.reload();
   }, POLL_MS);
+  // A deploy in progress refreshes faster, so its steps move as they happen.
+  let fast = 0;
+  const quick = () => {
+    fast = setTimeout(async () => {
+      if (appState(page.state).live && document.visibilityState === "visible") await page.reload().catch(() => {});
+      quick();
+    }, 1500);
+  };
+  quick();
 
   return {
     cleanup() {
+      clearTimeout(fast);
       stop();
       current?.cleanup?.();
     },
     update(p) {
       if (Number(p.id) !== id) return false;
+      page.sub = p.sub || null;
       show(p.tab);
       return true;
     },

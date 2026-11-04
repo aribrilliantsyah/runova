@@ -62,3 +62,8 @@ users
 x
 play
 refresh-cw
+package
+wrap-text
+chevron-up
+arrow-down-to-line
+circle-dashed

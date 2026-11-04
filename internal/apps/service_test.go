@@ -197,7 +197,7 @@ func TestContainerSpec(t *testing.T) {
 		t.Errorf("user = %s", spec.User)
 	}
 	// A value the user typed beats the database's; an empty one leaves it to the database.
-	wantEnv := []string{"PORT=8080", "MODE=prod", "DB=user", "PGHOST=host.docker.internal", "DB_PASSWORD=fromdb", "RUNOVA_DATA_DIR=/data", "HOME=/tmp"}
+	wantEnv := []string{"PORT=8080", "MODE=prod", "DB=user", "PGHOST=host.docker.internal", "DB_PASSWORD=fromdb", "SERVER_PORT=8080", "RUNOVA_DATA_DIR=/data", "HOME=/tmp"}
 	if !slices.Equal(spec.Env, wantEnv) {
 		t.Errorf("env = %v, want %v", spec.Env, wantEnv)
 	}
@@ -320,5 +320,25 @@ func TestNewVersion(t *testing.T) {
 	}
 	if _, err := e.svc.NewVersion(ctx, a, app.ID, e.upload(a, jarReport("x.jar", 8))); !errors.Is(err, apps.ErrValidation) {
 		t.Fatalf("kind change: %v", err)
+	}
+}
+
+// A Spring Boot app reads SERVER_PORT, not PORT: without it a JAR whose port
+// is set anywhere Runova cannot see (a profile file, a default in code) listens
+// elsewhere and the health check waits on a port nobody opens.
+func TestContainerSpecJarGetsServerPort(t *testing.T) {
+	e := newTestEnv(t)
+	v := 21
+	app := store.App{ID: 7, UserID: 2, Name: "starboom", Kind: artifact.KindJar, JavaVersion: &v, MemoryMB: 512, CPUMilli: 500}
+	d := store.Deployment{ID: 9, FileName: "starboom.jar", JavaVersion: &v, InternalPort: 9090, HostPort: 38398}
+	spec := e.svc.ContainerSpec(app, store.User{ID: 2, Username: "budi"}, d, []store.EnvEntry{{Name: "SERVER_PORT", Value: "1234"}}, nil)
+	if !slices.Contains(spec.Env, "SERVER_PORT=9090") || !slices.Contains(spec.Env, "PORT=9090") || slices.Contains(spec.Env, "SERVER_PORT=1234") {
+		t.Fatalf("env = %v, want SERVER_PORT and PORT set to the app port 9090", spec.Env)
+	}
+	static := e.svc.ContainerSpec(store.App{Kind: artifact.KindStatic}, store.User{ID: 2}, store.Deployment{FileName: "svc", InternalPort: 80}, nil, nil)
+	for _, kv := range static.Env {
+		if strings.HasPrefix(kv, "SERVER_PORT=") {
+			t.Fatalf("static binary env = %v; SERVER_PORT is a Spring setting", static.Env)
+		}
 	}
 }

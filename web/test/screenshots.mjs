@@ -99,17 +99,13 @@ try {
     wait: ".cols pre.log .ln:has-text('Listening')",
     after: (p) => p.waitForSelector(".link:has-text('billing.perusahaan.co.id')"),
   });
-  const deployAfter = (step) => async (p) => {
+  const deployAfter = async (p) => {
     await p.setInputFiles("#upload-file", jar);
     await p.waitForSelector(".fileok");
-    if (step > 1) {
-      const w = p.viewportSize().width;
-      if (w > 760) await p.click(`.steps button[data-step='${step}']`);
-      else for (let i = 1; i < step; i++) await p.click(".mbar button:has-text('Lanjut')");
-    }
   };
   const addressAfter = async (p) => {
-    await deployAfter(4)(p);
+    await deployAfter(p);
+    await p.locator("#d-addr").scrollIntoViewIfNeeded();
     await p.fill(".addr input[aria-label='Nama alamat']", "cv-budi");
     await p.waitForSelector(".addr .astate.ok");
   };
@@ -127,9 +123,9 @@ try {
     width: 390, height: 844, scheme: "dark", route: "/server", wait: "#hostrows tr",
     after: (p) => p.locator("#hostingcard").scrollIntoViewIfNeeded(),
   });
-  await shot("desktop-deploy.png", { width: 1440, height: 900, scheme: "light", route: "/deploy", wait: ".drop", after: deployAfter(2) });
+  await shot("desktop-deploy.png", { width: 1440, height: 900, scheme: "light", route: "/deploy", wait: ".drop", after: deployAfter });
   await shot("mobile-apps.png", { width: 390, height: 844, scheme: "light", route: "/apps", wait: ".acard:has-text('notif-relay')" });
-  await shot("mobile-deploy.png", { width: 390, height: 844, scheme: "light", route: "/deploy", wait: ".drop", after: deployAfter(2) });
+  await shot("mobile-deploy.png", { width: 390, height: 844, scheme: "light", route: "/deploy", wait: ".drop", after: deployAfter });
 } finally {
   await browser.close();
   await srv.stop();

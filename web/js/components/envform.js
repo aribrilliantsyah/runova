@@ -37,14 +37,21 @@ export function autoCell(database, kind) {
  * fills (kinds: name → kind, from the upload's db_env): they show "Otomatis · dari <db>", are
  * never required and are not sent unless the user overrides them. Secrets are masked.
  */
-export function envForm({ detected, onChange }) {
+export function envForm({ detected, onChange, foldOptional = false }) {
   let auto = null; // {database, kinds} while a database is chosen
   const rows = [];
   const list = h("div");
   const head = h("span", {});
+  // foldOptional (layout only): rows nobody has to fill stay behind a toggle until opened.
+  let unfolded = !foldOptional;
+  const foldBtn = h("button", { class: "envfold", type: "button", "aria-expanded": "false", hidden: true });
+  foldBtn.addEventListener("click", () => {
+    unfolded = true;
+    changed();
+  });
   const pasteBtn = h("button", { class: "btn sm ghost", type: "button" }, icon("file-code-2"), "Tempel .env");
   const addBtn = h("button", { class: "btn sm", type: "button", style: { "margin-top": "10px" } }, icon("plus"), "Tambah variabel");
-  const card = h("section", { class: "card" }, h("div", { class: "envhead" }, head, h("div", { class: "r" }, pasteBtn)), list);
+  const card = h("section", { class: "card" }, h("div", { class: "envhead" }, head, h("div", { class: "r" }, pasteBtn)), list, foldBtn);
   const node = h("div", {}, card, addBtn);
 
   const sourceNote = (src) => {
@@ -141,11 +148,24 @@ export function envForm({ detected, onChange }) {
   function changed() {
     for (const r of rows) r.paint();
     head.textContent = `${rows.length} variabel`;
+    paintFold();
     onChange?.();
+  }
+
+  function paintFold() {
+    let folded = 0;
+    for (const r of rows) {
+      const hide = !unfolded && !r.custom && !isRequired(r) && r.valInput.value === "" && document.activeElement !== r.valInput;
+      r.el.hidden = hide;
+      if (hide) folded++;
+    }
+    foldBtn.hidden = folded === 0;
+    fill(foldBtn, icon("chevron-down"), `Tampilkan ${folded} variabel opsional`);
   }
 
   for (const d of detected) addRow({ name: d.name, secret: d.secret, source: d.source, defaultValue: d.default || "" });
   head.textContent = `${rows.length} variabel`;
+  paintFold();
   if (!rows.length) list.append(h("div", { class: "envedit-note" }, "Tidak ada variabel yang terdeteksi. Tambah sendiri bila aplikasi membutuhkannya."));
 
   addBtn.addEventListener("click", () => {

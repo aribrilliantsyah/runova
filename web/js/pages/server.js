@@ -14,7 +14,17 @@ function stat(ic, label, value, of, percent) {
 }
 
 function service(ic, name, ok, detail, errText) {
-  return h("section", { class: "card" }, h("div", { class: "bd svc" }, h("span", { class: "ic" }, icon(ic)), h("div", {}, h("b", {}, name), h("div", { class: "muted mono", title: ok ? "" : errText }, ok ? detail : errText || "Tidak aktif")), h("span", { class: `chip ${ok ? "ok" : "err"}` }, ok ? "Aktif" : "Mati")));
+  const text = ok ? detail : errText || "Tidak aktif";
+  return h(
+    "section",
+    { class: "card" },
+    h(
+      "div",
+      { class: "bd svc" },
+      h("div", { class: "hd" }, h("span", { class: "ic" }, icon(ic)), h("b", {}, name), h("span", { class: `chip ${ok ? "ok" : "err"}` }, ok ? "Aktif" : "Mati")),
+      h("div", { class: "det muted mono", title: text }, text),
+    ),
+  );
 }
 
 export async function renderServer(root) {
@@ -22,7 +32,7 @@ export async function renderServer(root) {
   let upd = null;
   let settings = await api.get("/api/settings");
   const hosting = hostingCard();
-  const view = h("div", { class: "pb" });
+  const view = h("div", { class: "pb srv" });
   const sub = h("p", {}, "Memuat…");
   root.append(h("section", {}, h("div", { class: "ph" }, h("div", {}, h("h1", {}, "Server"), sub)), view));
 
@@ -38,7 +48,7 @@ export async function renderServer(root) {
         stat("cpu", "CPU dialokasikan", fmtNum(host.cpu_alloc_milli / 1000), `dari ${host.cpus} core`, pct(host.cpu_alloc_milli, host.cpus * 1000)),
         stat("memory-stick", "Memori dialokasikan", gb(host.mem_alloc_mb), `dari ${gb(host.mem_total_mb)}`, pct(host.mem_alloc_mb, host.mem_total_mb)),
         stat("hard-drive", "Disk", gb(host.disk_used_mb), `dari ${gb(host.disk_total_mb)}`, pct(host.disk_used_mb, host.disk_total_mb)),
-        stat("boxes", "Aplikasi", String(apps.total), `${apps.running} berjalan, ${apps.stopped + apps.failed} berhenti`, pct(apps.running, apps.total)),
+        stat("package", "Aplikasi", String(apps.total), `${apps.running} berjalan, ${apps.stopped + apps.failed} berhenti`, pct(apps.running, apps.total)),
       ),
       h(
         "div",
@@ -65,16 +75,22 @@ export async function renderServer(root) {
     const checked = upd?.checked_at ? fmtTime(upd.checked_at) : "-";
     return h(
       "section",
-      { class: "card", id: "versioncard", style: { "margin-top": "12px" } },
+      { class: "card", id: "versioncard" },
       h("header", {}, h("div", {}, h("h3", {}, "Versi Runova"), h("p", {}, "Memeriksa rilis baru tiap 6 jam dan menampilkannya sebagai banner untuk admin."))),
       h(
         "div",
         { class: "bd" },
-        h("div", { class: "cfgform" },
-          h("div", { class: "two" }, field("Terpasang", h("div", { class: "mono", id: "ver-current" }, upd ? `v${upd.current}` : "-")), field("Terbaru", h("div", { class: "mono", id: "ver-latest" }, latest))),
-          field("Terakhir diperiksa", h("div", { id: "ver-checked" }, checked)),
-          h("div", { class: "rtitem" }, h("div", {}, h("b", {}, "Periksa pembaruan"), h("small", {}, "Server menghubungi github.com; matikan bila server tanpa internet.")), sw),
+        h(
+          "dl",
+          { class: "kv ver" },
+          h("dt", {}, "Terpasang"),
+          h("dd", { class: "mono", id: "ver-current" }, upd ? `v${upd.current}` : "-"),
+          h("dt", {}, "Terbaru"),
+          h("dd", { class: "mono", id: "ver-latest" }, latest),
+          h("dt", {}, "Terakhir diperiksa"),
+          h("dd", { id: "ver-checked" }, checked),
         ),
+        h("div", { class: "setting" }, h("div", {}, h("b", {}, "Periksa pembaruan"), h("div", { class: "d" }, "Server menghubungi github.com; matikan bila server tanpa internet.")), h("div", { class: "ctl" }, sw)),
       ),
     );
   }
@@ -87,8 +103,28 @@ export async function renderServer(root) {
     }
   }
 
+  // The public IP is what DNS points at; app IP ports are linked at the LAN address when
+  // the public IP belongs to a proxy or NAT in front of this server.
+  function ipHint() {
+    const acc = st?.host?.ip_access;
+    const base = "Dipakai Cek DNS, panduan domain, dan detail koneksi database. Kosong: panduan hanya menawarkan Cloudflare Tunnel.";
+    const lan = st?.host?.local_ip;
+    if (!lan || lan === settings.public_ip) return base;
+    return [
+      base,
+      h(
+        "span",
+        { class: "iplocal" },
+        icon("network"),
+        "IP lokal terdeteksi ",
+        h("b", { class: "mono" }, lan),
+        acc?.local ? ". Link akses IP aplikasi memakai alamat ini karena IP publik bukan milik server ini (port 20000 ke atas tidak melewati proxy)." : ".",
+      ),
+    ];
+  }
+
   function field(label, input, hint) {
-    return h("div", { class: "fld", style: { margin: "0" } }, h("label", {}, label), input, hint ? h("div", { class: "hint" }, hint) : null);
+    return h("div", { class: "fld" }, h("label", {}, label), input, hint ? h("div", { class: "hint" }, hint) : null);
   }
 
   function settingsCards() {
@@ -135,31 +171,37 @@ export async function renderServer(root) {
       }, "Setelan disimpan"),
     );
 
+    q.node.classList.add("two");
+    const card = (title, desc, body, foot, attrs) =>
+      h("section", { class: "card", ...attrs }, h("header", {}, h("div", {}, h("h3", {}, title), h("p", {}, desc))), h("div", { class: "bd" }, body), foot ? h("footer", {}, foot) : null);
+
     return [
-      versionCard(),
-      h("section", { class: "card", style: { "margin-top": "12px" } }, h("header", {}, h("div", {}, h("h3", {}, "Bawaan untuk pengguna baru"), h("p", {}, "Bisa diubah per pengguna lewat tombol Kuota."))), h("div", { class: "bd" }, q.node, h("div", { class: "actions", style: { "margin-top": "12px" } }, saveQuota))),
-      h("section", { class: "card", style: { "margin-top": "12px" } }, h("header", {}, h("div", {}, h("h3", {}, "Yang boleh dijalankan"), h("p", {}, "Matikan untuk melarang deploy baru dengan runtime itu."))), h("div", { class: "bd" }, runtimes)),
       h(
-        "section",
-        { class: "card", style: { "margin-top": "12px" } },
-        h("header", {}, h("div", {}, h("h3", {}, "Jaringan dan alamat"), h("p", {}, "Satu kali diatur, berlaku untuk seluruh server."))),
+        "div",
+        { class: "setgrid" },
         h(
           "div",
-          { class: "bd" },
+          { class: "stack" },
+          versionCard(),
+          card("Bawaan untuk pengguna baru", "Bisa diubah per pengguna lewat tombol Kuota.", q.node, saveQuota),
+        ),
+        card(
+          "Jaringan dan alamat",
+          "Satu kali diatur, berlaku untuk seluruh server.",
           h(
             "div",
             { class: "cfgform" },
             h("div", { class: "two" }, field("Batas ukuran unggahan (MB)", upload), field("Unggahan tertunda per pengguna", pending)),
             h("div", { class: "two" }, field("Rentang port akses IP: awal", portMin), field("akhir", portMax)),
-            field("IP publik server", publicIP, "Dipakai panduan domain dan detail koneksi database. Kosong: panduan hanya menawarkan Cloudflare Tunnel."),
-            field("Domain panel", panelDomain, "HTTPS otomatis lewat Caddy. Mengisi domain dan port sekaligus tidak disarankan."),
-            field("Port panel (HTTPS di IP:port)", panelPort),
+            field("IP publik server", publicIP, ipHint()),
+            h("div", { class: "two" }, field("Domain panel", panelDomain, "HTTPS otomatis lewat Caddy. Mengisi domain dan port sekaligus tidak disarankan."), field("Port panel (HTTPS di IP:port)", panelPort)),
             field("Jaringan PostgreSQL yang diizinkan", nets, "Satu CIDR per baris, mis. 203.0.113.0/24. Subnet Docker selalu diizinkan."),
             field("Proxy di depan Runova", proxies, "IP atau CIDR proxy seperti nginx yang meneruskan ke server ini, satu per baris. Isi agar batas login dan aktivitas memakai IP asli pengunjung; Caddy lalu memakai sertifikat CA internalnya karena sertifikat publik dipegang proxy. Kosong bila tidak ada proxy."),
-            h("div", { class: "actions" }, saveServer),
           ),
+          saveServer,
         ),
       ),
+      card("Yang boleh dijalankan", "Matikan untuk melarang deploy baru dengan runtime itu.", runtimes, null, { class: "card rtcard" }),
     ];
   }
 
@@ -193,6 +235,16 @@ export async function renderServer(root) {
     paint();
   }
 
+  // The hosting card can set the public IP (DNS suggestion): reload the form with it.
+  const onSettings = async () => {
+    settings = await api.get("/api/settings");
+    await refreshStatus();
+  };
+  addEventListener("runova:settings", onSettings);
   await refreshStatus();
-  return poll(refreshStatus, POLL_MS);
+  const stop = poll(refreshStatus, POLL_MS);
+  return () => {
+    stop();
+    removeEventListener("runova:settings", onSettings);
+  };
 }
