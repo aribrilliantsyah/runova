@@ -208,28 +208,46 @@ func TestRequire(t *testing.T) {
 
 func TestClientIP(t *testing.T) {
 	cases := []struct {
-		remote, xff, want string
+		name, remote, xff string
+		trusted           []string
+		want              string
 	}{
-		{"127.0.0.1:5000", "198.51.100.7, 10.0.0.1", "198.51.100.7"},
-		{"[::1]:5000", "198.51.100.7", "198.51.100.7"},
-		{"203.0.113.9:5000", "1.2.3.4", "203.0.113.9"},
-		{"127.0.0.1:5000", "", "127.0.0.1"},
-		{"127.0.0.1:5000", "not-an-ip", "127.0.0.1"},
-		{"127.0.0.1:5000", "  198.51.100.7  ", "198.51.100.7"},
-		{"203.0.113.9:5000", "", "203.0.113.9"},
-		{"127.0.0.1:5000", "::ffff:198.51.100.7", "198.51.100.7"},
-		{"[::ffff:127.0.0.1]:5000", "198.51.100.7", "198.51.100.7"},
-		{"127.0.0.1:5000", "fe80::1%eth0", "fe80::1"},
+		{"first entry from loopback", "127.0.0.1:5000", "198.51.100.7, 10.0.0.1", nil, "10.0.0.1"},
+		{"single entry", "[::1]:5000", "198.51.100.7", nil, "198.51.100.7"},
+		{"non-loopback peer ignores header", "203.0.113.9:5000", "1.2.3.4", nil, "203.0.113.9"},
+		{"no header", "127.0.0.1:5000", "", nil, "127.0.0.1"},
+		{"invalid header", "127.0.0.1:5000", "not-an-ip", nil, "127.0.0.1"},
+		{"padding", "127.0.0.1:5000", "  198.51.100.7  ", nil, "198.51.100.7"},
+		{"no header, remote peer", "203.0.113.9:5000", "", nil, "203.0.113.9"},
+		{"ipv4-mapped entry", "127.0.0.1:5000", "::ffff:198.51.100.7", nil, "198.51.100.7"},
+		{"ipv4-mapped loopback peer", "[::ffff:127.0.0.1]:5000", "198.51.100.7", nil, "198.51.100.7"},
+		{"zone dropped", "127.0.0.1:5000", "fe80::1%eth0", nil, "fe80::1"},
+		{"one trusted proxy", "127.0.0.1:5000", "203.0.113.7, 10.0.0.1", []string{"10.0.0.1"}, "203.0.113.7"},
+		{"forged entry on the left", "127.0.0.1:5000", "1.1.1.1, 203.0.113.7, 10.0.0.1", []string{"10.0.0.1"}, "203.0.113.7"},
+		{"forged without trusted proxies is the last entry", "127.0.0.1:5000", "1.1.1.1, 203.0.113.7", nil, "203.0.113.7"},
+		{"all trusted uses the leftmost", "127.0.0.1:5000", "10.0.0.2, 10.0.0.1", []string{"10.0.0.0/8"}, "10.0.0.2"},
+		{"cidr", "127.0.0.1:5000", "203.0.113.7, 10.9.9.9", []string{"10.0.0.0/8"}, "203.0.113.7"},
+		{"ipv6 client", "127.0.0.1:5000", "2001:db8::5, 10.0.0.1", []string{"10.0.0.1"}, "2001:db8::5"},
+		{"ipv6 trusted proxy", "127.0.0.1:5000", "203.0.113.7, 2001:db8::1", []string{"2001:db8::/32"}, "203.0.113.7"},
+		{"junk left of a trusted proxy is not used", "127.0.0.1:5000", "junk, 10.0.0.1", []string{"10.0.0.1"}, "127.0.0.1"},
+		{"junk on the right", "127.0.0.1:5000", "203.0.113.7, junk", []string{"10.0.0.1"}, "127.0.0.1"},
+		{"loopback entries are skipped", "127.0.0.1:5000", "203.0.113.7, 127.0.0.1", nil, "203.0.113.7"},
+		{"trusted peer outside loopback is not trusted for the header", "10.0.0.1:5000", "1.2.3.4", []string{"10.0.0.1"}, "10.0.0.1"},
+		{"multiple header lines", "127.0.0.1:5000", "1.1.1.1\x00203.0.113.7, 10.0.0.1", []string{"10.0.0.1"}, "203.0.113.7"},
 	}
 	for _, c := range cases {
-		r := httptest.NewRequest("GET", "/", nil)
-		r.RemoteAddr = c.remote
-		if c.xff != "" {
-			r.Header.Set("X-Forwarded-For", c.xff)
-		}
-		if got := auth.ClientIP(r); got != c.want {
-			t.Errorf("ClientIP(%s, %q) = %q, want %q", c.remote, c.xff, got, c.want)
-		}
+		t.Run(c.name, func(t *testing.T) {
+			r := httptest.NewRequest("GET", "/", nil)
+			r.RemoteAddr = c.remote
+			for _, line := range strings.Split(c.xff, "\x00") {
+				if line != "" {
+					r.Header.Add("X-Forwarded-For", line)
+				}
+			}
+			if got := auth.ClientIP(r, auth.ParseTrusted(c.trusted)); got != c.want {
+				t.Errorf("ClientIP(%s, %q, %v) = %q, want %q", c.remote, c.xff, c.trusted, got, c.want)
+			}
+		})
 	}
 }
 

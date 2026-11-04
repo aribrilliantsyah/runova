@@ -211,11 +211,20 @@ func pathID(w http.ResponseWriter, r *http.Request) (int64, bool) {
 	return id, true
 }
 
+// clientIP is the address of the client behind the proxies listed in settings.
+func (s *server) clientIP(r *http.Request) string {
+	settings, err := s.store.Settings(r.Context())
+	if err != nil {
+		slog.Error("read trusted proxies", "err", err)
+	}
+	return auth.ClientIP(r, auth.ParseTrusted(settings.TrustedProxies))
+}
+
 // record appends an activity entry; a failure is logged but never fails the request.
 func (s *server) record(r *http.Request, actor store.User, action, target, detail string) {
 	a := store.Activity{
 		At: s.now().UnixMilli(), ActorName: actor.Username, Action: action,
-		Target: target, Detail: detail, IP: auth.ClientIP(r),
+		Target: target, Detail: detail, IP: s.clientIP(r),
 	}
 	if actor.ID != 0 {
 		a.ActorID = &actor.ID

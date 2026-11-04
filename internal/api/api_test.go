@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/cookiejar"
@@ -742,5 +743,37 @@ func TestLoginLockoutHoldsUnderConcurrency(t *testing.T) {
 	}
 	if got[401] != auth.MaxFailures || got[429] != n-auth.MaxFailures {
 		t.Fatalf("statuses = %v, want %d×401 and %d×429", got, auth.MaxFailures, n-auth.MaxFailures)
+	}
+}
+
+func TestLoginThrottleBehindTrustedProxy(t *testing.T) {
+	e := newEnv(t)
+	e.setSettings(func(s *store.Settings) { s.TrustedProxies = []string{"10.0.0.1"} })
+	attempt := func(xff, password string) int {
+		c := e.client()
+		c.hdr.Set("X-Forwarded-For", xff)
+		return c.do("POST", "/api/login", obj{"username": "admin", "password": password}).status
+	}
+	// Caddy appends the peer it saw; nginx appended the client before that.
+	// The forged leftmost entry changes on every attempt and must not matter.
+	for i := range 5 {
+		if got := attempt(fmt.Sprintf("192.0.2.%d, 203.0.113.7, 10.0.0.1", i+1), "salah-salah-salah"); got != 401 {
+			t.Fatalf("attempt %d: %d", i+1, got)
+		}
+	}
+	if got := attempt("192.0.2.99, 203.0.113.7, 10.0.0.1", adminPassword); got != 429 {
+		t.Fatalf("locked client with a new forged entry: %d, want 429", got)
+	}
+	if got := attempt("203.0.113.8, 10.0.0.1", adminPassword); got != 200 {
+		t.Fatalf("another client behind the same proxy: %d, want 200", got)
+	}
+
+	c := e.login("admin", adminPassword)
+	var list []store.Activity
+	c.do("GET", "/api/activity?limit=200", nil).into(t, &list)
+	for _, a := range list {
+		if a.Action == store.ActLoginFailed && a.IP != "203.0.113.7" {
+			t.Fatalf("login_failed recorded for %s, want the client address", a.IP)
+		}
 	}
 }
