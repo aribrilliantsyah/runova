@@ -83,7 +83,7 @@ EOF
 	echo x >>"$WEB/me/runova/releases/download/v0.2.0/runova-0.2.0-linux-amd64.tar.gz"
 	run bash "$GET" --yes
 	[ "$status" -ne 0 ]
-	[[ $output == *"Checksum arsip tidak cocok"* ]]
+	[[ $output == *"Archive checksum does not match"* ]]
 	[ ! -e "$OUT" ]
 }
 
@@ -96,7 +96,7 @@ EOF
 @test "an invalid version is refused" {
 	run bash "$GET" --version latest
 	[ "$status" -ne 0 ]
-	[[ $output == *"Versi tidak valid"* ]]
+	[[ $output == *"Invalid version"* ]]
 }
 
 @test "leaves no temporary folder behind" {

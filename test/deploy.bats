@@ -75,26 +75,26 @@ probe() {
 @test "ssh port must be a number" {
 	run "$DEPLOY" -p abc admin@host
 	[ "$status" -ne 0 ]
-	[[ "$output" == *"Port SSH"* ]]
+	[[ "$output" == *"Invalid SSH port"* ]]
 }
 
 @test "missing identity file is reported before connecting" {
-	run "$DEPLOY" -i "$BATS_TEST_TMPDIR/tidak-ada" admin@host
+	run "$DEPLOY" -i "$BATS_TEST_TMPDIR/missing" admin@host
 	[ "$status" -ne 0 ]
-	[[ "$output" == *"Berkas kunci"* ]]
+	[[ "$output" == *"Key file not found"* ]]
 	[ ! -s "$CALLS" ]
 }
 
 @test "invalid version is rejected" {
 	run "$DEPLOY" --version abc admin@host
 	[ "$status" -ne 0 ]
-	[[ "$output" == *"Versi tidak valid"* ]]
+	[[ "$output" == *"Invalid version"* ]]
 }
 
 @test "ssh failure (255) says how to check the connection and builds nothing" {
 	SSH_RC=255 run "$DEPLOY" --version 1.0.0 -p 2200 admin@host
 	[ "$status" -ne 0 ]
-	[[ "$output" == *"Tidak bisa tersambung"* ]]
+	[[ "$output" == *"Could not connect"* ]]
 	[[ "$output" == *"ssh -p 2200 admin@host"* ]]
 	! grep -q '^go ' "$CALLS"
 	! grep -q '^scp ' "$CALLS"

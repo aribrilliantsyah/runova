@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
-# Builds dist/runova-<versi>-linux-amd64.tar.gz and dist/SHA256SUMS.
-# Usage: scripts/release.sh <versi>   (for example 0.1.0)
+# Builds dist/runova-<version>-linux-amd64.tar.gz and dist/SHA256SUMS.
+# Usage: scripts/release.sh <version>   (for example 0.1.0)
 set -euo pipefail
 
 version="${1:-}"
 if [[ ! "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+([-.][0-9A-Za-z.]+)?$ ]]; then
-	echo "Penggunaan: scripts/release.sh <versi>   (contoh: 0.1.0)" >&2
+	echo "Usage: scripts/release.sh <version>   (example: 0.1.0)" >&2
 	exit 2
 fi
 

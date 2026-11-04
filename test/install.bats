@@ -406,3 +406,119 @@ set_src_version() {
 	parse_args --port 8443
 	[ "$PORT" = 8443 ] && [ -z "$DOMAIN" ]
 }
+
+# progress runs run_steps in a fresh bash with set -e and the EXIT trap, as
+# main does, with every step replaced by a stub. Extra arguments are bash code
+# that redefines steps. RUNOVA_PROGRESS picks plain or tty output.
+progress() {
+	RUNOVA_LOG="$BATS_TEST_TMPDIR/install.log" bash -c '
+		source "$1" --lib
+		shift
+		for s in packages user_dirs binary secret env_file docker_daemon caddy postgres panel admin firewall service verify; do
+			eval "step_$s() { :; }"
+		done
+		eval "$1"
+		set -euo pipefail
+		trap on_exit EXIT
+		run_steps
+		INSTALL_DONE=1
+	' _ "$BATS_TEST_DIRNAME/../install.sh" "$1"
+}
+
+@test "plain progress: one line per step, no carriage return, details path printed once" {
+	RUNOVA_PROGRESS=plain run progress ':'
+	[ "$status" -eq 0 ]
+	[[ $output != *$'\r'* ]]
+	[[ $output == *"Details: $BATS_TEST_TMPDIR/install.log"* ]]
+	[ "$(grep -c 'Details:' <<<"$output")" -eq 1 ]
+	[ "$(grep -cE '^\[[0-9]+/13\] .* \.\.\. (done \([0-9]+s\)|already done)$' <<<"$output")" -eq 13 ]
+	[[ $output == *"[2/13] Creating user and folders ... done (0s)"* ]]
+}
+
+@test "step output goes to the log, not the terminal; the log is 0600" {
+	RUNOVA_PROGRESS=plain run progress 'step_secret() { echo NOISY-LINE; }'
+	[ "$status" -eq 0 ]
+	[[ $output != *NOISY-LINE* ]]
+	grep -q NOISY-LINE "$BATS_TEST_TMPDIR/install.log"
+	[ "$(stat -c %a "$BATS_TEST_TMPDIR/install.log")" = 600 ]
+}
+
+@test "the log is created anew on every run" {
+	echo OLD >"$BATS_TEST_TMPDIR/install.log"
+	RUNOVA_PROGRESS=plain run progress ':'
+	! grep -q OLD "$BATS_TEST_TMPDIR/install.log"
+}
+
+@test "a step that was already done says so" {
+	RUNOVA_PROGRESS=plain run progress 'step_secret() { STEP_SKIPPED=1; }'
+	[[ $output == *"[4/13] Creating the encryption key ... already done"* ]]
+}
+
+@test "a failing step stops the install with the log tail and a non-zero exit" {
+	RUNOVA_PROGRESS=plain run progress 'step_caddy() { seq 1 50 | sed "s/^/log line /"; return 7; }'
+	[ "$status" -ne 0 ]
+	[[ $output == *"[7/13] Configuring Caddy ... failed ("* ]]
+	[[ $output == *"log line 50"* ]]
+	[[ $output == *"log line 21"* ]]
+	[[ $output != *"log line 20"$'\n'* ]]
+	[[ $output == *"$BATS_TEST_TMPDIR/install.log"* ]]
+	[[ $output == *"The installation stopped before finishing"* ]]
+	[[ $output != *"[8/13]"* ]]
+}
+
+@test "die in a step prints failed, the log tail, then the error message" {
+	RUNOVA_PROGRESS=plain run progress 'step_postgres() { echo from-the-log; die "PostgreSQL is broken"; }'
+	[ "$status" -eq 1 ]
+	[[ $output == *"[8/13] Configuring PostgreSQL ... failed"* ]]
+	[[ $output == *"from-the-log"* ]]
+	[[ $output == *"Error: PostgreSQL is broken"* ]]
+	[[ ${output%%Error:*} == *"failed"* ]]
+}
+
+@test "notice and warn from a step stay visible on the terminal" {
+	RUNOVA_PROGRESS=plain run progress 'step_caddy() { notice "shown to the user"; warn "careful"; }'
+	[ "$status" -eq 0 ]
+	[[ $output == *"shown to the user"* ]]
+	[[ $output == *"Warning: careful"* ]]
+}
+
+@test "tty progress animates one line with carriage returns and ends with done" {
+	RUNOVA_PROGRESS=tty run progress 'step_packages() { sleep 0.5; }'
+	[ "$status" -eq 0 ]
+	[[ $output == *$'\r'* ]]
+	[[ $output == *"[1/13] Installing packages (docker.io, caddy, postgresql-18, ufw, jq, curl)"* ]]
+	[[ $output == *"[1/13] Installing packages (docker.io, caddy, postgresql-18, ufw, jq, curl) ... done ("* ]]
+}
+
+@test "the spinner is gone after success, failure and a signal" {
+	local pidfile="$BATS_TEST_TMPDIR/pid"
+	RUNOVA_PROGRESS=tty run progress 'step_packages() { echo $SPINNER_PID >"'"$pidfile"'"; sleep 0.3; }'
+	[ "$status" -eq 0 ]
+	! kill -0 "$(cat "$pidfile")" 2>/dev/null
+
+	RUNOVA_PROGRESS=tty run progress 'step_packages() { echo $SPINNER_PID >"'"$pidfile"'"; sleep 0.3; return 3; }'
+	[ "$status" -ne 0 ]
+	! kill -0 "$(cat "$pidfile")" 2>/dev/null
+
+	RUNOVA_PROGRESS=tty run progress 'step_packages() { echo $SPINNER_PID >"'"$pidfile"'"; kill -INT $$; sleep 1; }'
+	[ "$status" -eq 130 ]
+	[[ $output != *"[2/13]"* ]]
+	! kill -0 "$(cat "$pidfile")" 2>/dev/null
+}
+
+@test "elapsed time is formatted as seconds or minutes" {
+	local t
+	fmt_elapsed 7 t
+	[ "$t" = 7s ]
+	fmt_elapsed 72 t
+	[ "$t" = 1m12s ]
+	fmt_elapsed 600 t
+	[ "$t" = 10m00s ]
+}
+
+@test "package step label lists what will be installed" {
+	mkdir -p "$RUNOVA_ROOT/.installed"
+	touch "$RUNOVA_ROOT/.installed/caddy"
+	missing_packages
+	[ "${MISSING[*]}" = "docker.io postgresql-18 ufw jq curl" ]
+}
