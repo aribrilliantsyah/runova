@@ -94,18 +94,35 @@ for (const p of ["/api/apps", "/api/databases", "/api/info", "/api/notifications
     await budi.waitForURL(/#\/apps$/);
   }
 
-  step("activity: budi sees his own, admin can filter by actor and page");
+  step("activity: budi sees only his own; admin filters by actor facet, search syntax, opens a row, and keeps the search in the URL");
   await budi.goto(`${srv.url}/#/activity`);
-  await budi.waitForSelector("#actrows tr");
-  check((await budi.locator("select[aria-label='Pelaku']").count()) === 0, "no actor filter for users");
+  await budi.waitForSelector("#actrows tr.act-row");
+  check((await budi.locator(".fgroup h3:has-text('Pelaku')").count()) === 0, "no actor facet for users");
   const text = await budi.locator("#actrows").innerText();
-  check(text.includes("budi_billing") && !text.includes("Pengguna dibuat"), `budi activity: ${text}`);
+  check(text.includes("budi_billing") && !text.includes("user.create"), `budi activity: ${text}`);
+  await budi.goto(`${srv.url}/#/activity?q=${encodeURIComponent("pelaku:admin")}`);
+  await budi.waitForSelector(".lempty");
+  check((await budi.locator("#actrows tr.act-row").count()) === 0, "pelaku:admin must not reveal the admin's entries to budi");
+
   await admin.goto(`${srv.url}/#/activity`);
-  await admin.waitForSelector("select[aria-label='Pelaku']");
-  await admin.waitForSelector("#actrows tr");
-  const total = await admin.locator("#actrows tr").count();
-  await admin.selectOption("select[aria-label='Pelaku']", { label: "budi" });
-  await admin.waitForFunction((n) => document.querySelectorAll("#actrows tr").length < n, total);
+  await admin.waitForSelector("#actrows tr.act-row");
+  const totalOf = async () => Number((await admin.locator(".lstatus b").innerText()).replace(/\D/g, ""));
+  const all = await totalOf();
+  await admin.click(".fgroup:has(h3:has-text('Pelaku')) .fitem-b:has-text('budi')");
+  await admin.waitForURL(/q=pelaku%3Abudi/);
+  await admin.waitForFunction((n) => Number(document.querySelector(".lstatus b")?.textContent.replace(/\D/g, "")) < n, all);
+  check((await admin.locator(".fchip:has-text('budi')").count()) === 1, "the actor filter shows as a chip");
+  const rows = await admin.locator("#actrows tr.act-row .c-actor").allInnerTexts();
+  check(rows.length > 0 && rows.every((r) => r.trim() === "budi"), `only budi's rows: ${rows}`);
+  await admin.locator("#actq").fill("pelaku:budi aksi:db.*");
+  await admin.keyboard.press("Enter");
+  await admin.waitForFunction(() => [...document.querySelectorAll("#actrows tr.act-row .c-action")].every((e) => e.textContent.trim().startsWith("db.")));
+  await admin.click("#actrows tr.act-row");
+  await admin.waitForSelector("#actrows tr.dt-detail pre");
+  check((await admin.locator("#actrows tr.dt-detail pre").innerText()).includes('"actor_name": "budi"'), "an opened row shows its raw JSON");
+  await admin.reload();
+  await admin.waitForSelector("#actrows tr.act-row");
+  check((await admin.locator("#actq").inputValue()) === "pelaku:budi aksi:db.*", "the search survives a reload");
 
   step("server page: services, host and defaults; saving a runtime toggle persists");
   await admin.goto(`${srv.url}/#/server`);
@@ -131,6 +148,25 @@ for (const p of ["/api/apps", "/api/databases", "/api/info", "/api/notifications
   await admin.locator("textarea[aria-label='Proxy di depan Runova']").fill("");
   await admin.click("button:has-text('Simpan setelan')");
   await admin.waitForSelector(".toast:has-text('Setelan disimpan')");
+
+  step("users: sort by a column (aria-sort), filter by role with counts, search, reset");
+  await admin.goto(`${srv.url}/#/users`);
+  await admin.waitForSelector("#userrows tr[data-user='budi']");
+  await admin.click("th:has-text('Database') .dt-sort");
+  await admin.waitForURL(/sort=databases&order=desc/);
+  await admin.waitForSelector("th[aria-sort=descending]:has-text('Database')");
+  check((await admin.locator("#userrows tr").first().getAttribute("data-user")) === "budi", "budi has the most databases");
+  await admin.click("th:has-text('Database') .dt-sort");
+  await admin.waitForSelector("th[aria-sort=ascending]:has-text('Database')");
+  check((await admin.locator(".lseg button:has-text('Admin') .seg-n").innerText()) === "1", "role filter counts the admins");
+  await admin.click(".lseg button:has-text('Admin')");
+  await admin.waitForURL(/role=admin/);
+  await admin.waitForSelector("#userrows tr[data-user='budi']", { state: "detached" });
+  await admin.locator("#userq").fill("tidakada");
+  await admin.waitForSelector(".lempty:has-text('Tidak ada pengguna yang cocok')");
+  await admin.click(".lempty button:has-text('Reset filter')");
+  await admin.waitForSelector("#userrows tr[data-user='budi']");
+  check((await admin.locator("#userq").inputValue()) === "", "reset clears the search");
 
   step("delete a user: warns about data, needs the username");
   await admin.goto(`${srv.url}/#/users`);

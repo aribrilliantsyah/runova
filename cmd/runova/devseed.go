@@ -79,7 +79,7 @@ func devSeed(ctx context.Context, st *store.Store, now int64) error {
 			name := []string{"billing", "portal", "worker", "blog"}[k]
 			if _, err := st.CreateApp(ctx, store.App{
 				UserID: u.ID, Name: name, Kind: artifact.KindStatic, InternalPort: 8080, IPPort: port,
-				MemoryMB: 128 << (k % 3), CPUMilli: 250 * (k + 1), Status: store.AppStopped, DeployMode: store.DeployModeStopStart, CreatedAt: now - 30*day,
+				MemoryMB: 128 * (1 + (i+k*3)%6), CPUMilli: 250 * (1 + (i+k)%4), Status: store.AppStopped, DeployMode: store.DeployModeStopStart, CreatedAt: now - 30*day,
 			}); err != nil {
 				return fmt.Errorf("seed app: %w", err)
 			}
