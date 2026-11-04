@@ -106,7 +106,8 @@ export function timeline(d) {
     "ol",
     { class: "tl", "aria-label": "Langkah deploy" },
     steps.map((s) => {
-      const t = s.status === "running" ? now - s.started_at : s.finished_at && s.started_at ? s.finished_at - s.started_at : null;
+      // The upload was checked before the deployment existed: no duration of its own.
+      const t = s.id === "artifact" ? null : s.status === "running" ? now - s.started_at : s.finished_at && s.started_at ? s.finished_at - s.started_at : null;
       return h(
         "li",
         { class: `tl-${s.status}`, "data-step": s.id },

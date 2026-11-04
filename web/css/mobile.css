@@ -49,7 +49,9 @@
   .nmbig{font-size:16px}
   .dk{grid-template-columns:1fr;gap:2px}
   .dk b .mono{display:block;overflow-wrap:anywhere}
-  .mbar .btn.pending{background:var(--panel);color:var(--text);border-color:var(--line-2);overflow:hidden;text-overflow:ellipsis}
+  .mbar .btn.pending{background:var(--panel);color:var(--text);border-color:var(--line-2)}
+  .mbar .btn{min-width:0}
+  .mbar .btn .mlabel{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 
   /* "Lainnya" bottom sheet */
   .msheet:not([hidden]){display:block;position:absolute;inset:0;z-index:30}
@@ -193,4 +195,10 @@
   .dep-why{max-width:60vw}
   table.deps td.dep-st{max-width:none}
   .rowacts{flex-wrap:wrap}
+}
+@media (max-width: 760px){
+  #hostingcard table.t:not(.act) td.dnscell{display:grid;grid-template-columns:auto;justify-items:start;text-align:left;gap:4px;min-width:0}
+  #hostingcard td.dnscell::before{margin-bottom:2px}
+  #hostingcard td.dnscell .dnsdetail{max-width:none}
+  #hostingcard td.mono{max-width:none}
 }

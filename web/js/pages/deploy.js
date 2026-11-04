@@ -269,7 +269,7 @@ export async function renderDeploy(root) {
     shell.mbar.deploy.classList.toggle("pending", list.length > 0);
     const label = submitting ? "Memulai deploy…" : list.length ? `Deploy (${list.length} belum siap)` : "Deploy";
     fill(deployBtn, icon("rocket"), label);
-    fill(shell.mbar.deploy, icon("rocket"), list.length && !submitting ? list[0].text : label);
+    fill(shell.mbar.deploy, icon(list.length && !submitting ? "circle-alert" : "rocket"), h("span", { class: "mlabel" }, list.length && !submitting ? list[0].text : label));
   }
 
   function jump(at) {
