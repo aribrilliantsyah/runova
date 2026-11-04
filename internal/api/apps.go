@@ -227,9 +227,8 @@ func (s *server) getApp(w http.ResponseWriter, r *http.Request) {
 // dbEnvVar is a variable the app gets from its database. Overridden means the
 // user set a value of their own, which the container gets instead.
 type dbEnvVar struct {
-	Name       string     `json:"name"`
-	Kind       dbenv.Kind `json:"kind"`
-	Overridden bool       `json:"overridden"`
+	dbenv.Var
+	Overridden bool `json:"overridden"`
 }
 
 // dbEnvView names the app's database and the variables it fills; never values.
@@ -269,7 +268,7 @@ func (s *server) appDBEnv(ctx context.Context, app store.App, env []store.EnvEnt
 	vars := dbenv.Vars(names, app.Kind == artifact.KindJar)
 	out := &dbEnvView{Database: d.Name, Vars: make([]dbEnvVar, len(vars))}
 	for i, v := range vars {
-		out.Vars[i] = dbEnvVar{v.Name, v.Kind, typed[v.Name]}
+		out.Vars[i] = dbEnvVar{v, typed[v.Name]}
 	}
 	return out, nil
 }

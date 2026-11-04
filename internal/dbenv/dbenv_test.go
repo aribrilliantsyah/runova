@@ -140,25 +140,31 @@ func TestEnvKindOf(t *testing.T) {
 	}
 }
 
-func TestAutoEnv(t *testing.T) {
-	got := dbenv.Auto([]string{"REDIS_URL", "DB_URL", "DATABASE_URL", "DB_PASSWORD", "DB_URL", "JWT_SECRET"}, true)
-	want := []dbenv.Var{{Name: "DB_URL", Kind: dbenv.JDBC}, {Name: "DATABASE_URL", Kind: dbenv.URL}, {Name: "DB_PASSWORD", Kind: dbenv.Password}}
-	if !slices.Equal(got, want) {
-		t.Fatalf("AutoEnv = %+v, want %+v", got, want)
+func TestVarsDetected(t *testing.T) {
+	got := dbenv.Vars([]string{"REDIS_URL", "DB_URL", "DATABASE_URL", "DB_PASSWORD", "DB_URL", "JWT_SECRET"}, true)
+	n := len(dbenv.StandardNames())
+	want := []dbenv.Var{{Name: "DB_URL", Kind: dbenv.JDBC}, {Name: "DB_PASSWORD", Kind: dbenv.Password}}
+	if !slices.Equal(got[n:], want) {
+		t.Fatalf("detected = %+v, want %+v", got[n:], want)
 	}
-	if got := dbenv.Auto(nil, false); got == nil || len(got) != 0 {
-		t.Fatalf("AutoEnv(nil) = %#v, want empty non-nil", got)
+	if got := dbenv.Vars(nil, false); len(got) != n {
+		t.Fatalf("Vars(nil) = %+v, want only the standard names", got)
 	}
 }
 
-func TestEnvVarsStandardFirst(t *testing.T) {
+func TestVarsStandardFirst(t *testing.T) {
 	got := dbenv.Vars([]string{"PGHOST", "DB_HOST", "MONGO_URL"}, false)
-	names := make([]string, len(got))
-	for i, v := range got {
-		names[i] = v.Name
+	var standard, names []string
+	for _, v := range got {
+		names = append(names, v.Name)
+		if v.Standard {
+			standard = append(standard, v.Name)
+		}
 	}
-	want := append(dbenv.StandardNames(), "DB_HOST")
-	if !slices.Equal(names, want) {
+	if want := append(dbenv.StandardNames(), "DB_HOST"); !slices.Equal(names, want) {
 		t.Fatalf("names = %v, want %v", names, want)
+	}
+	if !slices.Equal(standard, dbenv.StandardNames()) {
+		t.Fatalf("standard = %v", standard)
 	}
 }

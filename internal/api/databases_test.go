@@ -277,7 +277,7 @@ func TestDetectedDBEnvFilledAutomatically(t *testing.T) {
 		DBEnv []dbenv.Var `json:"db_env"`
 	}
 	up.into(t, &got)
-	for _, want := range []dbenv.Var{{Name: "DB_URL", Kind: dbenv.URL}, {Name: "DB_USER", Kind: dbenv.User}, {Name: "DB_PASSWORD", Kind: dbenv.Password}, {Name: "PGPASSWORD", Kind: dbenv.Password}} {
+	for _, want := range []dbenv.Var{{Name: "DB_URL", Kind: dbenv.URL}, {Name: "DB_USER", Kind: dbenv.User}, {Name: "DB_PASSWORD", Kind: dbenv.Password}, {Name: "PGPASSWORD", Kind: dbenv.Password, Standard: true}} {
 		if !slices.Contains(got.DBEnv, want) {
 			t.Errorf("upload db_env lacks %+v: %+v", want, got.DBEnv)
 		}
@@ -322,15 +322,25 @@ func TestDetectedDBEnvFilledAutomatically(t *testing.T) {
 	if strings.Contains(string(r.body), role.Password) {
 		t.Fatalf("app detail leaks the database password: %s", r.body)
 	}
+	type view struct {
+		Name       string `json:"name"`
+		Kind       string `json:"kind"`
+		Overridden bool   `json:"overridden"`
+	}
 	var detail struct {
 		DBEnv *struct {
-			Database string      `json:"database"`
-			Vars     []dbenv.Var `json:"vars"`
+			Database string `json:"database"`
+			Vars     []view `json:"vars"`
 		} `json:"db_env"`
 	}
 	r.into(t, &detail)
-	if detail.DBEnv == nil || detail.DBEnv.Database != "budi_billing" || !slices.Contains(detail.DBEnv.Vars, dbenv.Var{Name: "DB_URL", Kind: dbenv.URL}) {
+	if detail.DBEnv == nil || detail.DBEnv.Database != "budi_billing" {
 		t.Fatalf("db_env = %s", r.body)
+	}
+	for _, want := range []view{{"DB_URL", "url", false}, {"DB_USER", "user", true}, {"DB_PASSWORD", "password", false}} {
+		if !slices.Contains(detail.DBEnv.Vars, want) {
+			t.Errorf("db_env lacks %+v: %s", want, r.body)
+		}
 	}
 
 	// A new password reaches every filled name on the next deploy.

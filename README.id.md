@@ -82,8 +82,8 @@ Runova memasang **PostgreSQL 18** di server yang sama (paket resmi Ubuntu 26.04)
 - Setiap pengguna mendapat **satu akun PostgreSQL** saat didaftarkan admin, misalnya `budi`.
 - Pengguna membuat database sendiri di panel, dengan nama berawalan akunnya (`budi_billing`, `budi_auth`). Jumlahnya dibatasi admin, bawaannya **3 per pengguna**.
 - Hanya pemilik yang bisa masuk ke database-nya. Akun pengguna tidak punya hak superuser, tidak bisa membuat role, dan dibatasi jumlah koneksinya.
-- Saat deploy, pengguna memilih database untuk aplikasinya (atau tanpa database). Runova mengisi `DATABASE_URL`, `SPRING_DATASOURCE_URL`, dan `PGHOST`/`PGPORT`/`PGUSER`/`PGPASSWORD`/`PGDATABASE` otomatis. Beberapa aplikasi milik pengguna yang sama boleh memakai database yang sama.
-- Host, port, nama database, dan password bisa dilihat dan disalin di halaman **Database**, misalnya untuk dibuka dari DBeaver dari jaringan yang diizinkan admin.
+- Saat deploy, pengguna memilih database untuk aplikasinya (atau tanpa database). Runova mengisi `DATABASE_URL`, `SPRING_DATASOURCE_URL`, dan `PGHOST`/`PGPORT`/`PGUSER`/`PGPASSWORD`/`PGDATABASE` otomatis, ditambah setiap variabel database yang disebut artefak (`DB_URL`, `DB_USER`, `DB_PASSWORD`, `POSTGRES_PASSWORD`, `JDBC_URL`, `SPRING_R2DBC_URL`, `TYPEORM_*`, …) termasuk password-nya; barisnya tampil "Otomatis" dan tidak perlu diketik. Nilai yang diisi pengguna sendiri untuk variabel itu yang dipakai. Host-nya `host.docker.internal`: server ini dilihat dari dalam container (sama dengan `localhost` di server). Beberapa aplikasi milik pengguna yang sama boleh memakai database yang sama.
+- Host, port, nama database, dan password bisa dilihat dan disalin di halaman **Database**, misalnya untuk dibuka dari DBeaver dari jaringan yang diizinkan admin, atau lewat SSH tunnel (`ssh -N -L 5433:127.0.0.1:5432 <user>@<server>`, lalu `localhost:5433`).
 
 ## Instalasi
 
@@ -290,6 +290,7 @@ Semua mutasi API memakai `Content-Type: application/json`. Jalankan `go test ./.
 ```bash
 node web/test/unit.mjs            # halaman uji web/test/*.test.html
 node web/test/smoke-deploy.mjs    # login, wizard, deploy
+node web/test/smoke-dbenv.mjs     # variabel database terisi otomatis, isi sendiri, petunjuk SSH tunnel
 node web/test/smoke-app.mjs       # tab detail aplikasi, log, terminal
 node web/test/smoke-admin.mjs     # pengguna, database, aktivitas, server
 node web/test/smoke-layout.mjs    # 5 lebar layar, terang dan gelap, aksesibilitas

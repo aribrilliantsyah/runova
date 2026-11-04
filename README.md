@@ -82,8 +82,8 @@ Runova installs **PostgreSQL 18** on the same server (official Ubuntu 26.04 pack
 - Each user receives **one PostgreSQL account** upon admin registration, for example `budi`.
 - Users create their own databases in the panel, with names prefixed by their username (`budi_billing`, `budi_auth`). The count is capped by admin quotas, defaulting to **3 per user**.
 - Only the owner can access their database. User accounts have no superuser privileges, cannot create roles, and have connection limits.
-- During deployment, users select a database for their application (or none). Runova automatically populates `DATABASE_URL`, `SPRING_DATASOURCE_URL`, and `PGHOST`/`PGPORT`/`PGUSER`/`PGPASSWORD`/`PGDATABASE`. Multiple applications belonging to the same user may share the same database.
-- Host, port, database name, and password can be viewed and copied on the **Database** page, for example to connect via DBeaver from networks permitted by the admin.
+- During deployment, users select a database for their application (or none). Runova automatically populates `DATABASE_URL`, `SPRING_DATASOURCE_URL`, and `PGHOST`/`PGPORT`/`PGUSER`/`PGPASSWORD`/`PGDATABASE`, plus every database variable the artifact names (`DB_URL`, `DB_USER`, `DB_PASSWORD`, `POSTGRES_PASSWORD`, `JDBC_URL`, `SPRING_R2DBC_URL`, `TYPEORM_*`, …), password included; those rows show as "Otomatis" and need no typing. A value the user enters for one of them wins. The host is `host.docker.internal`: this server, as seen from inside the container (what `localhost` is on the server). Multiple applications belonging to the same user may share the same database.
+- Host, port, database name, and password can be viewed and copied on the **Database** page, for example to connect via DBeaver from networks permitted by the admin, or through an SSH tunnel (`ssh -N -L 5433:127.0.0.1:5432 <user>@<server>`, then `localhost:5433`).
 
 ## Installation
 
@@ -290,6 +290,7 @@ All API mutations use `Content-Type: application/json`. Run `go test ./...` to t
 ```bash
 node web/test/unit.mjs            # test pages web/test/*.test.html
 node web/test/smoke-deploy.mjs    # login, wizard, deploy
+node web/test/smoke-dbenv.mjs     # database variables filled automatically, override, SSH tunnel hint
 node web/test/smoke-app.mjs       # app detail tabs, logs, terminal
 node web/test/smoke-admin.mjs     # users, databases, activity, server
 node web/test/smoke-layout.mjs    # 5 viewport widths, light and dark, accessibility

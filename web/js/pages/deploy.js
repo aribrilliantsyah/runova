@@ -153,14 +153,12 @@ export async function renderDeploy(root) {
       s3.replaceChildren(h("h2", {}, "Database & environment"), h("p", { class: "lead" }, "Unggah file dulu di langkah 1."));
       return;
     }
-    const keep = pick?.choice();
-    pick = dbPick({ databases: dbData.databases, used: dbData.used, limit: dbData.limit, username: user.username, pgDown: dbData.pg_down, onChange: () => { env.setAuto(pick.autoNames()); refresh(); } });
+    pick = dbPick({ databases: dbData.databases, used: dbData.used, limit: dbData.limit, username: user.username, pgDown: dbData.pg_down, dbEnv: up.db_env || [], onChange: () => { env.setAuto(pick.auto()); refresh(); } });
     env = envForm({ detected: up.report.env, onChange: refresh });
-    env.setAuto(pick.autoNames());
-    void keep;
+    env.setAuto(pick.auto());
     s3.replaceChildren(
       h("h2", {}, "Database & environment"),
-      h("p", { class: "lead" }, "Pilih database PostgreSQL untuk aplikasi ini, lalu lengkapi variabel lain."),
+      h("p", { class: "lead" }, "Pilih database PostgreSQL untuk aplikasi ini. Variabel koneksinya terisi sendiri, lalu lengkapi variabel lain."),
       pick.node,
       env.node,
     );

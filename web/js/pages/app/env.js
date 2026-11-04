@@ -2,14 +2,16 @@ import * as api from "/assets/js/api.js";
 import { h, icon, clear, fill } from "/assets/js/dom.js";
 import { act } from "/assets/js/components/act.js";
 import { dialog } from "/assets/js/components/dialog.js";
+import { autoCell, DB_HOST_NOTE } from "/assets/js/components/envform.js";
 import { envError, envNameError, isSecretName, parseDotenv } from "/assets/js/validate.js";
 import { markRedeploy, redeployBanner } from "/assets/js/pages/app/redeploy.js";
 import { toast } from "/assets/js/toast.js";
-
 /**
  * The environment tab. Secrets come from the API blanked; "Lihat" fetches one value through the
  * reveal endpoint (which the server records). Edits are collected in a draft and sent together with
  * "Terapkan"; a secret whose value is left empty keeps what is stored.
+ * Variables the app's database fills (page.state.db_env) show as locked "Otomatis" rows; "Isi sendiri"
+ * gives one a value of the user's own, which wins until it is removed again.
  */
 export function renderEnv(page) {
   const node = h("div");
@@ -47,32 +49,46 @@ export function renderEnv(page) {
     return h("span", { class: `mono v ${masked ? "faint" : ""}`, title: masked ? null : d.value }, masked ? "••••••••••••" : d.value);
   }
 
+  const dbVars = () => page.state.db_env?.vars || [];
+  const dbVar = (name) => dbVars().find((v) => v.name === name);
+  // A stored entry still left to the database: unchanged and without a value of its own.
+  const isAuto = (d) => Boolean(dbVar(d.name)) && d.state === "same" && !dbVar(d.name).overridden;
+
+  function autoRow(name, kind, onOwn) {
+    const own = h("button", { class: "btn sm ghost", type: "button", "aria-label": `Isi ${name} sendiri`, onclick: onOwn }, icon("pencil"), "Isi sendiri");
+    return h("div", { class: "envrow auto", "data-env": name }, h("span", { class: "k" }, name), autoCell(page.state.db_env.database, kind), h("span", { class: "acts" }, own));
+  }
+
   function rowFor(d) {
+    if (isAuto(d)) return autoRow(d.name, dbVar(d.name).kind, () => editRow(d));
     const edit = h("button", { class: "ibtn", type: "button", "aria-label": `Ubah ${d.name}`, onclick: () => editRow(d) }, icon("pencil"));
-    const del = h("button", { class: "ibtn", type: "button", "aria-label": `Hapus ${d.name}`, onclick: () => { d.state = "removed"; render(); } }, icon("trash-2"));
+    const del = h("button", { class: "ibtn", type: "button", "aria-label": dbVar(d.name) ? `Pakai nilai otomatis untuk ${d.name}` : `Hapus ${d.name}`, title: dbVar(d.name) ? "Hapus nilai sendiri, pakai nilai dari database" : null, onclick: () => { if (d.state === "new") draft.splice(draft.indexOf(d), 1); else d.state = "removed"; render(); } }, icon(dbVar(d.name) ? "database" : "trash-2"));
     const undo = h("button", { class: "ibtn", type: "button", "aria-label": `Batalkan hapus ${d.name}`, onclick: () => { d.state = "same"; render(); } }, icon("rotate-cw"));
     const eye = d.secret ? h("button", { class: "ibtn", type: "button", "aria-label": d.revealed ? `Sembunyikan ${d.name}` : `Lihat ${d.name}`, "aria-pressed": String(d.revealed), onclick: (e) => reveal(d, e.currentTarget) }, icon(d.revealed ? "eye-off" : "eye")) : null;
+    const overrides = dbVar(d.name) && d.state !== "removed" ? h("span", { class: "chip", title: `Nilai ini dipakai, bukan nilai otomatis dari ${page.state.db_env.database}` }, "isian sendiri") : null;
     return h(
       "div",
       { class: `envrow ${d.state === "removed" ? "removed" : ""}`, "data-env": d.name },
-      h("span", { class: "k" }, d.name, d.secret ? icon("key-round") : null, d.state === "new" ? h("span", { class: "chip warn" }, "baru") : d.state === "changed" ? h("span", { class: "chip warn" }, "diubah") : d.state === "removed" ? h("span", { class: "chip warn" }, "dihapus") : null),
+      h("span", { class: "k" }, d.name, d.secret ? icon("key-round") : null, overrides, d.state === "new" ? h("span", { class: "chip warn" }, "baru") : d.state === "changed" ? h("span", { class: "chip warn" }, "diubah") : d.state === "removed" ? h("span", { class: "chip warn" }, dbVar(d.name) ? "kembali otomatis" : "dihapus") : null),
       valueCell(d),
       h("span", { class: "acts" }, d.state === "removed" ? undo : [eye, edit, del]),
     );
   }
 
-  function editRow(d) {
+  function editRow(d, preset = "") {
     const isNew = !d;
-    const name = h("input", { class: "f mono", "aria-label": "Nama variabel", value: d?.name || "", disabled: !isNew, placeholder: "NAMA_VARIABEL", autocomplete: "off", spellcheck: "false" });
-    const value = h("input", { class: "f mono", "aria-label": "Nilai", value: d && d.state !== "same" || (d && !d.secret) ? d.value : "", type: "text", autocomplete: "off", spellcheck: "false", placeholder: d?.secret && d.state === "same" ? "Kosongkan untuk mempertahankan nilai tersimpan" : "" });
-    const secretBox = h("input", { type: "checkbox", id: "env-secret", checked: d ? d.secret : false });
+    const name = h("input", { class: "f mono", "aria-label": "Nama variabel", value: d?.name || preset, disabled: !isNew || Boolean(preset), placeholder: "NAMA_VARIABEL", autocomplete: "off", spellcheck: "false" });
+    const value = h("input", { class: "f mono", "aria-label": "Nilai", value: d && d.state !== "same" || (d && !d.secret) ? d.value : "", type: "text", autocomplete: "off", spellcheck: "false", placeholder: d?.secret && d.state === "same" && !isAuto(d) ? "Kosongkan untuk mempertahankan nilai tersimpan" : "" });
+    const secretBox = h("input", { type: "checkbox", id: "env-secret", checked: d ? d.secret : isSecretName(preset) });
     if (d?.secret) secretBox.disabled = true;
+    const autoNote = dbVar(d?.name || preset) ? h("p", { class: "hint" }, `Kosong = nilai otomatis dari ${page.state.db_env.database}. Nilai yang diisi di sini dipakai menggantikannya.`) : null;
     dialog({
-      title: isNew ? "Tambah variabel" : `Ubah ${d.name}`,
+      title: isNew ? (preset ? `Isi ${preset} sendiri` : "Tambah variabel") : isAuto(d) ? `Isi ${d.name} sendiri` : `Ubah ${d.name}`,
       submit: "Simpan",
       body: [
         h("div", { class: "fld" }, h("label", {}, "Nama"), name),
         h("div", { class: "fld" }, h("label", {}, "Nilai"), value),
+        autoNote,
         isNew ? h("label", { class: "rowflex" }, secretBox, "Rahasia (disimpan terenkripsi, disamarkan)") : null,
       ],
       onSubmit: async () => {
@@ -81,7 +97,10 @@ export function renderEnv(page) {
           const bad = envNameError(nm);
           if (bad) throw new Error(bad);
           if (draft.some((x) => x.name === nm)) throw new Error(`Variabel ${nm} sudah ada`);
+          if (preset && value.value === "") return;
           draft.push({ name: nm, value: value.value, secret: secretBox.checked || isSecretName(nm), state: "new", revealed: false });
+        } else if (isAuto(d) && value.value === "") {
+          return;
         } else if (d.secret && d.state === "same" && value.value === "") {
           return;
         } else {
@@ -162,10 +181,16 @@ export function renderEnv(page) {
       render();
     } }, icon(showAll ? "eye-off" : "eye"), showAll ? "Sembunyikan nilai" : "Tampilkan nilai");
     const head = h("div", { class: "envhead" }, h("span", {}, `${visible.filter((d) => d.state !== "removed").length} variabel`), h("div", { class: "r" }, visible.some((d) => d.secret) ? toggleAll : null, h("button", { class: "btn sm ghost", type: "button", onclick: pasteDotenv }, icon("file-code-2"), "Edit sebagai .env"), h("button", { class: "btn sm", type: "button", onclick: () => editRow(null) }, icon("plus"), "Tambah")));
-    const list = visible.length ? visible.map(rowFor) : [h("div", { class: "envedit-note" }, "Belum ada variabel. Tambah dengan tombol di atas.")];
+    // Detected names the app has no entry for: filled by the database, shown so nobody types them again.
+    const dbOnly = dbVars().filter((v) => !v.standard && !draft.some((d) => d.name === v.name));
+    const autoList = dbOnly.map((v) => autoRow(v.name, v.kind, () => editRow(null, v.name)));
+    const standard = page.state.db_env
+      ? h("div", { class: "envedit-note", title: DB_HOST_NOTE }, "Dari ", h("b", { class: "mono" }, page.state.db_env.database), " juga selalu diberikan: ", dbVars().filter((v) => v.standard).map((v) => h("code", { class: "mono" }, v.name, " ")), "Host: server ini (lokal). Ganti database di tab Lanjutan.")
+      : null;
+    const list = visible.length || autoList.length ? [...autoList, ...visible.map(rowFor)] : [h("div", { class: "envedit-note" }, "Belum ada variabel. Tambah dengan tombol di atas.")];
     const banner = redeployBanner(page);
     bannerShown = Boolean(banner);
-    fill(node, banner, dirty, h("section", { class: "card" }, head, h("div", { id: "envlist" }, list)));
+    fill(node, banner, dirty, h("section", { class: "card" }, head, h("div", { id: "envlist" }, list), standard));
   }
 
   render();

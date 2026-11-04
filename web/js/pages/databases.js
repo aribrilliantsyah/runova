@@ -123,6 +123,8 @@ export async function renderDatabases(root) {
         },
       }),
     );
+    const sshHost = info.public_ip || info.panel_domain || "<host-server>";
+    const tunnel = kvRow("SSH tunnel", `ssh -N -L 5433:127.0.0.1:${conn?.port || 5432} <user-ssh>@${sshHost}`);
     return h(
       "section",
       { class: "card conn", id: "connCard" },
@@ -131,7 +133,9 @@ export async function renderDatabases(root) {
         "div",
         { class: "bd" },
         conn ? h("div", { class: "kvbox" }, rows.map((r) => r.el)) : h("div", { class: "loading" }, "Memuat…"),
-        h("div", { class: "gnote" }, icon("info"), h("span", {}, "Aplikasi tidak perlu mengisi ini. Runova memberi ", h("b", { class: "mono" }, "DATABASE_URL"), " dan ", h("b", { class: "mono" }, "PG*"), " otomatis ke aplikasi yang memakai database ini. Koneksi dari luar server (misalnya DBeaver) hanya bisa dari jaringan yang diizinkan admin", info.public_ip ? "." : ", dan butuh IP publik server yang diatur admin.")),
+        h("div", { class: "gnote" }, icon("info"), h("span", {}, "Aplikasi tidak perlu mengisi ini. Runova memberi ", h("b", { class: "mono" }, "DATABASE_URL"), ", ", h("b", { class: "mono" }, "PG*"), ", dan variabel database yang dikenali (", h("span", { class: "mono" }, "DB_URL"), ", ", h("span", { class: "mono" }, "DB_PASSWORD"), "…) otomatis ke aplikasi yang memakai database ini. Koneksi dari luar server (misalnya DBeaver) hanya bisa dari jaringan yang diizinkan admin", info.public_ip ? "." : ", dan butuh IP publik server yang diatur admin.")),
+        conn ? h("div", { class: "kvbox", id: "sshTunnel" }, tunnel.el) : null,
+        conn ? h("div", { class: "gnote" }, icon("info"), h("span", {}, "Tanpa membuka port: jalankan perintah di atas di komputermu (akun SSH server), lalu konek ke ", h("b", { class: "mono" }, "localhost:5433"), " dengan database, user, dan password di atas. Di DBeaver/DataGrip: isi tab SSH (host server, port 22, user SSH) dan koneksi ", h("span", { class: "mono" }, "localhost:5432"), ". Server di belakang NAT/proxy: tambah ", h("span", { class: "mono" }, "-J <user>@<jump-host>"), ".")) : null,
       ),
     );
   }

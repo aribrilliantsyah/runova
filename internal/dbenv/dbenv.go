@@ -24,23 +24,24 @@ const (
 	Database Kind = "database" // the database name
 )
 
-// Var is a variable Runova fills from the app's database.
+// Var is a variable Runova fills from the app's database. Standard marks the
+// names every app with a database gets, whether its artifact names them or not.
 type Var struct {
-	Name string `json:"name"`
-	Kind Kind   `json:"kind"`
+	Name     string `json:"name"`
+	Kind     Kind   `json:"kind"`
+	Standard bool   `json:"standard"`
 }
 
-// standard are the names every app with a database gets, detected or not.
 var standard = []Var{
-	{"DATABASE_URL", URL},
-	{"SPRING_DATASOURCE_URL", JDBC},
-	{"SPRING_DATASOURCE_USERNAME", User},
-	{"SPRING_DATASOURCE_PASSWORD", Password},
-	{"PGHOST", Host},
-	{"PGPORT", Port},
-	{"PGUSER", User},
-	{"PGPASSWORD", Password},
-	{"PGDATABASE", Database},
+	{"DATABASE_URL", URL, true},
+	{"SPRING_DATASOURCE_URL", JDBC, true},
+	{"SPRING_DATASOURCE_USERNAME", User, true},
+	{"SPRING_DATASOURCE_PASSWORD", Password, true},
+	{"PGHOST", Host, true},
+	{"PGPORT", Port, true},
+	{"PGUSER", User, true},
+	{"PGPASSWORD", Password, true},
+	{"PGDATABASE", Database, true},
 }
 
 // StandardNames returns the names every app with a database gets.
@@ -148,28 +149,17 @@ func KindOf(name string, jar bool) Kind {
 	return URL
 }
 
-// Auto returns the detected names Runova fills from the database, in
-// order and without repeats.
-func Auto(detected []string, jar bool) []Var {
-	out := []Var{}
+// Vars returns every variable an app with a database gets: the standard
+// names, then the detected names KindOf recognizes, in order and without
+// repeats. Names are kept as given.
+func Vars(detected []string, jar bool) []Var {
+	out := slices.Clone(standard)
 	for _, name := range detected {
 		if slices.ContainsFunc(out, func(v Var) bool { return v.Name == name }) {
 			continue
 		}
 		if k := KindOf(name, jar); k != "" {
-			out = append(out, Var{name, k})
-		}
-	}
-	return out
-}
-
-// Vars returns every variable an app with a database gets: the standard
-// names, then the detected names Auto recognizes.
-func Vars(detected []string, jar bool) []Var {
-	out := slices.Clone(standard)
-	for _, v := range Auto(detected, jar) {
-		if !slices.ContainsFunc(out, func(x Var) bool { return x.Name == v.Name }) {
-			out = append(out, v)
+			out = append(out, Var{Name: name, Kind: k})
 		}
 	}
 	return out
