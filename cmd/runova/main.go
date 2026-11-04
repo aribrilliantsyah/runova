@@ -93,7 +93,7 @@ func serve(cfg config.Config, stderr io.Writer) int {
 	log := slog.New(slog.NewTextHandler(stderr, nil))
 	slog.SetDefault(log)
 
-	if err := errors.Join(checkFakeBackends(cfg), checkDevMode(cfg)); err != nil {
+	if err := errors.Join(checkFakeBackends(cfg), checkDevMode(cfg), checkDevSeed(cfg)); err != nil {
 		fmt.Fprintln(stderr, err)
 		return 1
 	}
@@ -111,6 +111,13 @@ func serve(cfg config.Config, stderr io.Writer) int {
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
+	if cfg.DevSeed {
+		if err := devSeed(ctx, st, time.Now().UnixMilli()); err != nil {
+			fmt.Fprintf(stderr, "Could not seed the development database: %v\n", err)
+			return 1
+		}
+		log.Info("development seed ready", "password", seedPassword)
+	}
 
 	engine, dockerCheck := newEngine(cfg)
 	caddyClient, caddyCheck := newCaddyLoader(cfg)
