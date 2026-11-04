@@ -306,15 +306,19 @@ func fakeApps(svc *apps.Service, engine docker.Engine) {
 }
 
 // fakeDNS answers hosting-domain DNS checks without a network: domains starting
-// with "bad." have no record and "proxy." ones sit behind Cloudflare.
+// with "bad." have no record, "proxy." ones sit behind Cloudflare and "nat."
+// ones point at 117.54.12.173 until that is the public IP.
 type fakeDNS struct{}
 
-func (fakeDNS) Check(_ context.Context, domain, _ string) hostdns.Result {
+func (fakeDNS) Check(_ context.Context, domain, publicIP string) hostdns.Result {
 	switch {
 	case strings.HasPrefix(domain, "bad."):
 		return hostdns.Result{Detail: "Belum ada record DNS untuk *." + domain}
 	case strings.HasPrefix(domain, "proxy."):
 		return hostdns.Result{Detail: "Alamat itu milik Cloudflare (proxy menyala); matikan proxy: pilih DNS only"}
+	case strings.HasPrefix(domain, "nat.") && publicIP != "117.54.12.173":
+		// a server behind nginx at 117.54.12.173 (docs/nginx-front-proxy.md)
+		return hostdns.Result{Detail: "Record menunjuk ke 117.54.12.173, bukan ke server ini (10.81.20.111, 172.31.0.1)"}
 	}
 	return hostdns.Result{OK: true}
 }

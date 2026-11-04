@@ -32,24 +32,24 @@
   .bnav .fab[aria-current=page] .fabic{background:var(--accent);color:var(--on-accent)}
 
   /* Deploy flow: bottom nav swaps for a step action bar */
-  .app[data-view=new] .bnav{display:none}
-  .app[data-view=new] .mbar{display:flex}
+  .app[data-view=new]:has(.dpage.has) .bnav{display:none}
+  .app[data-view=new]:has(.dpage.has) .mbar{display:flex}
   .mbar{flex:none;gap:8px;padding:10px 12px calc(10px + env(safe-area-inset-bottom));border-top:1px solid var(--line);background:var(--panel)}
   .mbar .btn{flex:1;justify-content:center;height:44px;font-size:14px}
   .mbar #mprev{flex:0 0 auto;padding:0 16px}
-  .mstep{display:block;margin:0 0 16px}
-  .mstep .t{display:flex;justify-content:space-between;font-size:12px;color:var(--muted);margin-bottom:7px}
-  .mstep .t b{color:var(--text);font-weight:600}
-  .mstep .bar{height:4px}
-  .mstep .bar i{background:var(--accent);opacity:1;transition:width .2s}
-  .wiz{display:block}
-  .steps,.wnav{display:none}
-  .wbody{padding:16px}
-  .wbody h2{font-size:17px}
-  .summary{border-left:0;border-top:1px solid var(--line);padding:16px}
-  .wiz:not([data-at="4"]) .summary{display:none}
-  .summary #deploy{display:none}
   .drop{padding:20px 14px}
+  .dpage{display:block;padding:14px 16px 20px}
+  .drail{position:static;margin-top:14px}
+  .drail .dbtn,.drail .dcancel{display:none}
+  .dsec{padding:14px}
+  .presets{grid-template-columns:1fr}
+  .res3{grid-template-columns:1fr}
+  .portrow{display:grid}
+  .portrow input.f{max-width:none}
+  .nmbig{font-size:16px}
+  .dk{grid-template-columns:1fr;gap:2px}
+  .dk b .mono{display:block;overflow-wrap:anywhere}
+  .mbar .btn.pending{background:var(--panel);color:var(--text);border-color:var(--line-2);overflow:hidden;text-overflow:ellipsis}
 
   /* "Lainnya" bottom sheet */
   .msheet:not([hidden]){display:block;position:absolute;inset:0;z-index:30}
@@ -89,9 +89,6 @@
   .tab{padding:12px 16px 20px}
   .cols{grid-template-columns:minmax(0,1fr)}
   .cols > .card{min-width:0}
-  .checks div{display:block;line-height:1.55;padding:9px 12px 9px 36px;position:relative}
-  .checks div svg.lucide{position:absolute;left:12px;top:11px}
-  .checks .mono{overflow-wrap:anywhere}
   .dhead{min-width:0}
   .ph .acts{margin-left:auto}
   .actions{display:grid;grid-template-columns:1fr 1fr}
@@ -99,7 +96,6 @@
   dl.kv{grid-template-columns:104px minmax(0,1fr)}
   .setting{flex-wrap:wrap}
   .setting .ctl.wide{width:100% !important;margin-left:0}
-  .res3{grid-template-columns:1fr}
   .opts{grid-template-columns:repeat(3,minmax(0,1fr))}
   .opt{padding:11px}
   .banner{flex-wrap:wrap}
@@ -109,7 +105,7 @@
   .envrow .k{grid-column:1 / -1}
   .envhead{flex-wrap:wrap}
   .envhead .r{margin-left:0;flex-wrap:wrap}
-  .g3,.rt{grid-template-columns:1fr}
+  .rt,.rtcard .rt{grid-template-columns:1fr}
   pre.log.tall{height:380px}
   .btn{height:38px}
   .btn.sm{height:32px}
@@ -161,7 +157,13 @@
   .ph .acts{flex-wrap:wrap}
   .pop{max-width:calc(100vw - 16px)}
   .tabs{max-width:calc(100% - 32px)}
-  .cfgform .two{grid-template-columns:1fr}
+  .cfgform .two,.cfgform.two{grid-template-columns:1fr}
+  .g3{grid-template-columns:1fr}
+  .srv{gap:10px}
+  .card>footer .btn{flex:1;justify-content:center;height:42px}
+  .hostform .rowflex{grid-template-columns:1fr}
+  .hostform .rowflex .btn{justify-content:center;height:42px}
+  dl.kv.ver{grid-template-columns:130px minmax(0,1fr)}
   .links{flex-wrap:wrap}
   .link{max-width:100%;overflow:hidden}
   .link{min-width:0}
@@ -174,4 +176,21 @@
   table.t .qcell{min-width:160px}
 }
 @keyframes rnv-up{from{transform:translateY(18px);opacity:.6}}
-@media (prefers-reduced-motion: reduce){.mpanel{animation:none}.mstep .bar i{transition:none}}
+@media (prefers-reduced-motion: reduce){.mpanel{animation:none}}
+@media (max-width: 760px){
+  .lv-bar{padding:8px}
+  .lv-find{flex-basis:100%;height:40px}
+  .lv-acts{margin-left:0;width:100%;justify-content:space-between}
+  .lv-lbl{display:none}
+  .lv .ln{grid-template-columns:3.2ch minmax(0,1fr);padding-right:8px}
+  .lv .ln .ts{display:none}
+  .lv-fold{margin-left:calc(3.2ch + 16px)}
+  .lv.tall .lv-body{height:60vh}
+  select.f.lv-pick{margin-left:0;width:100%;height:42px}
+  .dep-grid{grid-template-columns:minmax(0,1fr)}
+  .appwhy{margin:10px 16px 0;flex-wrap:wrap}
+  .appwhy .btn{margin-left:auto}
+  .dep-why{max-width:60vw}
+  table.deps td.dep-st{max-width:none}
+  .rowacts{flex-wrap:wrap}
+}

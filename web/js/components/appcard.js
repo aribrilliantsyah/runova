@@ -1,8 +1,10 @@
 import { h, icon, fmtTime, fmtMB, fmtCPU } from "/assets/js/dom.js";
 import { kindLogo, runtimeSub, statusOf } from "/assets/js/kinds.js";
+import { ipHost } from "/assets/js/components/iphost.js";
 
-/** appCard(app, summary, publicIP) → the clickable card of the app list. */
-export function appCard(app, summary, publicIP) {
+/** appCard(app, summary, info) → the clickable card of the app list; info is GET /api/info. */
+export function appCard(app, summary, info) {
+  const ip = ipHost(info);
   const [cls, label] = statusOf(app.status);
   const logo = h("span", { class: "lgbox" }, kindLogo(app.kind, summary?.language));
   const dom = summary?.domains?.[0];
@@ -11,7 +13,7 @@ export function appCard(app, summary, publicIP) {
     ? h("div", {}, icon("lock"), h("span", { class: "mono" }, dom.host), extra > 0 ? h("span", { class: "faint" }, `+${extra}`) : null)
     : h("div", {}, icon("globe"), h("span", {}, "Belum ada domain"));
   const ipRow = app.ip_access
-    ? h("div", {}, icon("network"), h("span", { class: "mono" }, `${publicIP || location.hostname}:${app.ip_port}`))
+    ? h("div", {}, icon("network"), h("span", { class: "mono", title: ip.title || null }, `${ip.host}:${app.ip_port}`), ip.local ? h("span", { class: "lan" }, "LAN") : null)
     : h("div", {}, icon("network"), h("span", {}, "Akses IP ditutup"));
   const settled = app.status === "running";
   const foot = settled

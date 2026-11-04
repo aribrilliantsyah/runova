@@ -60,7 +60,7 @@ export async function renderDatabases(root) {
     const logoBox = h("span", { class: "pglogo" }, pgLogo());
     const del = h("button", { class: "btn sm ghost", type: "button", "aria-label": `Hapus ${d.name}`, onclick: () => remove(d) }, icon("trash-2"));
     const open = h("button", { class: "btn sm ghost", type: "button", "data-conn": d.name, onclick: () => { selected = d.id; revealed = null; conn = null; render(); loadConn(); } }, icon("plug"), "Koneksi");
-    const used = d.apps.length ? d.apps.map((a) => h("span", { class: "chip" }, icon("boxes"), a)) : [h("span", { class: "muted", style: { "font-size": "12px" } }, "Belum dipakai aplikasi")];
+    const used = d.apps.length ? d.apps.map((a) => h("span", { class: "chip" }, icon("package"), a)) : [h("span", { class: "muted", style: { "font-size": "12px" } }, "Belum dipakai aplikasi")];
     return h(
       "article",
       { class: "dbcard", "data-db": d.name },

@@ -1,15 +1,10 @@
 import * as api from "/assets/js/api.js";
+import { levelOf } from "/assets/js/components/logview.js";
 
 // eslint-disable-next-line no-control-regex
 const ANSI = /\x1b\[[0-9;?]*[A-Za-z]/g;
 const RETRY_MS = 2500;
 
-export const levelOf = (text) => {
-  if (/\b(ERROR|FATAL|SEVERE|CRITICAL|panic)\b/.test(text)) return "e";
-  if (/\b(WARN|WARNING)\b/.test(text)) return "w";
-  if (/^runova\b/.test(text)) return "s";
-  return "";
-};
 
 /**
  * logStream({id, tail, onLine, onState}) follows an app's container log over a WebSocket.

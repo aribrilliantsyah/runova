@@ -1,6 +1,7 @@
-// Task 3 smoke: login → wizard → upload a sample JAR → Java 8 disabled with the reason →
-// fill the required env → Deploy → the app page shows "Berjalan". Also: empty list call to
-// action, oversize file refused client-side, upload cancel, XSS-looking app names as text.
+// Deploy page smoke: login → upload a sample JAR → one review page with the suggested name on
+// top → Java 8 disabled with the reason → Deploy names what is missing → fill the required env →
+// Deploy → the deployment's live progress → Umum once it runs ("Berjalan"). Also: empty list
+// call to action, oversize file refused client-side, a binary without Java choice, Ganti file.
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -21,36 +22,49 @@ try {
   await page.goto(`${srv.url}/#/apps`);
   await page.waitForSelector("text=Deploy aplikasi pertama");
 
-  step("wizard: upload the sample JAR");
+  step("deploy page: upload the sample JAR, review opens with the name on top");
   await page.goto(`${srv.url}/#/deploy`);
+  check((await page.locator(".dreview").isHidden()), "the review waits for a file");
   await page.setInputFiles("#upload-file", jar);
   await page.waitForSelector(".fileok");
   await page.waitForSelector("text=Butuh Java 17 atau lebih baru");
   check((await page.inputValue("#nm")) === "billing-api", `suggested name: ${await page.inputValue("#nm")}`);
+  const order = await page.locator(".dreview > .dsec").evaluateAll((els) => els.map((e) => e.id || e.className));
+  check(order[0].includes("dname"), `the name comes first: ${order.join(", ")}`);
 
-  step("step 2: Java 8 and 11 are disabled with the reason");
-  await page.click("#steps button[data-step='2'], .steps button[data-step='2']");
+  step("Java 8 and 11 are disabled with the reason; 21 preselected");
   const j8 = page.locator("#javaopts .opt[data-java='8']");
   check((await j8.getAttribute("aria-disabled")) === "true", "Java 8 should be disabled");
   check(((await j8.getAttribute("title")) || "").includes("Butuh Java 17 atau lebih baru"), `Java 8 title: ${await j8.getAttribute("title")}`);
   check((await page.locator("#javaopts .opt[data-java='21']").getAttribute("aria-pressed")) === "true", "Java 21 should be preselected");
 
-  step("Deploy stays disabled until the required env is filled");
-  await page.click(".steps button[data-step='3']");
+  step("Deploy stays disabled and says what is missing; a bad name is explained inline");
   check(await page.locator("#deploy").isDisabled(), "Deploy should be disabled with JWT_SECRET empty");
-  await page.waitForSelector("text=Isi JWT_SECRET");
+  check((await page.locator("#deploy").innerText()).includes("belum siap"), `deploy label: ${await page.locator("#deploy").innerText()}`);
+  await page.waitForSelector(".dmiss button:has-text('Isi JWT_SECRET')");
+  await page.fill("#nm", "Billing API");
+  await page.waitForSelector("#nm-err:not([hidden])");
+  check((await page.getAttribute("#nm", "aria-invalid")) === "true", "an invalid name is marked");
+  await page.fill("#nm", "billing-api");
+  await page.click(".dmiss button:has-text('Isi JWT_SECRET')");
   const secret = page.locator("[data-env='JWT_SECRET'] input");
   check((await secret.getAttribute("type")) === "password", "secret input should be masked");
   await page.click("[data-env='JWT_SECRET'] button[aria-label='Buat nilai acak']");
   check((await secret.inputValue()).length === 48, "random secret should be 48 hex chars");
   await page.fill("[data-env='DB_PASSWORD'] input", "s3cret");
 
-  step("step 4 → Deploy");
-  await page.click(".steps button[data-step='4']");
+  step("size preset and advanced options");
+  check((await page.locator(".preset[data-size='m']").getAttribute("aria-pressed")) === "true", "a JAR starts at Sedang");
+  await page.click("#d-adv > summary");
+  await page.waitForSelector("#jopts");
+
+  step("Deploy → live progress → Umum");
   check(!(await page.locator("#deploy").isDisabled()), "Deploy should be enabled");
   await page.click("#deploy");
-  await page.waitForURL(/#\/apps\/\d+\/logs/);
-  await page.waitForSelector(".chip:has-text('Berjalan')", { timeout: 20000 });
+  await page.waitForURL(/#\/apps\/\d+\/deployments\/\d+/);
+  await page.waitForSelector(".tl li[data-step='health']");
+  await page.waitForURL(/#\/apps\/\d+$/, { timeout: 20000 });
+  await page.waitForSelector("#appstatus:has-text('Berjalan')", { timeout: 20000 });
   step("app page shows Berjalan");
 
   step("list: card shows the app, quota tiles reflect it");
@@ -78,7 +92,7 @@ try {
   await page.waitForSelector(".err:has-text('File melebihi batas 1 MB')");
   check(uploads === 0, "an oversize file must not be sent");
 
-  step("a binary: no Java choice, static runtime");
+  step("a binary: no Java choice, static runtime, Kecil preset");
   settings.upload_limit_mb = 500;
   await fetch(`${srv.url}/api/settings`, { method: "PUT", headers: { cookie, "Content-Type": "application/json" }, body: JSON.stringify(settings) });
   const bin = buildStaticBinary(tmp, "hello");
@@ -86,15 +100,14 @@ try {
   await page.waitForSelector(".drop");
   await page.setInputFiles("#upload-file", bin);
   await page.waitForSelector(".fileok");
-  await page.click(".steps button[data-step='2']");
-  await page.waitForSelector("text=Terdeteksi sebagai");
+  await page.waitForSelector("text=Binary Linux statis");
   check((await page.locator("#javaopts").count()) === 0, "a binary has no Java options");
+  check((await page.locator(".preset[data-size='s']").getAttribute("aria-pressed")) === "true", "a binary starts at Kecil");
 
   step("Ganti file discards the upload");
-  await page.click(".wbody >> text=Ganti file").catch(() => {});
-  await page.click(".steps button[data-step='1']");
   await page.click("button:has-text('Ganti file')");
   await page.waitForSelector(".drop");
+  check(await page.locator(".dreview").isHidden(), "the review goes with the file");
 } finally {
   await browser.close();
   const logs = srv.logs();

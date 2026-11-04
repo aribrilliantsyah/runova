@@ -55,7 +55,7 @@ export function buildShell({ onLogout }) {
       h(
         "nav",
         { class: "nav", "aria-label": "Utama" },
-        navLink("apps", "/apps", "boxes", "Aplikasi", true),
+        navLink("apps", "/apps", "package", "Aplikasi", true),
         navLink("new", "/deploy", "cloud-upload", "Deploy baru"),
         navLink("db", "/databases", "database", "Database", true),
         navLink("activity", "/activity", "history", "Aktivitas"),
@@ -102,7 +102,7 @@ export function buildShell({ onLogout }) {
   const bnav = h(
     "nav",
     { class: "bnav", "aria-label": "Navigasi bawah" },
-    bnLink("apps", "/apps", "boxes", "Aplikasi"),
+    bnLink("apps", "/apps", "package", "Aplikasi"),
     bnLink("db", "/databases", "database", "Database"),
     bnLink("new", "/deploy", "plus", "Deploy", "fab"),
     admin ? bnLink("users", "/users", "users", "Pengguna") : bnLink("activity", "/activity", "history", "Aktivitas"),
@@ -202,7 +202,7 @@ export function buildShell({ onLogout }) {
       const hits = appList.filter((a) => a.name.includes(q)).slice(0, 8);
       results.replaceChildren(
         ...(hits.length
-          ? hits.map((a) => h("a", { class: "btn", href: `#/apps/${a.id}`, onclick: () => document.querySelector(".dlg-scrim")?.remove() }, icon("boxes"), a.name))
+          ? hits.map((a) => h("a", { class: "btn", href: `#/apps/${a.id}`, onclick: () => document.querySelector(".dlg-scrim")?.remove() }, icon("package"), a.name))
           : [h("p", { class: "muted" }, "Tidak ada aplikasi yang cocok")]),
       );
     };

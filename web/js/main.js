@@ -21,9 +21,9 @@ const SESSION_ENDED = "Sesi berakhir, silakan masuk lagi";
 
 // view: which sidebar entry is current and which mobile chrome applies.
 route("/", () => {}, { redirect: DEFAULT_ROUTE });
-route("/apps", renderApps, { view: "apps", crumb: [["boxes", "Aplikasi", "/apps"]] });
-route("/apps/:id/:tab?", renderApp, { view: "app" });
-route("/deploy", renderDeploy, { view: "new", crumb: [["boxes", "Aplikasi", "/apps"], ["cloud-upload", "Deploy baru", "/deploy"]] });
+route("/apps", renderApps, { view: "apps", crumb: [["package", "Aplikasi", "/apps"]] });
+route("/apps/:id/:tab?/:sub?", renderApp, { view: "app" });
+route("/deploy", renderDeploy, { view: "new", crumb: [["package", "Aplikasi", "/apps"], ["cloud-upload", "Deploy baru", "/deploy"]] });
 route("/databases", renderDatabases, { view: "db", crumb: [["database", "Database", "/databases"]] });
 route("/activity", renderActivity, { view: "activity", crumb: [["history", "Aktivitas", "/activity"]] });
 route("/users", renderUsers, { view: "users", admin: true, crumb: [["users", "Pengguna", "/users"]] });
