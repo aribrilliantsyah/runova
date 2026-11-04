@@ -155,7 +155,7 @@ export async function renderServer(root) {
             field("Domain panel", panelDomain, "HTTPS otomatis lewat Caddy. Mengisi domain dan port sekaligus tidak disarankan."),
             field("Port panel (HTTPS di IP:port)", panelPort),
             field("Jaringan PostgreSQL yang diizinkan", nets, "Satu CIDR per baris, mis. 203.0.113.0/24. Subnet Docker selalu diizinkan."),
-            field("Proxy di depan Runova", proxies, "IP atau CIDR proxy seperti nginx yang meneruskan ke server ini, satu per baris. Isi agar batas login dan aktivitas memakai IP asli pengunjung. Kosong bila tidak ada proxy."),
+            field("Proxy di depan Runova", proxies, "IP atau CIDR proxy seperti nginx yang meneruskan ke server ini, satu per baris. Isi agar batas login dan aktivitas memakai IP asli pengunjung; Caddy lalu memakai sertifikat CA internalnya karena sertifikat publik dipegang proxy. Kosong bila tidak ada proxy."),
             h("div", { class: "actions" }, saveServer),
           ),
         ),
