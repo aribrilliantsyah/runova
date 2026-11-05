@@ -4,7 +4,7 @@ Semua perubahan penting Runova. Versi mengikuti [semantic versioning](https://se
 
 Perbarui server dengan `sudo runova update` (server 0.2.0 atau lebih lama: jalankan perintah `curl … get.sh | sudo bash` sekali). Perubahan skema database dimigrasikan otomatis setelah cadangan (`runova.db.bak-v<N>-*`); `sudo runova rollback` kembali ke versi sebelumnya beserta database-nya.
 
-## [Unreleased]
+## [0.3.10] - 2026-11-05
 
 ### Ditambahkan
 - **Pengelola file di tab File.** Breadcrumb yang bisa diklik dengan folder tersimpan di URL (`#/apps/<id>/files?path=storage/2026`), tombol naik satu folder, pencarian, tampilan daftar dan kisi (gambar kecil), urutan Nama/Ukuran/Diubah dengan folder selalu di atas, jumlah isi tiap folder.
@@ -148,6 +148,7 @@ Rilis pertama.
 - Pengguna dengan kuota (aplikasi, memori, CPU, database), batas login, log aktivitas, notifikasi.
 - Migrasi database berversi dengan cadangan otomatis.
 
+[0.3.10]: https://github.com/aribrilliantsyah/runova/compare/v0.3.9...v0.3.10
 [0.3.9]: https://github.com/aribrilliantsyah/runova/compare/v0.3.8...v0.3.9
 [0.3.8]: https://github.com/aribrilliantsyah/runova/compare/v0.3.7...v0.3.8
 [0.3.7]: https://github.com/aribrilliantsyah/runova/compare/v0.3.6...v0.3.7

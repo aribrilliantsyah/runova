@@ -4,7 +4,7 @@ All notable changes to Runova. Versions follow [semantic versioning](https://sem
 
 Upgrade any server with `sudo runova update` (servers on 0.2.0 or older: run the `curl … get.sh | sudo bash` command once). Database schema changes are migrated automatically after a backup (`runova.db.bak-v<N>-*`); `sudo runova rollback` returns to the previous version and its database.
 
-## [Unreleased]
+## [0.3.10] - 2026-11-05
 
 ### Added
 - **File manager in the File tab.** Clickable breadcrumb with the folder kept in the URL (`#/apps/<id>/files?path=storage/2026`), up button, filter, list and grid view (image thumbnails), sortable Name/Size/Modified with folders on top, folder item counts.
@@ -148,6 +148,7 @@ First release.
 - Users with quotas (apps, memory, CPU, databases), login limit, activity log, notifications.
 - Versioned database migrations with automatic backups.
 
+[0.3.10]: https://github.com/aribrilliantsyah/runova/compare/v0.3.9...v0.3.10
 [0.3.9]: https://github.com/aribrilliantsyah/runova/compare/v0.3.8...v0.3.9
 [0.3.8]: https://github.com/aribrilliantsyah/runova/compare/v0.3.7...v0.3.8
 [0.3.7]: https://github.com/aribrilliantsyah/runova/compare/v0.3.6...v0.3.7
