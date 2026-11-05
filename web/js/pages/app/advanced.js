@@ -24,12 +24,24 @@ export function renderAdvanced(page) {
     render();
   }
 
+  // card(title, desc, body, {id, aside, foot}): the Lanjutan card. Title and description stack on the
+  // left, aside (a secondary action) sits right in the header, foot holds the save action at the right.
+  function card(title, desc, body, { id = null, aside = null, foot = null } = {}) {
+    return h(
+      "section",
+      { class: "card", id },
+      h("header", {}, h("div", { class: "hd" }, h("h3", {}, title), desc ? h("p", {}, desc) : null), aside ? h("div", { class: "r" }, aside) : null),
+      body == null ? null : h("div", { class: "bd" }, body),
+      foot ? h("footer", { class: "cfoot" }, foot) : null,
+    );
+  }
+
   function modeCard() {
     const app = page.app;
     const sel = h("select", { class: "f", "aria-label": "Mode deploy", }, h("option", { value: "zero" }, "Tanpa jeda: container baru sehat dulu, lalu Caddy dialihkan"), h("option", { value: "stopstart" }, "Stop-start: container lama dihentikan dulu"));
     sel.value = app.deploy_mode;
     sel.addEventListener("change", () => act(sel, () => patch({ deploy_mode: sel.value }, "Mode deploy disimpan")));
-    return h("section", { class: "card" }, h("header", {}, h("h3", {}, "Mode deploy")), h("div", { class: "bd" }, h("div", { class: "fld", style: { margin: "0" } }, h("label", {}, "Cara deploy versi baru"), sel, h("div", { class: "hint" }, "Berlaku untuk deploy berikutnya."))));
+    return card("Mode deploy", "Berlaku untuk deploy berikutnya; tersimpan begitu dipilih.", h("div", { class: "fld", style: { margin: "0" } }, h("label", {}, "Cara deploy versi baru"), sel));
   }
 
   function resourceCard() {
@@ -39,21 +51,33 @@ export function renderAdvanced(page) {
     save.append("Simpan resource");
     save.addEventListener("click", () => act(save, () => patch({ memory_mb: res.memory(), cpu_milli: res.cpu(), disk_mb: res.disk() }, "Resource disimpan")));
     const disk = app.disk_mb ? fmtMB(app.disk_mb) : "disk belum dibatasi";
-    return h("section", { class: "card" }, h("header", {}, h("h3", {}, "Resource"), h("p", {}, `Sekarang ${fmtMB(app.memory_mb)} · ${fmtNum(app.cpu_milli / 1000)} core · ${disk}. Disk berlaku langsung; memori dan CPU setelah deploy ulang.`)), h("div", { class: "bd" }, res.node, h("div", { class: "actions" }, save)));
+    return card("Resource", `Sekarang ${fmtMB(app.memory_mb)}, ${fmtNum(app.cpu_milli / 1000)} core, ${disk}. Disk berlaku langsung; memori dan CPU setelah deploy ulang.`, res.node, { foot: [h("span", { class: "spacer" }), save] });
   }
 
   function foldersCard() {
     const app = page.app;
     const detected = page.state.latest?.report?.folders || page.state.deployment?.report?.folders || [];
     const save = h("button", { class: "btn dark", type: "button", disabled: true }, "Simpan folder");
+    const dirty = h("span", { class: "dirty", hidden: true }, h("i", { class: "dot warn", "aria-hidden": "true" }), "Belum disimpan");
+    const errHint = h("span", { class: "hint", hidden: true });
     let list = null;
-    list = folderList({ appName: () => app.name, detected, folders: app.folders || [], onChange: () => { if (list) save.disabled = Boolean(list.error()) || !list.changed(); } });
+    const paint = () => {
+      if (!list) return;
+      const changed = list.changed();
+      const bad = list.error();
+      save.disabled = Boolean(bad) || !changed;
+      dirty.hidden = !changed;
+      errHint.hidden = !changed || !bad;
+      errHint.textContent = bad ? "Perbaiki baris yang ditandai dulu" : "";
+    };
+    list = folderList({ appName: () => app.name, detected, folders: app.folders || [], onChange: paint });
+    paint();
     save.addEventListener("click", () => act(save, () => patch({ folders: list.value() }, "Folder tersimpan diubah")));
-    return h(
-      "section",
-      { class: "card", id: "a-folders" },
-      h("header", {}, h("h3", {}, "Folder tersimpan"), h("p", {}, ["Isi ", h("span", { class: "mono" }, `${app.name}/`), " tetap ada saat deploy ulang dan bisa dilihat di tab ", h("a", { href: page.path("files") }, "File"), ". Path absolut di-mount dari folder kerja. Perubahan berlaku setelah deploy ulang."])),
-      h("div", { class: "bd" }, list.node, h("div", { class: "actions" }, save)),
+    return card(
+      "Folder tersimpan",
+      ["Isi ", h("span", { class: "mono" }, `${app.name}/`), " tetap ada saat deploy ulang dan bisa dibuka di tab ", h("a", { href: page.path("files") }, "File"), ". Path absolut di-mount dari folder kerja. Berlaku setelah deploy ulang."],
+      list.node,
+      { id: "a-folders", aside: list.addButton, foot: [dirty, errHint, h("span", { class: "spacer" }), save] },
     );
   }
 
@@ -81,7 +105,7 @@ export function renderAdvanced(page) {
       }
       return act(save, () => patch(body, "Runtime disimpan"));
     });
-    return h("section", { class: "card" }, h("header", {}, h("h3", {}, "Runtime"), h("p", {}, "Perubahan berlaku setelah deploy ulang.")), h("div", { class: "bd" }, ...parts, h("div", { class: "actions" }, save)));
+    return card("Runtime", "Perubahan berlaku setelah deploy ulang.", parts, { foot: [h("span", { class: "spacer" }), save] });
   }
 
   function dbCard() {
@@ -90,7 +114,7 @@ export function renderAdvanced(page) {
     sel.value = String(app.database_id || 0);
     const save = h("button", { class: "btn dark", type: "button" }, "Simpan database");
     save.addEventListener("click", () => act(save, () => patch({ database_id: Number(sel.value) }, "Database disimpan")));
-    return h("section", { class: "card" }, h("header", {}, h("h3", {}, "Database terpakai"), h("p", {}, "DATABASE_URL, variabel PG*, dan variabel database yang dikenali di aplikasi (DB_URL, DB_PASSWORD…) diisi otomatis, termasuk password. Berlaku setelah deploy ulang.")), h("div", { class: "bd" }, dbs.pg_down ? h("p", { class: "hint" }, "PostgreSQL sedang tidak bisa diakses; pilihan tetap bisa disimpan.") : null, h("div", { class: "fld" }, sel), h("div", { class: "actions" }, save)));
+    return card("Database terpakai", "DATABASE_URL, variabel PG*, dan variabel database yang dikenali di aplikasi (DB_URL, DB_PASSWORD…) diisi otomatis, termasuk password. Berlaku setelah deploy ulang.", [dbs.pg_down ? h("p", { class: "hint", style: { "margin-top": "0" } }, "PostgreSQL sedang tidak bisa diakses; pilihan tetap bisa disimpan.") : null, h("div", { class: "fld", style: { margin: "0" } }, sel)], { foot: [h("span", { class: "spacer" }), save] });
   }
 
   function dangerCard() {
@@ -110,7 +134,7 @@ export function renderAdvanced(page) {
         },
       }),
     );
-    return h("section", { class: "card" }, h("header", {}, h("h3", {}, "Hapus aplikasi")), h("div", { class: "bd" }, h("p", { class: "muted", style: { "margin-top": "0" } }, "Penghapusan tidak bisa dibatalkan. Ketik nama aplikasi untuk mengonfirmasi."), h("div", { class: "actions" }, btn)));
+    return card("Hapus aplikasi", "Penghapusan tidak bisa dibatalkan. Ketik nama aplikasi untuk mengonfirmasi.", null, { foot: [h("span", { class: "spacer" }), btn] });
   }
 
   function render() {
