@@ -1,0 +1,142 @@
+/* Database workspace: table browser and query editor of the selected database. */
+.dbw{margin-top:12px}
+.dbw>header{flex-wrap:wrap}
+.dbw-tabs{margin-left:auto}
+.dbw-tabs button{height:26px;padding:0 11px}
+.dbw-tabs .lucide{width:14px;height:14px}
+.dbw-pane[hidden]{display:none}
+
+/* Tabel: list on the left, the chosen table on the right. */
+.tsplit{display:grid;grid-template-columns:minmax(220px,280px) minmax(0,1fr);min-height:320px}
+.tlist{border-right:1px solid var(--line);min-width:0}
+.tlist-h{display:flex;align-items:center;gap:8px;padding:8px 8px 8px 14px;font-size:12px;color:var(--muted);border-bottom:1px solid var(--line)}
+.tlist-h .ibtn{margin-left:auto}
+.tlist ul{list-style:none;margin:0;padding:4px;display:grid;gap:1px;max-height:560px;overflow:auto}
+.trow{all:unset;box-sizing:border-box;display:grid;grid-template-columns:16px minmax(0,1fr);column-gap:9px;row-gap:1px;width:100%;padding:7px 10px;border-radius:7px;cursor:pointer}
+.trow:hover{background:var(--hover)}
+.trow:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
+.trow[aria-selected=true]{background:var(--hover);box-shadow:inset 0 0 0 1px var(--line-2)}
+.trow .lucide{width:14px;height:14px;color:var(--faint);grid-row:span 2;margin-top:2px}
+.trow .tn{font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.trow .tm{font-size:11.5px;color:var(--muted);font-variant-numeric:tabular-nums}
+.tlist .lempty{padding:40px 16px}
+.tlist div.err{margin:12px}
+.tdetail{min-width:0;display:grid;grid-template-columns:minmax(0,1fr);align-content:start}
+.tpick{display:flex;align-items:center;justify-content:center;gap:8px;min-height:320px;font-size:12.5px}
+.tpick .lucide{width:16px;height:16px}
+.td-h{display:flex;align-items:center;gap:10px;padding:10px 14px;border-bottom:1px solid var(--line);flex-wrap:wrap}
+.td-h b{font-weight:600;font-size:13.5px}
+.td-h .sub{font-size:12px;color:var(--muted);font-variant-numeric:tabular-nums}
+.td-h .r{margin-left:auto;display:flex;gap:6px;flex-wrap:wrap}
+.btn.danger{border-color:var(--line-2)}
+.btn.danger:hover{background:var(--err-bg);border-color:transparent}
+.tcol-box{border-bottom:1px solid var(--line)}
+.tcol-box>summary{cursor:pointer;padding:8px 14px;font-size:12px;font-weight:500;color:var(--muted);list-style-position:inside}
+.tcol-box>summary:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
+.tcol-scroll{overflow-x:auto;max-height:260px;overflow-y:auto;border-top:1px solid var(--line)}
+table.tcols td{padding:6px 14px;font-size:12.5px}
+table.tcols th{padding:6px 14px;position:sticky;top:0}
+table.tcols td:first-child{white-space:nowrap}
+.chip.pk{height:18px;margin-left:6px;font-size:10.5px;color:var(--warn);background:var(--warn-bg);border-color:transparent}
+.chip.pk .lucide{width:10px;height:10px}
+.tdata{min-width:0}
+.tdata-h{display:flex;align-items:baseline;gap:8px;padding:8px 14px;font-size:12px}
+.tdata-h b{font-weight:500}
+.tdata[aria-busy=true] .grid-wrap{opacity:.55}
+.tempty{padding:18px 14px}
+.tdata div.err{margin:0 14px 14px}
+
+/* Result grid: real columns at every width, scrolls both ways. */
+.grid-wrap{overflow:auto;max-height:520px;border-top:1px solid var(--line);background:var(--panel)}
+.grid-wrap:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
+table.grid{border-collapse:separate;border-spacing:0;font:400 12px/1.45 var(--mono);min-width:100%}
+table.grid th{position:sticky;top:0;z-index:1;background:var(--raised);text-align:left;padding:6px 12px;border-bottom:1px solid var(--line);border-right:1px solid var(--line);white-space:nowrap;vertical-align:bottom}
+table.grid th .cn{display:block;font:600 12px var(--mono);color:var(--text)}
+table.grid th .ct{display:block;font:400 10.5px var(--mono);color:var(--faint)}
+table.grid td{padding:5px 12px;border-bottom:1px solid var(--line);border-right:1px solid var(--line);white-space:pre;max-width:420px;overflow:hidden;text-overflow:ellipsis;vertical-align:top}
+table.grid tbody tr:hover td{background:var(--raised)}
+table.grid .rn{width:1%;position:sticky;left:0;background:var(--raised);color:var(--faint);text-align:right;font-size:11px;min-width:3ch;padding:5px 8px}
+table.grid th.rn{z-index:2}
+table.grid td.null{color:var(--faint);font-style:italic}
+
+/* Query editor */
+.qbar{display:flex;align-items:center;gap:8px;padding:10px 14px;flex-wrap:wrap}
+.qmode button{height:26px}
+.qmode .lucide{width:13px;height:13px}
+#modeWrite[aria-pressed=true]{color:var(--warn);box-shadow:0 0 0 1px var(--warn)}
+.kbdh{font:500 10.5px var(--mono);opacity:.75;margin-left:2px;padding:1px 4px;border-radius:4px;background:rgba(255,255,255,.18)}
+.qtime{font-size:12px;color:var(--muted);font-variant-numeric:tabular-nums}
+.qnote{display:flex;gap:8px;align-items:flex-start;margin:0 14px 10px;padding:7px 10px;border-radius:7px;background:var(--raised);font-size:12px;color:var(--muted)}
+.qnote .lucide{width:14px;height:14px;flex:none;margin-top:1px}
+.qnote b{color:var(--text);font-weight:500}
+.writing .qnote:not(.warn),.qnote.warn{background:var(--warn-bg);color:var(--warn)}
+.writing .qnote b,.qnote.warn span{color:var(--text)}
+.sqled{display:grid;grid-template-columns:auto minmax(0,1fr);margin:0 14px;border:1px solid var(--line-2);border-radius:var(--r);background:var(--panel);overflow:hidden}
+.sqled:focus-within{border-color:var(--faint);box-shadow:0 0 0 3px var(--hover)}
+.writing .sqled{border-color:var(--warn)}
+.sqlgut{overflow:hidden;padding:10px 0;background:var(--raised);border-right:1px solid var(--line);font:400 12.5px/1.6 var(--mono);color:var(--faint);text-align:right;user-select:none;min-width:4ch;height:100%;max-height:420px;box-sizing:border-box}
+.sqlgut span{display:block;padding:0 8px 0 10px}
+.sqlgut span.e{color:var(--err);background:var(--err-bg);font-weight:600}
+textarea.sqltext{all:unset;box-sizing:border-box;display:block;width:100%;min-height:168px;max-height:420px;padding:10px 12px;font:400 12.5px/1.6 var(--mono);color:var(--text);white-space:pre;overflow:auto;resize:vertical;tab-size:2}
+textarea.sqltext::placeholder{color:var(--faint)}
+.qhist{margin:0 14px 10px;border:1px solid var(--line);border-radius:var(--r);max-height:260px;overflow:auto}
+.qhist ul{list-style:none;margin:0;padding:4px}
+.qh{all:unset;box-sizing:border-box;display:grid;grid-template-columns:minmax(0,1fr) auto;gap:12px;align-items:baseline;width:100%;padding:6px 10px;border-radius:6px;cursor:pointer}
+.qh:hover{background:var(--hover)}
+.qh:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
+.qh code{font:400 12px var(--mono);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.qh span{font-size:11.5px;white-space:nowrap}
+.qh-empty{padding:12px;font-size:12.5px}
+.qres{margin-top:12px;border-top:1px solid var(--line)}
+.qres .grid-wrap{border-top:0}
+.qres-h{display:flex;align-items:center;gap:8px;padding:8px 14px;font-size:12.5px;border-bottom:1px solid var(--line)}
+.qres-h .qsum{font-variant-numeric:tabular-nums;color:var(--muted)}
+.qres .qnote{margin:10px 14px}
+.qempty,.qdone{display:flex;align-items:center;gap:8px;padding:18px 14px;font-size:12.5px}
+.qempty .lucide,.qdone .lucide{width:15px;height:15px;flex:none}
+.qdone .lucide-circle-check{color:var(--ok)}
+div.err.qerr{margin:12px 14px;display:grid;grid-template-columns:auto minmax(0,1fr)}
+.qerr b{display:block;color:var(--err);font-size:12px;margin-bottom:2px}
+.qerr pre{margin:0;font:400 12px/1.5 var(--mono);white-space:pre-wrap;overflow-wrap:anywhere;color:var(--text)}
+
+/* Restore from file */
+.rdrop{position:relative;margin:12px 0 0;padding:18px}
+.rdrop .ic{width:36px;height:36px}
+.rdrop:focus-within{border-color:var(--accent)}
+.rdrop .mono{font-size:12px;overflow-wrap:anywhere}
+.dlg .bar{margin-top:10px}
+.dlg .bar[hidden]{display:none}
+a.btn[aria-disabled=true]{opacity:.45;cursor:not-allowed}
+
+@media (max-width: 760px){
+  .dbw-tabs{margin-left:0;width:100%}
+  .dbw-tabs button{flex:1;justify-content:center;height:32px}
+  .tsplit{grid-template-columns:minmax(0,1fr)}
+  .tlist{border-right:0;border-bottom:1px solid var(--line)}
+  .tlist ul{max-height:280px}
+  .tpick{min-height:120px}
+  .td-h .r{margin-left:0;width:100%}
+  .td-h .r .btn{flex:1;justify-content:center}
+  .grid-wrap{max-height:60vh}
+  table.grid td{max-width:240px}
+  .qbar{padding:10px 12px}
+  .qmode{flex:1 1 100%}
+  .qmode button{flex:1;justify-content:center;height:34px}
+  #runQuery{flex:1;justify-content:center;height:38px}
+  .kbdh{display:none}
+  .qbar .spacer{display:none}
+  .qnote,.qhist{margin-left:12px;margin-right:12px}
+  .sqled{margin:0 12px}
+  textarea.sqltext{font-size:16px;min-height:150px}
+  .sqlgut{font-size:16px}
+  .backups>header .r{width:100%;flex-wrap:wrap}
+  .backups>header .r .btn{flex:1;justify-content:center}
+}
+@media (max-width: 1100px){
+  .tsplit{grid-template-columns:minmax(0,1fr)}
+  .tlist{border-right:0;border-bottom:1px solid var(--line)}
+  .tlist ul{max-height:240px}
+  .tpick{min-height:120px}
+  .backups>header{flex-wrap:wrap}
+  .backups>header .hd{flex:1 1 240px}
+}

@@ -176,7 +176,13 @@ func (u *Users) Query(_ context.Context, c pg.Creds, sql string, write bool) (pg
 	if u.QueryErr != nil {
 		return pg.Result{}, u.QueryErr
 	}
-	words := strings.Fields(strings.ToLower(sql))
+	var code []string
+	for _, line := range strings.Split(sql, "\n") {
+		if !strings.HasPrefix(strings.TrimSpace(line), "--") {
+			code = append(code, line)
+		}
+	}
+	words := strings.Fields(strings.ToLower(strings.Join(code, "\n")))
 	if len(words) == 0 {
 		return pg.Result{}, &pgconn.PgError{Severity: "ERROR", Code: "42601", Message: "syntax error"}
 	}

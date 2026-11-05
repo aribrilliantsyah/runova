@@ -15,8 +15,8 @@ check
 chevron-down
 chevron-left
 chevron-right
-chevron-up
 chevrons-up-down
+chevron-up
 circle
 circle-alert
 circle-check
@@ -34,6 +34,7 @@ cpu
 database
 download
 ellipsis
+eraser
 external-link
 eye
 eye-off
@@ -86,6 +87,7 @@ sliders-horizontal
 square
 square-terminal
 sun
+table
 text-cursor-input
 trash-2
 triangle-alert
