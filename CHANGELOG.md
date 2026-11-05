@@ -4,6 +4,12 @@ All notable changes to Runova. Versions follow [semantic versioning](https://sem
 
 Upgrade any server with `sudo runova update` (servers on 0.2.0 or older: run the `curl … get.sh | sudo bash` command once). Database schema changes are migrated automatically after a backup (`runova.db.bak-v<N>-*`); `sudo runova rollback` returns to the previous version and its database.
 
+## [0.3.11] - 2026-11-05
+
+### Changed
+- README is short and written for people installing Runova: what you get, new screenshots (file manager, database tables and query, deploy timeline, activity), a six-step install, update and rollback.
+- Technical material moved out of the README into its own documents, in English and Indonesian: `docs/architecture.md`, `docs/domains.md`, `docs/operations.md` and `docs/development.md`. The installation guide links to them.
+
 ## [0.3.10] - 2026-11-05
 
 ### Added
@@ -148,6 +154,7 @@ First release.
 - Users with quotas (apps, memory, CPU, databases), login limit, activity log, notifications.
 - Versioned database migrations with automatic backups.
 
+[0.3.11]: https://github.com/aribrilliantsyah/runova/compare/v0.3.10...v0.3.11
 [0.3.10]: https://github.com/aribrilliantsyah/runova/compare/v0.3.9...v0.3.10
 [0.3.9]: https://github.com/aribrilliantsyah/runova/compare/v0.3.8...v0.3.9
 [0.3.8]: https://github.com/aribrilliantsyah/runova/compare/v0.3.7...v0.3.8

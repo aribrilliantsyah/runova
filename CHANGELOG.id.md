@@ -4,6 +4,12 @@ Semua perubahan penting Runova. Versi mengikuti [semantic versioning](https://se
 
 Perbarui server dengan `sudo runova update` (server 0.2.0 atau lebih lama: jalankan perintah `curl … get.sh | sudo bash` sekali). Perubahan skema database dimigrasikan otomatis setelah cadangan (`runova.db.bak-v<N>-*`); `sudo runova rollback` kembali ke versi sebelumnya beserta database-nya.
 
+## [0.3.11] - 2026-11-05
+
+### Changed
+- README dibuat singkat untuk orang yang memasang Runova: apa yang didapat, screenshot baru (file manager, tabel dan query database, timeline deploy, aktivitas), cara pasang enam langkah, update, dan rollback.
+- Materi teknis dipindah dari README ke dokumen sendiri, dalam bahasa Inggris dan Indonesia: `docs/architecture.md`, `docs/domains.md`, `docs/operations.md`, dan `docs/development.md`. Panduan instalasi menautkan ke dokumen itu.
+
 ## [0.3.10] - 2026-11-05
 
 ### Ditambahkan
@@ -148,6 +154,7 @@ Rilis pertama.
 - Pengguna dengan kuota (aplikasi, memori, CPU, database), batas login, log aktivitas, notifikasi.
 - Migrasi database berversi dengan cadangan otomatis.
 
+[0.3.11]: https://github.com/aribrilliantsyah/runova/compare/v0.3.10...v0.3.11
 [0.3.10]: https://github.com/aribrilliantsyah/runova/compare/v0.3.9...v0.3.10
 [0.3.9]: https://github.com/aribrilliantsyah/runova/compare/v0.3.8...v0.3.9
 [0.3.8]: https://github.com/aribrilliantsyah/runova/compare/v0.3.7...v0.3.8
