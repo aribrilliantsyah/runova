@@ -202,3 +202,9 @@
   #hostingcard td.dnscell .dnsdetail{max-width:none}
   #hostingcard td.mono{max-width:none}
 }
+@media (max-width: 760px){
+  .res3:has(>.rescard:nth-child(3)){grid-template-columns:1fr}
+  .fldline{grid-template-columns:1fr}
+  .fldarr{display:none}
+  .ftable th:nth-child(3),.ftable td:nth-child(3){display:none}
+}

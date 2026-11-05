@@ -3,13 +3,14 @@ import { h, icon, clear, fill, fmtMB, fmtNum } from "/assets/js/dom.js";
 import { act } from "/assets/js/components/act.js";
 import { dialog } from "/assets/js/components/dialog.js";
 import { resourceCards } from "/assets/js/components/resource.js";
+import { folderList } from "/assets/js/components/folders.js";
 import { jvmOptsError, portError } from "/assets/js/validate.js";
 import { JAVA_VERSIONS } from "/assets/js/kinds.js";
 import { markRedeploy, redeployBanner } from "/assets/js/pages/app/redeploy.js";
 import { toast } from "/assets/js/toast.js";
 import { go } from "/assets/js/router.js";
 
-/** Advanced tab: deploy mode, resources, runtime, port, bound database, delete. */
+/** Advanced tab: deploy mode, resources, saved folders, runtime, port, bound database, delete. */
 export function renderAdvanced(page) {
   const node = h("div");
   let usage = null;
@@ -33,11 +34,27 @@ export function renderAdvanced(page) {
 
   function resourceCard() {
     const app = page.app;
-    const res = resourceCards({ usage, current: { memory_mb: app.memory_mb, cpu_milli: app.cpu_milli }, memory: app.memory_mb, cpu: app.cpu_milli });
+    const res = resourceCards({ usage, current: { memory_mb: app.memory_mb, cpu_milli: app.cpu_milli, disk_mb: app.disk_mb }, memory: app.memory_mb, cpu: app.cpu_milli, disk: app.disk_mb || 256 });
     const save = h("button", { class: "btn dark", type: "button", disabled: !res.fits() });
     save.append("Simpan resource");
-    save.addEventListener("click", () => act(save, () => patch({ memory_mb: res.memory(), cpu_milli: res.cpu() }, "Resource disimpan")));
-    return h("section", { class: "card" }, h("header", {}, h("h3", {}, "Resource"), h("p", {}, `Sekarang ${fmtMB(app.memory_mb)} · ${fmtNum(app.cpu_milli / 1000)} core`)), h("div", { class: "bd" }, res.node, h("div", { class: "actions" }, save)));
+    save.addEventListener("click", () => act(save, () => patch({ memory_mb: res.memory(), cpu_milli: res.cpu(), disk_mb: res.disk() }, "Resource disimpan")));
+    const disk = app.disk_mb ? fmtMB(app.disk_mb) : "disk belum dibatasi";
+    return h("section", { class: "card" }, h("header", {}, h("h3", {}, "Resource"), h("p", {}, `Sekarang ${fmtMB(app.memory_mb)} · ${fmtNum(app.cpu_milli / 1000)} core · ${disk}. Disk berlaku langsung; memori dan CPU setelah deploy ulang.`)), h("div", { class: "bd" }, res.node, h("div", { class: "actions" }, save)));
+  }
+
+  function foldersCard() {
+    const app = page.app;
+    const detected = page.state.latest?.report?.folders || page.state.deployment?.report?.folders || [];
+    const save = h("button", { class: "btn dark", type: "button", disabled: true }, "Simpan folder");
+    let list = null;
+    list = folderList({ appName: () => app.name, detected, folders: app.folders || [], onChange: () => { if (list) save.disabled = Boolean(list.error()) || !list.changed(); } });
+    save.addEventListener("click", () => act(save, () => patch({ folders: list.value() }, "Folder tersimpan diubah")));
+    return h(
+      "section",
+      { class: "card", id: "a-folders" },
+      h("header", {}, h("h3", {}, "Folder tersimpan"), h("p", {}, ["Isi ", h("span", { class: "mono" }, `${app.name}/`), " tetap ada saat deploy ulang dan bisa dilihat di tab ", h("a", { href: page.path("files") }, "File"), ". Path absolut di-mount dari folder kerja. Perubahan berlaku setelah deploy ulang."])),
+      h("div", { class: "bd" }, list.node, h("div", { class: "actions" }, save)),
+    );
   }
 
   function runtimeCard() {
@@ -85,7 +102,7 @@ export function renderAdvanced(page) {
         submit: "Hapus aplikasi",
         danger: true,
         confirmWord: app.name,
-        body: [h("p", {}, "Container, semua versi yang tersimpan, folder data /data, dan domainnya ikut dihapus. Database PostgreSQL tidak dihapus.")],
+        body: [h("p", {}, `Container, semua versi yang tersimpan, folder kerja ${app.name}/ beserta semua filenya, dan domainnya ikut dihapus. Database PostgreSQL tidak dihapus.`)],
         onSubmit: async () => {
           await api.del(`/api/apps/${page.id}`, { confirm: app.name });
           toast(`${app.name} dihapus`);
@@ -99,7 +116,7 @@ export function renderAdvanced(page) {
   function render() {
     clear(node);
     if (!usage || !dbs) return fill(node, h("div", { class: "loading" }, "Memuat…"));
-    fill(node, redeployBanner(page), h("div", { class: "stack" }, modeCard(), resourceCard(), runtimeCard(), dbCard(), dangerCard()));
+    fill(node, redeployBanner(page), h("div", { class: "stack" }, modeCard(), resourceCard(), foldersCard(), runtimeCard(), dbCard(), dangerCard()));
   }
 
   render();

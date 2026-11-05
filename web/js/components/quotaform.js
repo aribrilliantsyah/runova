@@ -6,6 +6,7 @@ const FIELDS = [
   ["cpu_milli", "CPU", "millicore", 50, 256000],
   ["databases", "Jumlah database", "database", 1, 100],
   ["pg_connections", "Koneksi PostgreSQL", "koneksi", 1, 500],
+  ["disk_mb", "Disk", "MB", 64, 10485760],
 ];
 
 /** quotaForm(quota) → {node, value()}: one number field per quota entry. */

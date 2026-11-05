@@ -10,6 +10,7 @@ import { markRedeploy } from "/assets/js/pages/app/redeploy.js";
 import { ipHost } from "/assets/js/components/iphost.js";
 import { levelOf, fromServer } from "/assets/js/components/logview.js";
 import { problemCard } from "/assets/js/components/deploytrace.js";
+import { diskMeter } from "/assets/js/pages/app/files.js";
 
 const kindName = (r) => (r.kind === "jar" ? `JAR${r.main_class ? `, main class ${r.main_class}` : ""}${r.min_java ? `, bytecode butuh Java ${r.min_java}` : ""}` : r.kind === "static" ? "Binary Linux statis" : "Binary Linux glibc");
 
@@ -100,6 +101,8 @@ export function renderGeneral(page) {
     const cpu = stats ? pct(stats.cpu_percent, cpuLimit) : 0;
     const memLabel = stats ? `${fmtNum(stats.memory_bytes / 1048576)} / ${fmtMB(app.memory_mb)}` : `– / ${fmtMB(app.memory_mb)}`;
     const cpuLabel = stats ? `${fmtNum(stats.cpu_percent / 100)} / ${fmtNum(app.cpu_milli / 1000)} core` : `– / ${fmtNum(app.cpu_milli / 1000)} core`;
+    const disk = diskMeter(app);
+    const diskRow = h("div", { class: disk.tone === "err" ? "disk-full" : "" }, h("div", { class: "t" }, h("b", {}, icon("hard-drive"), "Disk"), h("span", {}, disk.text)), bar(disk.percent, { hiAt: 80 }));
 
     const logPre = h("pre", { class: "log tail", "aria-label": "Log terbaru" });
     paintLog(logPre);
@@ -131,7 +134,7 @@ export function renderGeneral(page) {
           "section",
           { class: "card" },
           h("header", {}, h("h3", {}, "Resource"), h("div", { class: "r" }, h("a", { class: "btn sm ghost", href: page.path("advanced") }, "Ubah"))),
-          h("div", { class: "bd meters" }, meter("memory-stick", "Memori", memLabel, mem), meter("cpu", "CPU", cpuLabel, cpu)),
+          h("div", { class: "bd meters" }, meter("memory-stick", "Memori", memLabel, mem), meter("cpu", "CPU", cpuLabel, cpu), diskRow, h("a", { class: "hint", href: page.path("files") }, `Lihat file di ${app.name}/`)),
         ),
       ),
     );

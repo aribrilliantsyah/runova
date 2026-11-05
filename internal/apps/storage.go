@@ -531,6 +531,7 @@ func (s *Service) DeleteFile(ctx context.Context, actor store.User, appID int64,
 		return fileErr(err)
 	}
 	s.logActivity(ctx, actor, store.ActFileDelete, app.Name, rel)
+	s.remeasure(ctx, owner, app)
 	return nil
 }
 
@@ -602,5 +603,13 @@ func (s *Service) SaveFile(ctx context.Context, actor store.User, appID int64, d
 		return fileErr(err)
 	}
 	s.logActivity(ctx, actor, store.ActFileUpload, app.Name, rel)
+	s.remeasure(ctx, owner, app)
 	return nil
+}
+
+// remeasure updates the workspace size after the panel changed files, so the bar is right at once.
+func (s *Service) remeasure(ctx context.Context, owner store.User, app store.App) {
+	if _, _, err := s.measureApp(ctx, owner, app); err != nil {
+		slog.Warn("measure after file change", "app", app.Name, "err", err)
+	}
 }
