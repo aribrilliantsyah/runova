@@ -361,7 +361,7 @@ func exitProblem(p store.Problem, app store.App, st docker.ContainerState, lines
 			p.Hint += " Docker menyalakannya lagi, dan ia mati lagi di titik yang sama."
 		}
 		if app.Kind == artifact.KindJar {
-			p.Hint += " Naikkan memori di tab Lanjutan (aplikasi Spring dengan database biasanya butuh 512 MB), atau kecilkan pemakaian JVM lewat Opsi JVM, mis. -XX:MaxRAMPercentage=50."
+			p.Hint += " Naikkan memori di tab Lanjutan; Spring Boot dengan JPA butuh lebih dari 192 MB saat start, 512 MB memberi ruang. Membatasi heap saja sering tidak cukup karena yang membengkak saat start adalah memori native JVM (compiler, metaspace, thread). Bila memori harus kecil, Opsi JVM -XX:TieredStopAtLevel=1 memangkasnya dengan kinerja puncak sedikit lebih rendah."
 		} else {
 			p.Hint += " Naikkan memori di tab Lanjutan."
 		}
