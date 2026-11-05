@@ -14,9 +14,14 @@ Perbarui server dengan `sudo runova update` (server 0.2.0 atau lebih lama: jalan
 - Panel pratinjau: gambar PNG/JPEG/GIF/WebP dan file teks sampai 1 MB (nomor baris), dengan ukuran, tipe terdeteksi, waktu, dan path. SVG, PDF, dan file lain hanya diunduh.
 - Footer berisi jumlah item, ukuran folder, dan bar disk aplikasi (peringatan 80 %, penuh 100 %). Di ponsel baris ringkas dan aksi lewat sheet.
 - API: `POST /api/apps/{id}/files/folder`, `POST …/files/move`, `GET …/files/zip`, `GET …/files/info`, `GET …/files/preview`; unggah banyak file. Aktivitas: `file.rename`, `file.mkdir`.
+- **Tabel dan Query di halaman Database.** Setelah memilih database: daftar tabelnya (baris, ukuran, kolom dengan tipe, null, default, dan primary key), isi tabel 100 baris per halaman, Kosongkan (truncate) dan Hapus tabel (drop) dengan konfirmasi nama tabel.
+- Editor query dengan nomor baris dan Ctrl+Enter: mode Baca (SELECT, WITH, EXPLAIN, SHOW dalam transaksi read-only, 10 detik) atau mode Tulis (juga INSERT, UPDATE, DELETE, TRUNCATE, CREATE/ALTER/DROP TABLE atau INDEX, 30 detik). Satu perintah per jalankan, hasil maksimal 1.000 baris / 5 MB, jumlah baris terpengaruh untuk DML, galat PostgreSQL beserta barisnya. Riwayat 50 query terakhir per database di browser; hasil bisa diunduh sebagai CSV.
+- Restore database dari file `pg_dump -Fc` yang diunggah (sampai batas unggah, dengan konfirmasi nama database) dan **Export** dump terbaru sebagai unduhan.
+- API: `GET /api/databases/{id}/tables`, `GET …/tables/{table}/data`, `POST …/tables/{table}/truncate`, `DELETE …/tables/{table}`, `POST …/query`, `POST …/restore-upload`, `GET …/export`. Aktivitas: `db.query`, `db.table_truncate`, `db.table_drop`, `db.restore_upload`, `db.export`.
 
 ### Diubah
 - `DELETE /api/apps/{id}/files` menerima `{"paths": [...]}`; satu path yang ditolak membatalkan semuanya.
+- Pekerjaan panel di database pengguna (tabel, query, restore, export) masuk dengan role pengguna itu lewat `127.0.0.1`, tidak pernah lewat role Runova; restore dari backup tersimpan juga. `pg_hba.d/runova.conf` milik Runova kini selalu mengizinkan `127.0.0.1/32` dengan `scram-sha-256`.
 - Kartu di tab Lanjutan memakai satu tata letak: judul dan deskripsi di kiri, tombol simpan di kanan footer kartu.
 
 ### Diperbaiki
