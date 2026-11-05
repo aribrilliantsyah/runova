@@ -206,5 +206,50 @@
   .res3:has(>.rescard:nth-child(3)){grid-template-columns:1fr}
   .fldline{grid-template-columns:1fr}
   .fldarr{display:none}
-  .ftable th:nth-child(3),.ftable td:nth-child(3){display:none}
+  .fldlist li{grid-template-columns:auto minmax(0,1fr) auto;padding:10px}
+  .fldlist .fldsrc{grid-column:2;grid-row:2;justify-self:start;margin-top:0}
+  .fldlist li>.ibtn{grid-column:3;grid-row:1}
+  .card>header .hd{flex-basis:100%}
+  .card>header .r{margin-left:0}
+  .card>footer.cfoot .dirty{flex-basis:100%}
+  .fldadd .btn{flex:1;justify-content:center;height:42px}
+
+  /* Files: toolbar wraps, the list becomes compact cards, actions open as a bottom sheet. */
+  .fm-head{flex-wrap:nowrap;align-items:center}
+  .fm-head .r{margin-left:auto}
+  .fm-head .btn{height:38px}
+  .fm-lbl{display:none}
+  #fupload .fm-lbl{display:inline}
+  .fm-tools{flex-wrap:wrap;padding:8px 10px;gap:6px}
+  .fm-tools .fm-search{order:5;flex-basis:100%;width:100%;height:40px}
+  .fm-tools .btn{height:38px;min-width:38px;justify-content:center}
+  .fm-tools .seg button{height:32px}
+  .fm-t thead{display:none}
+  table.fm-t,.fm-t tbody{display:block}
+  .fm-t tr{display:grid;grid-template-columns:34px minmax(0,1fr) 40px;align-items:center;min-height:56px;border-bottom:1px solid var(--line)}
+  .fm-t tr:last-child{border-bottom:0}
+  .fm-t td{display:block;height:auto;border:0;padding:0}
+  .fm-t .c-chk{padding-left:12px;width:auto}
+  .fm-t .c-size,.fm-t .c-mod{display:none}
+  .fm-t .c-act{width:auto;padding-right:4px}
+  .fm-t .c-name{padding:8px 0}
+  .fm-cell{display:grid;grid-template-columns:auto minmax(0,1fr);column-gap:10px;row-gap:1px}
+  .fm-ic{grid-row:span 2}
+  .fm-t .fm-meta{display:block;grid-column:2;color:var(--muted);font-size:11.5px}
+  .fm-more{opacity:1}
+  .fm-up li{grid-template-columns:16px minmax(0,1fr) auto;row-gap:4px}
+  .fm-up li .bar{grid-column:1 / -1}
+  .fm-grid{grid-template-columns:repeat(2,minmax(0,1fr));padding:10px}
+  .fm-tile>input[type=checkbox]{opacity:1}
+  .fm-srow{gap:8px}
+  .fm-disk{flex-basis:100%}
+  .fm-disk .bar{flex:1;width:auto}
+  .fm-sel{padding:8px 10px}
+  .fm-sel .btn{height:34px}
+  .fm-stage{min-height:200px}
+  .fm-scrim{display:block;position:fixed;inset:0;z-index:49;background:var(--scrim)}
+  .pop.fm-menu{left:0 !important;right:0;top:auto !important;bottom:0;max-width:none;width:100%;border-radius:16px 16px 0 0;padding:8px 8px calc(12px + env(safe-area-inset-bottom));max-height:80vh}
+  .pop.fm-menu .item{min-height:46px;font-size:14px}
+  .fm-menu-why{max-width:none}
+  .fm-info{grid-template-columns:84px minmax(0,1fr)}
 }

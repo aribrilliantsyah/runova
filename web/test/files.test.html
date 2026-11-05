@@ -1,0 +1,58 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>file manager helpers</title>
+<body>
+<script type="module">
+import { test, eq, run } from "/test/harness.js";
+import { sortEntries, fileKind, rangeSelect, parentOf, appPaths, filesHash } from "/assets/js/pages/app/fileutil.js";
+
+const E = (name, type = "file", size = 0, mod_time = 0, items = 0) => ({ name, type, size, mod_time, items });
+
+test("sortEntries keeps folders on top in both orders", () => {
+  const list = [E("b.txt", "file", 5, 3), E("zeta", "dir", 0, 1, 4), E("A.png", "file", 9, 2), E("alpha", "dir", 0, 9, 1)];
+  eq(sortEntries(list, "name", "asc").map((e) => e.name), ["alpha", "zeta", "A.png", "b.txt"]);
+  eq(sortEntries(list, "name", "desc").map((e) => e.name), ["zeta", "alpha", "b.txt", "A.png"]);
+  eq(sortEntries(list, "size", "desc").map((e) => e.name), ["zeta", "alpha", "A.png", "b.txt"], "folders by item count");
+  eq(sortEntries(list, "mod", "desc").map((e) => e.name), ["alpha", "zeta", "b.txt", "A.png"]);
+  eq(sortEntries([E("f10"), E("f9")], "name", "asc").map((e) => e.name), ["f9", "f10"], "numeric names in natural order");
+});
+
+test("fileKind names the icon family", () => {
+  eq(fileKind(E("x", "dir")), "folder");
+  eq(fileKind(E("x", "link")), "link");
+  eq(["a.PNG", "b.webp", "c.svg"].map((n) => fileKind(E(n))), ["image", "image", "image"]);
+  eq(["a.js", "b.properties", "c.yml", "Dockerfile.go"].map((n) => fileKind(E(n))), ["code", "code", "code", "code"]);
+  eq(["a.zip", "b.tar.gz", "c.jar"].map((n) => fileKind(E(n))), ["archive", "archive", "archive"]);
+  eq([fileKind(E("x.pdf")), fileKind(E("notes.txt")), fileKind(E("data.bin")), fileKind(E("README"))], ["pdf", "text", "other", "other"]);
+});
+
+test("rangeSelect selects from the anchor to the clicked row", () => {
+  const names = ["a", "b", "c", "d", "e"];
+  eq([...rangeSelect(names, new Set(["x"]), "b", "d")].sort(), ["b", "c", "d", "x"]);
+  eq([...rangeSelect(names, new Set(), "d", "b")].sort(), ["b", "c", "d"]);
+  eq([...rangeSelect(names, new Set(), "", "c")], ["c"], "no anchor selects one row");
+  eq([...rangeSelect(names, new Set(), "gone", "c")], ["c"]);
+});
+
+test("parentOf walks up one folder", () => {
+  eq(parentOf("storage/2026/x"), "storage/2026");
+  eq(parentOf("storage"), "");
+  eq(parentOf(""), "");
+});
+
+test("appPaths name the file inside the container", () => {
+  const folders = [{ path: "/app/storage", dir: "storage" }, { path: "public/uploads", dir: "public/uploads" }];
+  eq(appPaths("x.png", folders), ["./x.png", "/data/x.png"]);
+  eq(appPaths("storage/2026/x.png", folders), ["/app/storage/2026/x.png", "./storage/2026/x.png", "/data/storage/2026/x.png"]);
+  eq(appPaths("public/uploads/a b.jpg", folders), ["./public/uploads/a b.jpg", "/data/public/uploads/a b.jpg"]);
+  eq(appPaths("storage", folders), ["/app/storage", "./storage", "/data/storage"]);
+});
+
+test("filesHash keeps the folder in the query", () => {
+  eq(filesHash(7, ""), "#/apps/7/files");
+  eq(filesHash(7, "storage/2026"), "#/apps/7/files?path=storage%2F2026");
+  eq(filesHash(7, "a b&c"), "#/apps/7/files?path=a+b%26c");
+});
+
+run();
+</script>

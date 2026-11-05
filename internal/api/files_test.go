@@ -256,6 +256,22 @@ func TestZipDownloadLimit(t *testing.T) {
 	if r.status != 400 || !strings.Contains(r.errMsg(t), "melebihi batas 4 MB") {
 		t.Errorf("zip over 4× the upload limit: %d %s", r.status, r.body)
 	}
+	// check=1 answers before the download starts, so the panel can show the reason.
+	if r := budi.do("GET", appPath(id, "/files/zip?path=big.bin&check=1"), nil); r.status != 400 {
+		t.Errorf("check over the limit: %d %s", r.status, r.body)
+	}
+	var plan struct {
+		Name string `json:"name"`
+		Size int64  `json:"size"`
+	}
+	if err := os.WriteFile(filepath.Join(e.dataDir, "data", "budi", "starboom", "big.bin"), make([]byte, 10), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	r = budi.do("GET", appPath(id, "/files/zip?path=big.bin&check=1"), nil)
+	r.into(t, &plan)
+	if r.status != 200 || plan.Name != "big.bin.zip" || plan.Size != 10 || !strings.HasPrefix(r.header.Get("Content-Type"), "application/json") {
+		t.Errorf("check = %d %+v %v", r.status, plan, r.header)
+	}
 }
 
 func TestAppDetailAndListCarryStorage(t *testing.T) {

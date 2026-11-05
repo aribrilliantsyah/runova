@@ -254,6 +254,13 @@ func (s *server) downloadZip(w http.ResponseWriter, r *http.Request) {
 		appError(w, r, err)
 		return
 	}
+	if r.URL.Query().Get("check") == "1" {
+		writeJSON(w, http.StatusOK, struct {
+			Name string `json:"name"`
+			Size int64  `json:"size"`
+		}{plan.Name, plan.Size})
+		return
+	}
 	w.Header().Set("Content-Type", "application/zip")
 	w.Header().Set("X-Content-Type-Options", "nosniff")
 	w.Header().Set("Content-Security-Policy", "default-src 'none'; sandbox")
