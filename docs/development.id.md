@@ -86,7 +86,7 @@ Membuat arsip rilis: `scripts/release.sh 0.4.0` menghasilkan `dist/runova-0.4.0-
 
 ## Tangkapan layar
 
-Tangkapan layar di README dan `docs/screenshots/` diambil dari panel sungguhan (`node web/test/screenshots.mjs`, yang mengisi server berbackend palsu), bukan dari preview. Bila stack lokal lain memakai port 20000+, setel `SHOT_PORT_MIN` (misalnya `SHOT_PORT_MIN=34000`). PNG dikompres dengan `optipng`.
+Tangkapan layar di README dan `docs/screenshots/` diambil dari panel sungguhan (`node web/test/screenshots.mjs`, yang mengisi server berbackend palsu), bukan dari preview. Setiap tampilan diambil dua kali, ke `docs/screenshots/light/` dan `docs/screenshots/dark/` dengan nama file yang sama; README menampilkan set terang dan melipat set gelap di bawahnya. Bila stack lokal lain memakai port 20000+, setel `SHOT_PORT_MIN` (misalnya `SHOT_PORT_MIN=34000`). PNG dikompres dengan `optipng`.
 
 ## Merilis versi baru
 

@@ -18,7 +18,7 @@
 </p>
 
 <p align="center">
-  <img src="docs/screenshots/desktop-apps.png" alt="Daftar aplikasi di Runova: kuota akun, kartu aplikasi dengan logo bahasa, status, domain, dan akses IP" width="860">
+  <img src="docs/screenshots/light/desktop-apps.png" alt="Daftar aplikasi di Runova: kuota akun, kartu aplikasi dengan logo bahasa, status, domain, dan akses IP" width="860">
 </p>
 
 ## Yang Anda dapat
@@ -33,22 +33,24 @@
 
 ## Sekilas tampilan
 
+### Mode terang
+
 <table>
   <tr>
-    <td width="50%"><img src="docs/screenshots/desktop-deploy.png" alt="Halaman Deploy: file yang diunggah terdeteksi, versi Java dan port dipilih, ringkasan di kanan menunjukkan semuanya siap"><br><sub><b>Deploy.</b> Unggah file, periksa hasil deteksi, tekan Deploy.</sub></td>
-    <td width="50%"><img src="docs/screenshots/desktop-deployments.png" alt="Detail deployment dengan timeline langkah beserta durasinya"><br><sub><b>Timeline deploy.</b> Setiap langkah dengan durasinya, dan alasan yang jelas bila ada yang gagal.</sub></td>
+    <td width="50%"><img src="docs/screenshots/light/desktop-deploy.png" alt="Halaman Deploy: file yang diunggah terdeteksi, versi Java dan port dipilih, ringkasan di kanan menunjukkan semuanya siap"><br><sub><b>Deploy.</b> Unggah file, periksa hasil deteksi, tekan Deploy.</sub></td>
+    <td width="50%"><img src="docs/screenshots/light/desktop-deployments.png" alt="Detail deployment dengan timeline langkah beserta durasinya"><br><sub><b>Timeline deploy.</b> Setiap langkah dengan durasinya, dan alasan yang jelas bila ada yang gagal.</sub></td>
   </tr>
   <tr>
-    <td><img src="docs/screenshots/desktop-app-dark.png" alt="Halaman aplikasi mode gelap: kontrol, domain, log, dan resource"><br><sub><b>Halaman aplikasi.</b> Kontrol, domain, log, dan pemakaian resource di satu tempat (mode gelap).</sub></td>
-    <td><img src="docs/screenshots/desktop-files.png" alt="Pengelola file di tab File dengan folder, folder tersimpan, dan ukuran file"><br><sub><b>Pengelola file.</b> Lihat dan kelola yang disimpan aplikasi Anda.</sub></td>
+    <td><img src="docs/screenshots/light/desktop-app.png" alt="Halaman aplikasi: kontrol, domain, log, dan resource"><br><sub><b>Halaman aplikasi.</b> Kontrol, domain, log, dan pemakaian resource di satu tempat.</sub></td>
+    <td><img src="docs/screenshots/light/desktop-files.png" alt="Pengelola file di tab File dengan folder, folder tersimpan, dan ukuran file"><br><sub><b>Pengelola file.</b> Lihat dan kelola yang disimpan aplikasi Anda.</sub></td>
   </tr>
   <tr>
-    <td><img src="docs/screenshots/desktop-database-tables.png" alt="Halaman Database dengan penjelajah tabel yang menampilkan baris tabel invoices"><br><sub><b>Tabel database.</b> Intip isi database tanpa alat terpisah.</sub></td>
-    <td><img src="docs/screenshots/desktop-database-query-dark.png" alt="Editor query SQL dengan tabel hasil, mode gelap"><br><sub><b>Query.</b> Jalankan SQL dan unduh hasilnya sebagai CSV (mode gelap).</sub></td>
+    <td><img src="docs/screenshots/light/desktop-database-tables.png" alt="Halaman Database dengan penjelajah tabel yang menampilkan baris tabel invoices"><br><sub><b>Tabel database.</b> Intip isi database tanpa alat terpisah.</sub></td>
+    <td><img src="docs/screenshots/light/desktop-database-query.png" alt="Editor query SQL dengan tabel hasil"><br><sub><b>Query.</b> Jalankan SQL dan unduh hasilnya sebagai CSV.</sub></td>
   </tr>
   <tr>
-    <td><img src="docs/screenshots/desktop-activity.png" alt="Log aktivitas dengan pencarian dan filter pelaku serta aksi"><br><sub><b>Aktivitas.</b> Siapa melakukan apa dan kapan, dengan pencarian dan filter.</sub></td>
-    <td><img src="docs/screenshots/desktop-server-hosting.png" alt="Halaman Server dengan domain hosting: domain terdaftar dan record DNS yang perlu dibuat"><br><sub><b>Server dan domain.</b> Daftarkan domain sekali; panel menunjukkan record DNS yang tepat.</sub></td>
+    <td><img src="docs/screenshots/light/desktop-activity.png" alt="Log aktivitas dengan pencarian dan filter pelaku serta aksi"><br><sub><b>Aktivitas.</b> Siapa melakukan apa dan kapan, dengan pencarian dan filter.</sub></td>
+    <td><img src="docs/screenshots/light/desktop-server-hosting.png" alt="Halaman Server dengan domain hosting: domain terdaftar dan record DNS yang perlu dibuat"><br><sub><b>Server dan domain.</b> Daftarkan domain sekali; panel menunjukkan record DNS yang tepat.</sub></td>
   </tr>
 </table>
 
@@ -56,12 +58,48 @@ Di HP, panel berpindah ke navigasi bawah:
 
 <table>
   <tr>
-    <td width="25%"><img src="docs/screenshots/mobile-apps.png" alt="Daftar aplikasi di HP"></td>
-    <td width="25%"><img src="docs/screenshots/mobile-app-dark.png" alt="Halaman aplikasi di HP, mode gelap"></td>
-    <td width="25%"><img src="docs/screenshots/mobile-deploy.png" alt="Halaman Deploy di HP"></td>
-    <td width="25%"><img src="docs/screenshots/mobile-database-query.png" alt="Hasil query SQL di HP"></td>
+    <td width="25%"><img src="docs/screenshots/light/mobile-apps.png" alt="Daftar aplikasi di HP"></td>
+    <td width="25%"><img src="docs/screenshots/light/mobile-app.png" alt="Halaman aplikasi di HP"></td>
+    <td width="25%"><img src="docs/screenshots/light/mobile-deploy.png" alt="Halaman Deploy di HP"></td>
+    <td width="25%"><img src="docs/screenshots/light/mobile-database-query.png" alt="Hasil query SQL di HP"></td>
   </tr>
 </table>
+
+<details>
+<summary><b>Mode gelap (klik untuk membuka)</b></summary>
+<br>
+
+<table>
+  <tr>
+    <td width="50%"><img src="docs/screenshots/dark/desktop-deploy.png" alt="Halaman Deploy: file yang diunggah terdeteksi, versi Java dan port dipilih, ringkasan di kanan menunjukkan semuanya siap (mode gelap)"><br><sub><b>Deploy.</b> Unggah file, periksa hasil deteksi, tekan Deploy.</sub></td>
+    <td width="50%"><img src="docs/screenshots/dark/desktop-deployments.png" alt="Detail deployment dengan timeline langkah beserta durasinya (mode gelap)"><br><sub><b>Timeline deploy.</b> Setiap langkah dengan durasinya, dan alasan yang jelas bila ada yang gagal.</sub></td>
+  </tr>
+  <tr>
+    <td><img src="docs/screenshots/dark/desktop-app.png" alt="Halaman aplikasi: kontrol, domain, log, dan resource (mode gelap)"><br><sub><b>Halaman aplikasi.</b> Kontrol, domain, log, dan pemakaian resource di satu tempat.</sub></td>
+    <td><img src="docs/screenshots/dark/desktop-files.png" alt="Pengelola file di tab File dengan folder, folder tersimpan, dan ukuran file (mode gelap)"><br><sub><b>Pengelola file.</b> Lihat dan kelola yang disimpan aplikasi Anda.</sub></td>
+  </tr>
+  <tr>
+    <td><img src="docs/screenshots/dark/desktop-database-tables.png" alt="Halaman Database dengan penjelajah tabel yang menampilkan baris tabel invoices (mode gelap)"><br><sub><b>Tabel database.</b> Intip isi database tanpa alat terpisah.</sub></td>
+    <td><img src="docs/screenshots/dark/desktop-database-query.png" alt="Editor query SQL dengan tabel hasil (mode gelap)"><br><sub><b>Query.</b> Jalankan SQL dan unduh hasilnya sebagai CSV.</sub></td>
+  </tr>
+  <tr>
+    <td><img src="docs/screenshots/dark/desktop-activity.png" alt="Log aktivitas dengan pencarian dan filter pelaku serta aksi (mode gelap)"><br><sub><b>Aktivitas.</b> Siapa melakukan apa dan kapan, dengan pencarian dan filter.</sub></td>
+    <td><img src="docs/screenshots/dark/desktop-server-hosting.png" alt="Halaman Server dengan domain hosting: domain terdaftar dan record DNS yang perlu dibuat (mode gelap)"><br><sub><b>Server dan domain.</b> Daftarkan domain sekali; panel menunjukkan record DNS yang tepat.</sub></td>
+  </tr>
+</table>
+
+Di HP, panel berpindah ke navigasi bawah:
+
+<table>
+  <tr>
+    <td width="25%"><img src="docs/screenshots/dark/mobile-apps.png" alt="Daftar aplikasi di HP (mode gelap)"></td>
+    <td width="25%"><img src="docs/screenshots/dark/mobile-app.png" alt="Halaman aplikasi di HP (mode gelap)"></td>
+    <td width="25%"><img src="docs/screenshots/dark/mobile-deploy.png" alt="Halaman Deploy di HP (mode gelap)"></td>
+    <td width="25%"><img src="docs/screenshots/dark/mobile-database-query.png" alt="Hasil query SQL di HP (mode gelap)"></td>
+  </tr>
+</table>
+
+</details>
 
 ## Pasang
 
@@ -102,7 +140,7 @@ sudo runova update      # minta konfirmasi, lalu memasang rilis terbaru
 sudo runova rollback    # kurang cocok? kembali ke versi sebelumnya
 ```
 
-<p><img src="docs/screenshots/desktop-update-banner.png" alt="Banner pembaruan di bawah topbar, tampil untuk admin saat ada versi baru" width="720"></p>
+<p><img src="docs/screenshots/light/desktop-update-banner.png" alt="Banner pembaruan di bawah topbar, tampil untuk admin saat ada versi baru" width="720"></p>
 
 Admin juga melihat banner di panel saat ada versi baru. Aplikasi, pengguna, data, dan alamat panel tidak diubah. Detail lengkap di [Operasional](docs/operations.id.md).
 

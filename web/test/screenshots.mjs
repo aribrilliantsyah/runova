@@ -1,4 +1,4 @@
-// Seeds a fake-backend server with a few apps and writes docs/screenshots/*.png from the real panel:
+// Seeds a fake-backend server with a few apps and writes docs/screenshots/{light,dark}/*.png from the real panel:
 //   node web/test/screenshots.mjs
 import fs from "node:fs";
 import os from "node:os";
@@ -6,6 +6,7 @@ import path from "node:path";
 import { chromium, startRunova, buildSampleJar, buildStaticBinary, buildMarkedBinary, login, repo, check } from "./lib.mjs";
 
 const out = path.join(repo, "docs/screenshots");
+for (const scheme of ["light", "dark"]) fs.mkdirSync(path.join(out, scheme), { recursive: true });
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "shots-"));
 const srv = await startRunova({ env: { RUNOVA_DEV_SEED: "1" } });
 const browser = await chromium.launch();
@@ -113,7 +114,9 @@ try {
     await call("PUT", "/api/settings", { ...cur, update_check: on }, cookie);
   };
   await withBanner(true);
-  await shot("desktop-update-banner.png", { width: 1440, height: 900, scheme: "light", route: "/apps", wait: ".app > .main > .banner.upd:not([hidden])" });
+  for (const scheme of ["light", "dark"]) {
+    await shot(`${scheme}/desktop-update-banner.png`, { width: 1440, height: 900, scheme, route: "/apps", wait: ".app > .main > .banner.upd:not([hidden])" });
+  }
   await withBanner(false);
 
   const pickDb = (p) => p.click("button[data-conn='admin_billing']");
@@ -147,49 +150,55 @@ try {
     await p.evaluate(() => document.querySelectorAll("*").forEach((e) => { if (e.scrollTop) e.scrollTop = 0; }));
   };
 
-  await shot("desktop-apps.png", { width: 1440, height: 900, scheme: "light", route: "/apps", wait: ".acard:has-text('notif-relay')" });
-  await shot("desktop-app-dark.png", {
-    width: 1440, height: 900, scheme: "dark", route: `/apps/${billing}`,
-    wait: ".cols pre.log .ln:has-text('Listening')",
-    after: (p) => p.waitForSelector(".link:has-text('billing.perusahaan.co.id')"),
-  });
-  await shot("desktop-deployments.png", { width: 1440, height: 900, scheme: "light", route: `/apps/${billing}/deployments/${deps[1].id}`, wait: ".dep-grid .tl-ok, .dep-grid [data-step]" });
-  await shot("desktop-deploy.png", { width: 1440, height: 1000, scheme: "light", route: "/deploy", wait: ".drop", after: deployAfter });
-  await shot("desktop-files.png", {
-    width: 1440, height: 900, scheme: "light", route: `/apps/${billing}/files`, wait: "tr[data-file='storage']",
-    after: (p) => p.waitForSelector("tr[data-file='exports']"),
-  });
-  await shot("desktop-database-tables.png", {
-    width: 1440, height: 900, scheme: "light", route: "/databases", wait: ".dbcard[data-db='admin_billing']",
-    after: async (p) => {
-      await pickDb(p);
-      await p.waitForSelector("#tableList .trow[data-table='invoices']");
-      await p.click(".trow[data-table='invoices']");
-      await p.waitForSelector("#tableDetail table.grid tbody tr");
-    },
-  });
-  await shot("desktop-database-query-dark.png", {
-    width: 1440, height: 900, scheme: "dark", route: "/databases", wait: ".dbcard[data-db='admin_billing']",
-    after: runQuery("-- semua tagihan\nSELECT * FROM invoices;"),
-  });
-  await shot("desktop-activity.png", { width: 1440, height: 900, scheme: "light", route: "/activity", wait: "#actrows tr.act-row" });
-  // Domain hosting is the subject; the stat cards above it would show the dev seed's oversubscribed totals.
-  await shot("desktop-server-hosting.png", {
-    width: 1440, height: 800, scheme: "light", route: "/server", wait: "#hostrows tr",
-    after: async (p) => {
-      await tidyServer(p);
-      await p.fill("#hostname", "*.baru.perusahaan.co.id");
-      await p.waitForSelector("#hostdns");
-      await p.evaluate(() => document.querySelector("#hostingcard").scrollIntoView({ block: "start" }));
-    },
-  });
-  await shot("mobile-apps.png", { width: 390, height: 844, scheme: "light", route: "/apps", wait: ".acard:has-text('notif-relay')" });
-  await shot("mobile-app-dark.png", { width: 390, height: 844, scheme: "dark", route: `/apps/${billing}`, wait: ".link:has-text('billing.perusahaan.co.id')" });
-  await shot("mobile-deploy.png", { width: 390, height: 844, scheme: "light", route: "/deploy", wait: ".drop", after: deployAfter });
-  await shot("mobile-database-query.png", {
-    width: 390, height: 844, scheme: "light", route: "/databases", wait: ".dbcard[data-db='admin_billing']",
-    after: runQuery("SELECT * FROM invoices;"),
-  });
+  // Every view in both themes, kept in separate folders so the README can show one theme at a time.
+  const views = [
+    ["desktop-apps.png", { width: 1440, height: 900, route: "/apps", wait: ".acard:has-text('notif-relay')" }],
+    ["desktop-app.png", {
+      width: 1440, height: 900, route: `/apps/${billing}`,
+      wait: ".cols pre.log .ln:has-text('Listening')",
+      after: (p) => p.waitForSelector(".link:has-text('billing.perusahaan.co.id')"),
+    }],
+    ["desktop-deployments.png", { width: 1440, height: 900, route: `/apps/${billing}/deployments/${deps[1].id}`, wait: ".dep-grid .tl-ok, .dep-grid [data-step]" }],
+    ["desktop-deploy.png", { width: 1440, height: 1000, route: "/deploy", wait: ".drop", after: deployAfter }],
+    ["desktop-files.png", {
+      width: 1440, height: 900, route: `/apps/${billing}/files`, wait: "tr[data-file='storage']",
+      after: (p) => p.waitForSelector("tr[data-file='exports']"),
+    }],
+    ["desktop-database-tables.png", {
+      width: 1440, height: 900, route: "/databases", wait: ".dbcard[data-db='admin_billing']",
+      after: async (p) => {
+        await pickDb(p);
+        await p.waitForSelector("#tableList .trow[data-table='invoices']");
+        await p.click(".trow[data-table='invoices']");
+        await p.waitForSelector("#tableDetail table.grid tbody tr");
+      },
+    }],
+    ["desktop-database-query.png", {
+      width: 1440, height: 900, route: "/databases", wait: ".dbcard[data-db='admin_billing']",
+      after: runQuery("-- semua tagihan\nSELECT * FROM invoices;"),
+    }],
+    ["desktop-activity.png", { width: 1440, height: 900, route: "/activity", wait: "#actrows tr.act-row" }],
+    // Domain hosting is the subject; the stat cards above it would show the dev seed's oversubscribed totals.
+    ["desktop-server-hosting.png", {
+      width: 1440, height: 800, route: "/server", wait: "#hostrows tr",
+      after: async (p) => {
+        await tidyServer(p);
+        await p.fill("#hostname", "*.baru.perusahaan.co.id");
+        await p.waitForSelector("#hostdns");
+        await p.evaluate(() => document.querySelector("#hostingcard").scrollIntoView({ block: "start" }));
+      },
+    }],
+    ["mobile-apps.png", { width: 390, height: 844, route: "/apps", wait: ".acard:has-text('notif-relay')" }],
+    ["mobile-app.png", { width: 390, height: 844, route: `/apps/${billing}`, wait: ".link:has-text('billing.perusahaan.co.id')" }],
+    ["mobile-deploy.png", { width: 390, height: 844, route: "/deploy", wait: ".drop", after: deployAfter }],
+    ["mobile-database-query.png", {
+      width: 390, height: 844, route: "/databases", wait: ".dbcard[data-db='admin_billing']",
+      after: runQuery("SELECT * FROM invoices;"),
+    }],
+  ];
+  for (const scheme of ["light", "dark"]) {
+    for (const [name, opts] of views) await shot(`${scheme}/${name}`, { ...opts, scheme });
+  }
 } finally {
   await browser.close();
   await srv.stop();

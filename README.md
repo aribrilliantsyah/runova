@@ -18,7 +18,7 @@
 </p>
 
 <p align="center">
-  <img src="docs/screenshots/desktop-apps.png" alt="Application list in Runova: account quota, application cards with language logos, status, domain, and IP access" width="860">
+  <img src="docs/screenshots/light/desktop-apps.png" alt="Application list in Runova: account quota, application cards with language logos, status, domain, and IP access" width="860">
 </p>
 
 ## What you get
@@ -33,22 +33,24 @@
 
 ## A quick look
 
+### Light mode
+
 <table>
   <tr>
-    <td width="50%"><img src="docs/screenshots/desktop-deploy.png" alt="Deploy page: the uploaded file is detected, Java version and port are chosen, a summary on the right shows everything is ready"><br><sub><b>Deploy.</b> Upload a file, check what was detected, press Deploy.</sub></td>
-    <td width="50%"><img src="docs/screenshots/desktop-deployments.png" alt="Deployment details with a step-by-step timeline and durations"><br><sub><b>Deploy timeline.</b> Every step with its duration, and a clear reason when something fails.</sub></td>
+    <td width="50%"><img src="docs/screenshots/light/desktop-deploy.png" alt="Deploy page: the uploaded file is detected, Java version and port are chosen, a summary on the right shows everything is ready"><br><sub><b>Deploy.</b> Upload a file, check what was detected, press Deploy.</sub></td>
+    <td width="50%"><img src="docs/screenshots/light/desktop-deployments.png" alt="Deployment details with a step-by-step timeline and durations"><br><sub><b>Deploy timeline.</b> Every step with its duration, and a clear reason when something fails.</sub></td>
   </tr>
   <tr>
-    <td><img src="docs/screenshots/desktop-app-dark.png" alt="Application page in dark mode: controls, domain, logs and resources"><br><sub><b>App page.</b> Controls, domain, logs and resource use in one place (dark mode).</sub></td>
-    <td><img src="docs/screenshots/desktop-files.png" alt="File manager in the Files tab with folders, saved folders and file sizes"><br><sub><b>File manager.</b> Browse and manage what your app saves.</sub></td>
+    <td><img src="docs/screenshots/light/desktop-app.png" alt="Application page: controls, domain, logs and resources"><br><sub><b>App page.</b> Controls, domain, logs and resource use in one place.</sub></td>
+    <td><img src="docs/screenshots/light/desktop-files.png" alt="File manager in the Files tab with folders, saved folders and file sizes"><br><sub><b>File manager.</b> Browse and manage what your app saves.</sub></td>
   </tr>
   <tr>
-    <td><img src="docs/screenshots/desktop-database-tables.png" alt="Database page with the table browser showing rows of an invoices table"><br><sub><b>Database tables.</b> Look inside a database without a separate tool.</sub></td>
-    <td><img src="docs/screenshots/desktop-database-query-dark.png" alt="SQL query editor with a result grid, dark mode"><br><sub><b>Query.</b> Run SQL and download the result as CSV (dark mode).</sub></td>
+    <td><img src="docs/screenshots/light/desktop-database-tables.png" alt="Database page with the table browser showing rows of an invoices table"><br><sub><b>Database tables.</b> Look inside a database without a separate tool.</sub></td>
+    <td><img src="docs/screenshots/light/desktop-database-query.png" alt="SQL query editor with a result grid"><br><sub><b>Query.</b> Run SQL and download the result as CSV.</sub></td>
   </tr>
   <tr>
-    <td><img src="docs/screenshots/desktop-activity.png" alt="Activity log with search and filters by actor and action"><br><sub><b>Activity.</b> Who did what and when, with search and filters.</sub></td>
-    <td><img src="docs/screenshots/desktop-server-hosting.png" alt="Server page with domain hosting: registered domains and the DNS record to create"><br><sub><b>Server and domains.</b> Register a domain once; the panel shows the exact DNS record.</sub></td>
+    <td><img src="docs/screenshots/light/desktop-activity.png" alt="Activity log with search and filters by actor and action"><br><sub><b>Activity.</b> Who did what and when, with search and filters.</sub></td>
+    <td><img src="docs/screenshots/light/desktop-server-hosting.png" alt="Server page with domain hosting: registered domains and the DNS record to create"><br><sub><b>Server and domains.</b> Register a domain once; the panel shows the exact DNS record.</sub></td>
   </tr>
 </table>
 
@@ -56,12 +58,48 @@ On a phone the panel switches to a bottom navigation bar:
 
 <table>
   <tr>
-    <td width="25%"><img src="docs/screenshots/mobile-apps.png" alt="Application list on mobile"></td>
-    <td width="25%"><img src="docs/screenshots/mobile-app-dark.png" alt="Application page on mobile, dark mode"></td>
-    <td width="25%"><img src="docs/screenshots/mobile-deploy.png" alt="Deploy page on mobile"></td>
-    <td width="25%"><img src="docs/screenshots/mobile-database-query.png" alt="SQL query result on mobile"></td>
+    <td width="25%"><img src="docs/screenshots/light/mobile-apps.png" alt="Application list on mobile"></td>
+    <td width="25%"><img src="docs/screenshots/light/mobile-app.png" alt="Application page on mobile"></td>
+    <td width="25%"><img src="docs/screenshots/light/mobile-deploy.png" alt="Deploy page on mobile"></td>
+    <td width="25%"><img src="docs/screenshots/light/mobile-database-query.png" alt="SQL query result on mobile"></td>
   </tr>
 </table>
+
+<details>
+<summary><b>Dark mode (click to open)</b></summary>
+<br>
+
+<table>
+  <tr>
+    <td width="50%"><img src="docs/screenshots/dark/desktop-deploy.png" alt="Deploy page: the uploaded file is detected, Java version and port are chosen, a summary on the right shows everything is ready (dark mode)"><br><sub><b>Deploy.</b> Upload a file, check what was detected, press Deploy.</sub></td>
+    <td width="50%"><img src="docs/screenshots/dark/desktop-deployments.png" alt="Deployment details with a step-by-step timeline and durations (dark mode)"><br><sub><b>Deploy timeline.</b> Every step with its duration, and a clear reason when something fails.</sub></td>
+  </tr>
+  <tr>
+    <td><img src="docs/screenshots/dark/desktop-app.png" alt="Application page: controls, domain, logs and resources (dark mode)"><br><sub><b>App page.</b> Controls, domain, logs and resource use in one place.</sub></td>
+    <td><img src="docs/screenshots/dark/desktop-files.png" alt="File manager in the Files tab with folders, saved folders and file sizes (dark mode)"><br><sub><b>File manager.</b> Browse and manage what your app saves.</sub></td>
+  </tr>
+  <tr>
+    <td><img src="docs/screenshots/dark/desktop-database-tables.png" alt="Database page with the table browser showing rows of an invoices table (dark mode)"><br><sub><b>Database tables.</b> Look inside a database without a separate tool.</sub></td>
+    <td><img src="docs/screenshots/dark/desktop-database-query.png" alt="SQL query editor with a result grid (dark mode)"><br><sub><b>Query.</b> Run SQL and download the result as CSV.</sub></td>
+  </tr>
+  <tr>
+    <td><img src="docs/screenshots/dark/desktop-activity.png" alt="Activity log with search and filters by actor and action (dark mode)"><br><sub><b>Activity.</b> Who did what and when, with search and filters.</sub></td>
+    <td><img src="docs/screenshots/dark/desktop-server-hosting.png" alt="Server page with domain hosting: registered domains and the DNS record to create (dark mode)"><br><sub><b>Server and domains.</b> Register a domain once; the panel shows the exact DNS record.</sub></td>
+  </tr>
+</table>
+
+On a phone the panel switches to a bottom navigation bar:
+
+<table>
+  <tr>
+    <td width="25%"><img src="docs/screenshots/dark/mobile-apps.png" alt="Application list on mobile (dark mode)"></td>
+    <td width="25%"><img src="docs/screenshots/dark/mobile-app.png" alt="Application page on mobile (dark mode)"></td>
+    <td width="25%"><img src="docs/screenshots/dark/mobile-deploy.png" alt="Deploy page on mobile (dark mode)"></td>
+    <td width="25%"><img src="docs/screenshots/dark/mobile-database-query.png" alt="SQL query result on mobile (dark mode)"></td>
+  </tr>
+</table>
+
+</details>
 
 ## Install
 
@@ -102,7 +140,7 @@ sudo runova update      # asks for confirmation, then installs the newest releas
 sudo runova rollback    # went wrong? go back to the previous version
 ```
 
-<p><img src="docs/screenshots/desktop-update-banner.png" alt="Update banner below the top bar, shown to admins when a new version is out" width="720"></p>
+<p><img src="docs/screenshots/light/desktop-update-banner.png" alt="Update banner below the top bar, shown to admins when a new version is out" width="720"></p>
 
 Admins also see a banner in the panel when a new version is out. Your apps, users, data and panel address are left untouched. More detail in [Operations](docs/operations.md).
 

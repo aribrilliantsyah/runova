@@ -86,7 +86,7 @@ Building release archives: `scripts/release.sh 0.4.0` outputs `dist/runova-0.4.0
 
 ## Screenshots
 
-The screenshots in the README and `docs/screenshots/` are captured from the real panel (`node web/test/screenshots.mjs`, which seeds a fake-backend server), not from the preview. If another local stack holds ports 20000+, set `SHOT_PORT_MIN` (for example `SHOT_PORT_MIN=34000`). PNGs are compressed with `optipng`.
+The screenshots in the README and `docs/screenshots/` are captured from the real panel (`node web/test/screenshots.mjs`, which seeds a fake-backend server), not from the preview. Every view is taken twice, into `docs/screenshots/light/` and `docs/screenshots/dark/` under the same file name; the README shows the light set and folds the dark set below it. If another local stack holds ports 20000+, set `SHOT_PORT_MIN` (for example `SHOT_PORT_MIN=34000`). PNGs are compressed with `optipng`.
 
 ## Releasing a new version
 
