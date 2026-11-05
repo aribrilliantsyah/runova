@@ -53,9 +53,11 @@ export function appState({ app, deployment, latest, busy }) {
         return { cls: "ok", label: "Berjalan", warn: true, line: `Deploy v${lastFailed.number} gagal: ${lastFailed.problem?.title || "lihat detail"}. v${deployment.number} tetap berjalan.`, deployment: lastFailed };
       }
       return { cls: "ok", label: "Berjalan", line: "", deployment };
+    case "starting":
+      return { cls: "warn", label: "Memulai…", line: `Menunggu aplikasi membuka port ${app.internal_port}${app.kind === "jar" ? "; aplikasi Java bisa butuh beberapa menit" : ""}.`, deployment, live: true };
     case "failed": {
       const crash = deployment?.problem;
-      if (crash && (crash.kind === "crash_loop" || crash.kind === "container_lost" || crash.kind === "exited")) {
+      if (crash && (crash.kind === "crash_loop" || crash.kind === "container_lost" || crash.kind === "exited" || crash.kind === "health_timeout")) {
         const prefix = crash.kind === "crash_loop" ? "Crash berulang dan dihentikan" : "";
         return { cls: "err", label: "Gagal", line: prefix ? `${prefix}: ${crash.title}` : crash.title, deployment };
       }

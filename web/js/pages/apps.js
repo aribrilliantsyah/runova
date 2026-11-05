@@ -7,7 +7,7 @@ import * as session from "/assets/js/session.js";
 const POLL_MS = 5000;
 const FILTERS = [
   ["all", "Semua", () => true],
-  ["running", "Berjalan", (a) => a.status === "running" || a.status === "deploying"],
+  ["running", "Berjalan", (a) => a.status === "running" || a.status === "starting" || a.status === "deploying"],
   ["problem", "Bermasalah", (a) => a.status === "failed"],
   ["stopped", "Berhenti", (a) => a.status === "stopped"],
 ];

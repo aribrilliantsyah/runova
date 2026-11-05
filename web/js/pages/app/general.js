@@ -22,7 +22,7 @@ export function renderGeneral(page) {
     const { app } = page.state;
     if (!page.mine) return "Terminal hanya untuk pemilik aplikasi";
     if (app.kind === "static") return "Binary statis memakai image distroless yang tidak punya shell";
-    if (app.status !== "running") return "Aplikasi tidak sedang berjalan";
+    if (app.status !== "running" && app.status !== "starting") return "Aplikasi tidak sedang berjalan";
     return "";
   }
 
@@ -53,7 +53,7 @@ export function renderGeneral(page) {
     const { app, deployment, stats, busy } = page.state;
     const running = app.status === "running";
     const termWhy = terminalState();
-    const kill = running || app.status === "deploying";
+    const kill = running || app.status === "starting" || app.status === "deploying";
     const lock = busy || app.status === "deploying";
 
     const upBtn = h("button", { class: "btn dark", type: "button", disabled: lock, onclick: newVersion }, icon("cloud-upload"), "Unggah versi baru");
@@ -71,8 +71,9 @@ export function renderGeneral(page) {
           h("dt", {}, "Artefak"), h("dd", { class: "mono" }, deployment.file_name, " ", h("span", { class: "faint" }, fmtBytes(deployment.report?.size))),
           h("dt", {}, "Jenis"), h("dd", {}, kindName(deployment.report)),
           h("dt", {}, "Runtime"), h("dd", { class: "mono" }, runtimeImage(app)),
-          h("dt", {}, "Port aplikasi"), h("dd", { class: "mono" }, String(app.internal_port)),
-          h("dt", {}, "Port server"), h("dd", { class: "mono" }, deployment.host_port ? String(deployment.host_port) : "–"),
+          h("dt", {}, "Port aplikasi"), h("dd", {}, h("span", { class: "mono" }, String(app.internal_port)), h("span", { class: "faint" }, " di dalam container")),
+          h("dt", {}, "Akses IP"), h("dd", {}, app.ip_access ? h("span", { class: "mono" }, `${ipHost(page.info).host}:${app.ip_port}`) : h("span", { class: "faint" }, "ditutup")),
+          h("dt", { title: "Port 127.0.0.1 di server tempat Caddy meneruskan domain dan akses IP ke container; tidak dibuka ke luar." }, "Port host internal"), h("dd", { class: "mono faint" }, deployment.host_port ? `127.0.0.1:${deployment.host_port}` : "–"),
           h("dt", {}, "Diunggah"), h("dd", {}, `${deployment.created_by === page.me.id ? page.me.username : page.state.owner}, ${fmtTime(deployment.created_at)}`),
         )
       : h("p", { class: "muted" }, page.state.latest ? `Belum ada deployment yang berhasil. Deploy terakhir: v${page.state.latest.number}.` : "Belum ada deployment aktif.");

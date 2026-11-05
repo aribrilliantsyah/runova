@@ -47,6 +47,7 @@ export async function renderDeploy(root) {
       const allowed = r.allowed_java || [];
       javaVersion = allowed.includes(21) ? 21 : (allowed[0] ?? 0);
       port.value = String(r.report.port || 8080);
+      port.placeholder = port.value;
       if (!nameTouched) name.value = suggestName(r.report.file_name);
       preset = r.report.kind === "jar" ? "m" : "s";
       build();
@@ -63,7 +64,8 @@ export async function renderDeploy(root) {
   name.addEventListener("input", () => { nameTouched = true; refresh(); });
   const nameErr = h("div", { class: "errtext", id: "nm-err", hidden: true });
   const port = h("input", { class: "f mono", id: "pt", inputmode: "numeric", "aria-describedby": "pt-hint" });
-  port.addEventListener("input", () => refresh());
+  // An emptied field means the detected (or default) port; it is sent explicitly so the app stores it.
+  const effectivePort = () => (port.value.trim() ? Number(port.value) : up?.report.port || 8080);
   const jvm = h("input", { class: "f mono", id: "jopts", value: "-XX:MaxRAMPercentage=75", spellcheck: "false", autocomplete: "off" });
   jvm.addEventListener("input", () => refresh());
   const ipSw = h("button", { class: "sw", type: "button", role: "switch", "aria-checked": "true", "aria-label": "Akses lewat IP" });
@@ -122,8 +124,12 @@ export async function renderDeploy(root) {
     } else {
       rows.push(h("div", { class: "dk" }, h("span", {}, "Image"), h("b", { class: "mono" }, runtimeImage({ kind: r.kind }))));
     }
-    const src = r.port_source === "bawaan" ? "bawaan, tidak ditemukan di file" : `dari ${r.port_source}`;
-    rows.push(fld("Port aplikasi", h("div", { class: "portrow" }, port, h("span", { class: "hint", id: "pt-hint" }, `Port yang dibuka aplikasi di dalam container (${src}). Runova mengisi PORT${r.kind === "jar" ? " dan SERVER_PORT" : ""} dengan nilai ini.`)), null, "pt"));
+    const src = r.port_source === "bawaan" ? "bawaan Runova, tidak ditemukan di file" : `dari ${r.port_source}`;
+    const portHint = h("span", { class: "hint", id: "pt-hint" });
+    const paintPort = () => fill(portHint, "Dipakai: ", h("b", { class: "mono" }, String(effectivePort())), ` (${port.value.trim() ? "diisi sendiri" : src}). Port yang dibuka aplikasi di dalam container; Runova mengisi PORT${r.kind === "jar" ? " dan SERVER_PORT" : ""} dengan nilai ini, dan setiap deploy ulang memakai nilai yang sama. Bukan port akses IP.`);
+    paintPort();
+    port.oninput = () => { paintPort(); refresh(); };
+    rows.push(fld("Port aplikasi (di dalam container)", h("div", { class: "portrow" }, port, portHint), null, "pt"));
     return h("div", { class: "ddet" }, rows);
   }
 
@@ -224,7 +230,7 @@ export async function renderDeploy(root) {
       const j = jvmOptsError(jvm.value.trim());
       if (j) out.push({ at: "d-adv", text: j });
     }
-    const pe = portError(Number(port.value));
+    const pe = portError(effectivePort());
     if (pe) out.push({ at: "d-run", text: pe });
     if (env && pick) {
       const dbErr = pick.error();
@@ -255,7 +261,7 @@ export async function renderDeploy(root) {
       sumBox,
       rep ? h("div", { class: "dfile" }, h("span", { class: "lgbox" }, kindLogo(rep.kind || "static", rep.language)), h("div", {}, h("b", { class: "mono" }, name.value || "–"), h("small", { class: "mono" }, `${rep.file_name} · ${fmtBytes(rep.size)}`))) : null,
       rowsum("Runtime", runtime),
-      rowsum("Port", rep ? port.value || "–" : "–", "mono"),
+      rowsum("Port aplikasi", rep ? String(effectivePort()) : "–", "mono"),
       rowsum("Alamat", addr ? (addr.host || `${addr.label}.${(hostingData.domains || []).find((d) => d.id === addr.hosting_domain_id)?.name.replace(/^\*\./, "") || ""}`) : "Belum ada", addr ? "mono" : "muted"),
       rowsum("Database", pick ? pick.label() : "–", pick && pick.choice() !== "none" ? "mono" : ""),
       rowsum("Ukuran", `${fmtMB(res.memory())} · ${fmtNum(res.cpu() / 1000)} core`),
@@ -302,7 +308,7 @@ export async function renderDeploy(root) {
       const body = {
         upload_id: up.id,
         name: name.value,
-        internal_port: Number(port.value),
+        internal_port: effectivePort(),
         memory_mb: res.memory(),
         cpu_milli: res.cpu(),
         ip_access: ipSw.getAttribute("aria-checked") === "true",

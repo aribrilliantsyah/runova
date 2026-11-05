@@ -52,7 +52,7 @@ export function renderAdvanced(page) {
       jvm = h("input", { class: "f mono", "aria-label": "Opsi JVM", value: app.jvm_opts, spellcheck: "false" });
       parts.push(h("div", { class: "fld" }, h("label", {}, "Versi Java"), java), h("div", { class: "fld" }, h("label", {}, "Opsi JVM"), jvm));
     }
-    parts.push(h("div", { class: "fld" }, h("label", {}, "Port aplikasi"), port, h("div", { class: "hint" }, "Port yang didengarkan aplikasi di dalam container.")));
+    parts.push(h("div", { class: "fld" }, h("label", {}, "Port aplikasi (di dalam container)"), port, h("div", { class: "hint" }, `Port yang didengarkan aplikasi di dalam container. Runova mengisi PORT${app.kind === "jar" ? " dan SERVER_PORT" : ""} dengan nilai ini; setiap deploy ulang memakai nilai ini. Bukan port akses IP${app.ip_access ? ` (${app.ip_port})` : ""}.`)));
     const save = h("button", { class: "btn dark", type: "button" }, "Simpan runtime");
     save.addEventListener("click", () => {
       const body = { internal_port: Number(port.value) };
