@@ -25,8 +25,8 @@ const (
 	// exactly; bigger ones show the planner's estimate.
 	exactCountBytes = 16 << 20
 
-	defaultReadTimeout  = 10 * time.Second
-	defaultWriteTimeout = 30 * time.Second
+	DefaultReadTimeout  = 10 * time.Second
+	DefaultWriteTimeout = 30 * time.Second
 	connectTimeout      = 5 * time.Second
 	applicationName     = "runova-panel"
 	loopbackHost        = "127.0.0.1"
@@ -126,12 +126,12 @@ func (u *PgxUsers) timeout(write bool) time.Duration {
 		if u.WriteTimeout > 0 {
 			return u.WriteTimeout
 		}
-		return defaultWriteTimeout
+		return DefaultWriteTimeout
 	}
 	if u.ReadTimeout > 0 {
 		return u.ReadTimeout
 	}
-	return defaultReadTimeout
+	return DefaultReadTimeout
 }
 
 func (u *PgxUsers) ClientEnv(c Creds) []string {

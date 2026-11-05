@@ -50,7 +50,7 @@ func newDBEnv(t *testing.T) *dbEnv {
 	engine := dockertest.New()
 	fake := pgfake.New()
 	dsvc := &dbs.Service{
-		Store: st, PG: fake, Box: box, BackupDir: filepath.Join(dataDir, "backup"), Now: clk.Now,
+		Store: st, PG: fake, Users: fake.Users(), Box: box, BackupDir: filepath.Join(dataDir, "backup"), Now: clk.Now,
 		HBAPath: filepath.Join(dataDir, "runova.conf"),
 	}
 	svc := &apps.Service{

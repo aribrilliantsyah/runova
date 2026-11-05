@@ -22,7 +22,6 @@ import (
 	"runova/internal/docker"
 	"runova/internal/docker/dockertest"
 	"runova/internal/hostdns"
-	"runova/internal/pg"
 	"runova/internal/pg/pgfake"
 	"runova/internal/secret"
 	"runova/internal/store"
@@ -332,15 +331,18 @@ func fakeDatabases(ctx context.Context, cfg config.Config, st *store.Store, box 
 	}
 	dump := filepath.Join(bin, "pg_dump")
 	restore := filepath.Join(bin, "pg_restore")
+	// A real custom-format header, so a downloaded export restores through the upload path too.
 	if err := os.WriteFile(dump, []byte("#!/bin/sh\nprintf 'PGDMP fake dump\\n'\n"), 0o755); err != nil {
 		return nil, nil, err
 	}
 	if err := os.WriteFile(restore, []byte("#!/bin/sh\nexit 0\n"), 0o755); err != nil {
 		return nil, nil, err
 	}
-	var admin pg.Admin = pgfake.New()
+	fake := pgfake.New()
+	users := fake.Users()
+	users.Demo = true
 	svc := &dbs.Service{
-		Store: st, PG: admin, Box: box, BackupDir: cfg.BackupDir(),
+		Store: st, PG: fake, Users: users, Box: box, BackupDir: cfg.BackupDir(),
 		HBAPath: filepath.Join(cfg.DataDir, "pg_hba.conf"), PGDump: dump, PGRestore: restore,
 	}
 	// Like the real startup: users that exist before this process (the installer's admin) get their roles.

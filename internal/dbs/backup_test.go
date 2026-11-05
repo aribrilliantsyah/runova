@@ -1,8 +1,10 @@
 package dbs_test
 
 import (
+	"bytes"
 	"context"
 	"errors"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -230,6 +232,9 @@ func TestRestoreCommand(t *testing.T) {
 	e := newEnv(t)
 	ctx := context.Background()
 	u := e.user(t, "budi", store.RoleUser)
+	if err := e.svc.OnUserCreated(ctx, u); err != nil {
+		t.Fatal(err)
+	}
 	d, _ := e.svc.Create(ctx, u, "one")
 	id := e.writeBackup(t, d.Name, time.Date(2026, 10, 30, 2, 0, 0, 0, time.UTC), false, "x")
 	argsFile := filepath.Join(t.TempDir(), "args")
@@ -305,7 +310,11 @@ func TestBackupRestoreRoundTrip(t *testing.T) {
 	}
 
 	e := newEnv(t)
-	e.svc.PG, e.svc.PGEnv = admin, env
+	users, err := pg.NewUsers(dsn)
+	if err != nil {
+		t.Fatal(err)
+	}
+	e.svc.PG, e.svc.PGEnv, e.svc.Users = admin, env, users
 	e.svc.Now = time.Now
 	u := e.user(t, "budi", store.RoleUser)
 	if err := e.svc.OnUserCreated(ctx, u); err != nil {
@@ -358,6 +367,29 @@ func TestBackupRestoreRoundTrip(t *testing.T) {
 	}
 	if _, err := conn.Exec(ctx, `INSERT INTO invoices VALUES (3, 'third')`); err != nil {
 		t.Fatalf("budi cannot write after restore: %v", err)
+	}
+
+	// Export streams a dump made as budi; restoring it from an upload brings the rows back.
+	var dump bytes.Buffer
+	if _, err := e.svc.Export(ctx, u, d.ID, func(string) io.Writer { return &dump }); err != nil {
+		t.Fatalf("Export: %v", err)
+	}
+	if !bytes.HasPrefix(dump.Bytes(), []byte("PGDMP")) {
+		t.Fatalf("export is not a custom dump: %q", dump.Bytes()[:min(16, dump.Len())])
+	}
+	if _, err := conn.Exec(ctx, `DROP TABLE invoices`); err != nil {
+		t.Fatal(err)
+	}
+	if err := e.svc.RestoreUpload(ctx, u, d.ID, d.Name, &dump, 1<<30); err != nil {
+		t.Fatalf("RestoreUpload: %v", err)
+	}
+	conn = connectAsUser(t, ctx, e, dsn, u, d.Name)
+	if err := conn.QueryRow(ctx, `SELECT count(*) FROM invoices`).Scan(&n); err != nil || n != 3 {
+		t.Fatalf("rows after upload restore = %d, %v", n, err)
+	}
+	tables, err := e.svc.Tables(ctx, u, d.ID)
+	if err != nil || len(tables) != 2 || tables[0].Name != "invoices" || tables[0].Rows != 3 || tables[1].Name != "junk" {
+		t.Fatalf("Tables = %+v, %v", tables, err)
 	}
 }
 

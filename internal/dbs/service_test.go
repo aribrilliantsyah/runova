@@ -46,7 +46,7 @@ func newEnv(t *testing.T) *env {
 	now := time.Date(2026, 10, 30, 9, 0, 0, 0, time.UTC)
 	e := &env{st: st, pg: pgfake.New(), box: box, dir: dir, clock: &now}
 	e.svc = &dbs.Service{
-		Store: st, PG: e.pg, Box: box, BackupDir: filepath.Join(dir, "backup"),
+		Store: st, PG: e.pg, Users: e.pg.Users(), Box: box, BackupDir: filepath.Join(dir, "backup"),
 		Now: func() time.Time { return *e.clock }, HBAPath: filepath.Join(dir, "runova.conf"),
 	}
 	return e

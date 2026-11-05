@@ -63,11 +63,13 @@ const (
 	loopbackNet      = "127.0.0.1/32"
 )
 
-// Service is the database domain logic. Store, PG, Box and BackupDir are
+// Service is the database domain logic. Store, PG, Users, Box and BackupDir are
 // required; the rest have working defaults.
 type Service struct {
-	Store     *store.Store
-	PG        pg.Admin
+	Store *store.Store
+	PG    pg.Admin
+	// Users runs the panel's table browser and query editor with the user's own role.
+	Users     pg.Users
 	Box       *secret.Box
 	BackupDir string
 	Now       func() time.Time
