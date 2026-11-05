@@ -70,7 +70,7 @@ func TestAdminCreateAndReset(t *testing.T) {
 	if !u.IsAdmin() || !auth.CheckPassword(hash, first) {
 		t.Fatalf("stored user %+v does not match printed password", u)
 	}
-	if u.Quota != (store.Quota{Apps: 3, MemoryMB: 1024, CPUMilli: 1000, Databases: 3, PGConnections: 20}) {
+	if u.Quota != (store.Quota{Apps: 3, MemoryMB: 1024, CPUMilli: 1000, Databases: 3, PGConnections: 20, DiskMB: 1024}) {
 		t.Fatalf("quota = %+v", u.Quota)
 	}
 

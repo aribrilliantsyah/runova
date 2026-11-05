@@ -63,7 +63,7 @@ func devSeed(ctx context.Context, st *store.Store, now int64) error {
 		}
 		u, err := st.CreateUser(ctx, store.NewUser{
 			Username: name, DisplayName: display, Email: email, PasswordHash: hash, Role: role,
-			Quota: store.Quota{Apps: 2 + i%5, MemoryMB: 1024 * (1 + i%4), CPUMilli: 1000 * (1 + i%3), Databases: 1 + i%4, PGConnections: 20},
+			Quota: store.Quota{Apps: 2 + i%5, MemoryMB: 1024 * (1 + i%4), CPUMilli: 1000 * (1 + i%3), Databases: 1 + i%4, PGConnections: 20, DiskMB: 1024 * (1 + i%3)},
 		}, now-int64(90-i)*day)
 		if err != nil {
 			return fmt.Errorf("seed user %s: %w", name, err)
