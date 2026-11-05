@@ -97,7 +97,7 @@ func TestIntegrationSlowJVMDeployRedeployRestart(t *testing.T) {
 		t.Fatal(err)
 	}
 	user, err := st.CreateUser(ctx, store.NewUser{Username: "itestslow", PasswordHash: "x", Role: store.RoleUser,
-		Quota: store.Quota{Apps: 3, MemoryMB: 2048, CPUMilli: 2000, Databases: 3, PGConnections: 20}}, 1)
+		Quota: store.Quota{Apps: 3, MemoryMB: 2048, CPUMilli: 2000, Databases: 3, PGConnections: 20, DiskMB: 1024}}, 1)
 	if err != nil {
 		t.Fatal(err)
 	}
