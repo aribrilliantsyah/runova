@@ -27,13 +27,13 @@ func (s *Service) Busy(appID int64) bool {
 }
 
 // runningContainer returns the container of the app's active deployment when
-// the app is running.
+// the app is running or starting.
 func (s *Service) runningContainer(ctx context.Context, user store.User, appID int64) (store.App, store.User, string, error) {
 	app, owner, err := s.load(ctx, user, appID)
 	if err != nil {
 		return store.App{}, store.User{}, "", err
 	}
-	if app.Status != store.AppRunning || app.CurrentDeploymentID == nil {
+	if !app.Status.Up() || app.CurrentDeploymentID == nil {
 		return store.App{}, store.User{}, "", ErrNotRunning
 	}
 	d, err := s.Store.Deployment(ctx, *app.CurrentDeploymentID)

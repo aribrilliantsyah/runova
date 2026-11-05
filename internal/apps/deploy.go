@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"runova/internal/artifact"
 	"runova/internal/docker"
 	"runova/internal/store"
 )
@@ -75,6 +76,10 @@ func (s *Service) deployLocked(ctx context.Context, actor, owner store.User, app
 	}
 
 	prevStatus := app.Status
+	if prevStatus == store.AppStarting {
+		// The deploy takes over from the start's wait, which then records nothing.
+		prevStatus = store.AppRunning
+	}
 	if err := s.Store.SetAppStatus(ctx, app.ID, store.AppDeploying); err != nil {
 		return err
 	}
@@ -195,7 +200,7 @@ func (s *Service) rollout(ctx context.Context, owner store.User, app store.App, 
 		return containerID, atStep(stepStart, fmt.Errorf("start container: %w", err))
 	}
 	tr.done(ctx, stepStart, "")
-	if err := s.waitHealthy(ctx, containerID, d.HostPort, d.InternalPort, tr); err != nil {
+	if err := s.waitHealthy(ctx, app, containerID, d.HostPort, d.InternalPort, tr); err != nil {
 		return containerID, err
 	}
 	return containerID, nil
@@ -231,23 +236,50 @@ func (s *Service) removeContainerOf(ctx context.Context, d store.Deployment) err
 }
 
 // waitHealthy polls 127.0.0.1:hostPort (published from the container's
-// appPort) until the app answers or the health timeout passes. Docker's port
-// proxy accepts connections even when nothing listens in the container and
-// then closes them at once, so a connect alone proves nothing: a healthy app
-// stays quiet (the read times out) or sends data, while EOF or a reset means
-// nobody is home. Every round also checks that the container still runs; one
-// that exited fails the deploy at once. Errors name the container port, the
-// one the user configures.
-func (s *Service) waitHealthy(ctx context.Context, containerID string, hostPort, appPort int, tr *tracer) error {
+// appPort) until the app answers or healthTimeoutFor(app) passes. Docker's
+// port proxy accepts connections even when nothing listens in the container
+// and then closes them at once, so a connect alone proves nothing: a healthy
+// app stays quiet (the read times out) or sends data, while EOF or a reset
+// means nobody is home. Every round also checks that the container still
+// runs; one that exited fails at once. A JAR whose log still moves at the
+// timeout and that has not logged "Started …" is still starting: the wait
+// goes on, up to twice the timeout. Errors name the container port, the one
+// the user configures. tr may be nil (Restart, Start).
+func (s *Service) waitHealthy(ctx context.Context, app store.App, containerID string, hostPort, appPort int, tr *tracer) error {
 	dial := s.Dial
 	if dial == nil {
 		dial = net.DialTimeout
 	}
 	addr := net.JoinHostPort("127.0.0.1", strconv.Itoa(hostPort))
-	timeout := s.healthTimeout()
-	start := time.Now()
-	deadline := start.Add(timeout)
-	tr.begin(ctx, stepHealth, fmt.Sprintf("Menunggu port %d", appPort))
+	timeout := s.healthTimeoutFor(app)
+	start := s.healthNow()
+	deadline, limit := start.Add(timeout), start.Add(2*timeout)
+	jvm := app.Kind == artifact.KindJar
+	var (
+		logMoved, logChecked time.Time
+		lastLine             string
+		started              bool
+	)
+	// watchLog notes when the JVM's output last changed and whether it logged "Started".
+	watchLog := func(now time.Time) {
+		if !jvm || now.Sub(logChecked) < startLogEvery {
+			return
+		}
+		logChecked = now
+		lines := s.readLines(ctx, containerID, startLogLines)
+		started = startedInLog(lines) != nil
+		if len(lines) == 0 {
+			return
+		}
+		last := lines[len(lines)-1]
+		if line := last.Time.String() + last.Text; line != lastLine {
+			if lastLine != "" {
+				logMoved = now
+			}
+			lastLine = line
+		}
+	}
+	tr.begin(ctx, stepHealth, fmt.Sprintf("Menunggu port %d (paling lama %s)", appPort, plainDuration(timeout)))
 	for attempt := 1; ; attempt++ {
 		st, err := s.Engine.InspectContainer(ctx, containerID)
 		if err != nil {
@@ -257,14 +289,22 @@ func (s *Service) waitHealthy(ctx context.Context, containerID string, hostPort,
 			return &stepError{step: stepHealth, state: &st, err: fmt.Errorf("aplikasi berhenti saat dijalankan (%s, exit code %d)", st.Status, st.ExitCode)}
 		}
 		if s.accepts(dial, addr) {
-			tr.done(ctx, stepHealth, fmt.Sprintf("Port %d menerima koneksi setelah %s", appPort, time.Since(start).Round(100*time.Millisecond)))
+			tr.done(ctx, stepHealth, fmt.Sprintf("Port %d menerima koneksi setelah %s", appPort, plainDuration(s.healthNow().Sub(start))))
 			return nil
 		}
-		if time.Now().After(deadline) {
-			return &stepError{step: stepHealth, waited: timeout, port: appPort,
+		now := s.healthNow()
+		watchLog(now)
+		stillStarting := jvm && !started && !logMoved.IsZero() && now.Sub(logMoved) < startStall && now.Before(limit)
+		if now.After(deadline) && !stillStarting {
+			// The wait begins right after the container starts, so it is also how long the JVM has run.
+			return &stepError{step: stepHealth, waited: now.Sub(start), port: appPort,
 				err: fmt.Errorf("aplikasi tidak menerima koneksi di port %d dalam %s (%d percobaan)", appPort, timeout.Round(time.Second), attempt)}
 		}
-		tr.progress(ctx, stepHealth, fmt.Sprintf("Menunggu port %d: %d detik, percobaan %d", appPort, int(time.Since(start)/time.Second), attempt))
+		detail := fmt.Sprintf("Menunggu port %d: %s dari paling lama %s, percobaan %d", appPort, plainDuration(now.Sub(start)), plainDuration(timeout), attempt)
+		if now.After(deadline) {
+			detail = fmt.Sprintf("Menunggu port %d: %s; JVM masih start (log terus bertambah), ditunggu paling lama %s", appPort, plainDuration(now.Sub(start)), plainDuration(2*timeout))
+		}
+		tr.progress(ctx, stepHealth, detail)
 		select {
 		case <-ctx.Done():
 			return atStep(stepHealth, ctx.Err())
@@ -485,7 +525,8 @@ func (s *Service) startContainer(ctx context.Context, app store.App, id string) 
 	return nil
 }
 
-// Restart stops and starts the active container.
+// Restart stops and starts the active container; the app is "starting" until
+// its port opens (awaitStart).
 func (s *Service) Restart(ctx context.Context, user store.User, appID int64) error {
 	app, _, err := s.load(ctx, user, appID)
 	if err != nil {
@@ -506,11 +547,48 @@ func (s *Service) Restart(ctx context.Context, user store.User, appID int64) err
 	if err := s.startContainer(ctx, app, id); err != nil {
 		return err
 	}
-	if err := s.Store.SetAppStatus(ctx, app.ID, store.AppRunning); err != nil {
+	if err := s.Store.SetAppStatus(ctx, app.ID, store.AppStarting); err != nil {
 		return err
 	}
 	s.logActivity(ctx, user, store.ActRestart, app.Name, "")
+	s.awaitStart(ctx, app)
 	return nil
+}
+
+// awaitStart waits in the background until the restarted or started active
+// container opens its port, then marks the app running, or failed with the
+// reason on the deployment. The app's lock is not held meanwhile, so the user
+// can stop a start that hangs; the result is only recorded while the app is
+// still starting the same deployment. The container stays as it is either
+// way: a JVM that needs longer keeps going and its log stays readable.
+func (s *Service) awaitStart(ctx context.Context, app store.App) {
+	ctx = context.WithoutCancel(ctx)
+	s.background(func() {
+		d, err := s.Store.Deployment(ctx, *app.CurrentDeploymentID)
+		if err != nil {
+			slog.Error("load started deployment", "app", app.Name, "err", err)
+			return
+		}
+		werr := s.waitHealthy(ctx, app, d.ContainerID, d.HostPort, d.InternalPort, nil)
+		cur, err := s.Store.App(ctx, app.ID)
+		if err != nil || cur.Status != store.AppStarting || cur.CurrentDeploymentID == nil || *cur.CurrentDeploymentID != d.ID {
+			return
+		}
+		if werr == nil {
+			if err := s.Store.SetAppStatus(ctx, app.ID, store.AppRunning); err != nil {
+				slog.Error("set app running after start", "app", app.Name, "err", err)
+			}
+			return
+		}
+		lines := s.readLines(ctx, d.ContainerID, keptLogLines)
+		p := diagnose(cur, d, werr, lines, s.now().UnixMilli())
+		if err := s.Store.SetAppStatus(ctx, app.ID, store.AppFailed); err != nil {
+			slog.Error("set app failed after start", "app", app.Name, "err", err)
+		}
+		s.markActive(ctx, cur, p)
+		s.notify(ctx, cur, store.LevelError, fmt.Sprintf("Aplikasi %s tidak siap setelah dijalankan", app.Name), p.Title)
+		slog.Warn("start failed", "app", app.Name, "err", werr)
+	})
 }
 
 // Stop stops the active container and marks the app stopped.
@@ -558,11 +636,12 @@ func (s *Service) Start(ctx context.Context, user store.User, appID int64) error
 	if err := s.startContainer(ctx, app, id); err != nil {
 		return err
 	}
-	if err := s.Store.SetAppStatus(ctx, app.ID, store.AppRunning); err != nil {
+	if err := s.Store.SetAppStatus(ctx, app.ID, store.AppStarting); err != nil {
 		return err
 	}
 	s.refreshCaddy(ctx, app)
 	s.logActivity(ctx, user, store.ActStart, app.Name, "")
+	s.awaitStart(ctx, app)
 	return nil
 }
 

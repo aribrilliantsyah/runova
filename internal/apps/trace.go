@@ -70,7 +70,11 @@ func (s *Service) newTracer(ctx context.Context, d store.Deployment, hasOld, rep
 	return t
 }
 
+// find returns the step, or nil; a nil tracer (Restart, Start) records nothing.
 func (t *tracer) find(id string) *store.DeployStep {
+	if t == nil {
+		return nil
+	}
 	for i := range t.steps {
 		if t.steps[i].ID == id {
 			return &t.steps[i]
@@ -180,6 +184,45 @@ var listenPortRE = []*regexp.Regexp{
 
 var unsupportedClassRE = regexp.MustCompile(`class file version (\d+)\.\d+`)
 
+// startedRE is Spring Boot's "Started StarboomApplication in 48.2 seconds".
+var startedRE = regexp.MustCompile(`\bStarted (\S+) in ([\d.]+) seconds`)
+
+// startLogLines is how much of a starting JVM's output the health wait reads.
+const startLogLines = 50
+
+// startedInLog returns the submatches of the last "Started … in N seconds", or nil.
+func startedInLog(lines []docker.LogLine) []string {
+	for i := len(lines) - 1; i >= 0; i-- {
+		if m := startedRE.FindStringSubmatch(lines[i].Text); m != nil {
+			return m
+		}
+	}
+	return nil
+}
+
+// lastLogLine returns the last non-blank line of output, clipped.
+func lastLogLine(lines []docker.LogLine) string {
+	for i := len(lines) - 1; i >= 0; i-- {
+		if t := strings.TrimSpace(lines[i].Text); t != "" {
+			return clip(t, 300)
+		}
+	}
+	return ""
+}
+
+// plainDuration writes d the way the panel speaks: "45 detik", "3 menit", "2 menit 30 detik".
+func plainDuration(d time.Duration) string {
+	secs := int(d.Round(time.Second) / time.Second)
+	switch m, s := secs/60, secs%60; {
+	case m == 0:
+		return fmt.Sprintf("%d detik", s)
+	case s == 0:
+		return fmt.Sprintf("%d menit", m)
+	default:
+		return fmt.Sprintf("%d menit %d detik", m, s)
+	}
+}
+
 // portInLog returns the last listening port the output mentions, or 0.
 func portInLog(lines []docker.LogLine) int {
 	for i := len(lines) - 1; i >= 0; i-- {
@@ -247,16 +290,7 @@ func diagnose(app store.App, d store.Deployment, err error, lines []docker.LogLi
 			secs = int(se.waited.Round(time.Second) / time.Second)
 		}
 		p.Title = fmt.Sprintf("Aplikasi tidak membuka port %d dalam %d detik", want, secs)
-		switch seen := portInLog(lines); {
-		case seen != 0 && seen != want:
-			p.Hint = fmt.Sprintf("Log aplikasi menyebut port %d, sedangkan Runova menunggu port %d. Ubah Port aplikasi di tab Lanjutan menjadi %d, atau atur aplikasi agar memakai variabel PORT.", seen, want, seen)
-		case seen == want && seen != 0:
-			p.Hint = fmt.Sprintf("Log menyebut port %d, tetapi port itu tidak menerima koneksi. Pastikan aplikasi mendengarkan di 0.0.0.0, bukan 127.0.0.1.", want)
-		case app.Kind == artifact.KindJar:
-			p.Hint = fmt.Sprintf("Runova mengisi SERVER_PORT dan PORT dengan %d. Bila aplikasi memakai port lain (server.port), samakan Port aplikasi di tab Lanjutan. Aplikasi yang lambat start bisa butuh CPU lebih besar.", want)
-		default:
-			p.Hint = fmt.Sprintf("Runova mengisi PORT dengan %d. Pastikan aplikasi membaca PORT atau samakan Port aplikasi di tab Lanjutan.", want)
-		}
+		p.Hint = healthHint(app, want, se, lines)
 	case stepRoute:
 		p.Title = "Caddy menolak alamat aplikasi"
 		p.Hint = "Versi yang berjalan sebelumnya tetap melayani. Periksa domain aplikasi, lalu deploy ulang."
@@ -266,6 +300,45 @@ func diagnose(app store.App, d store.Deployment, err error, lines []docker.LogLi
 		p.Title = "Deploy gagal"
 	}
 	return p
+}
+
+// healthHint explains a health timeout from the app's output: the port it
+// logged, whether the JVM finished starting, and how far it got.
+func healthHint(app store.App, want int, se *stepError, lines []docker.LogLine) string {
+	seen := portInLog(lines)
+	if m := startedInLog(lines); m != nil {
+		switch {
+		case seen != 0 && seen != want:
+			return fmt.Sprintf("Aplikasi sudah start dalam %s detik di port %d, sedangkan Runova menunggu port %d. Ubah Port aplikasi di tab Lanjutan menjadi %d, atau hapus server.port dari konfigurasi agar SERVER_PORT dipakai.", m[2], seen, want, seen)
+		case seen != 0:
+			return fmt.Sprintf("Aplikasi sudah start dalam %s detik di port %d, tetapi port itu tidak menerima koneksi. Pastikan aplikasi mendengarkan di 0.0.0.0 (server.address), bukan 127.0.0.1.", m[2], seen)
+		default:
+			return fmt.Sprintf("Aplikasi sudah start dalam %s detik, tetapi tidak membuka port %d. Periksa apakah aplikasi memang server web (spring-boot-starter-web) dan port yang dipakainya.", m[2], want)
+		}
+	}
+	switch {
+	case seen != 0 && seen != want:
+		return fmt.Sprintf("Log aplikasi menyebut port %d, sedangkan Runova menunggu port %d. Ubah Port aplikasi di tab Lanjutan menjadi %d, atau atur aplikasi agar memakai variabel PORT.", seen, want, seen)
+	case seen == want && seen != 0:
+		return fmt.Sprintf("Log menyebut port %d, tetapi port itu tidak menerima koneksi. Pastikan aplikasi mendengarkan di 0.0.0.0, bukan 127.0.0.1.", want)
+	case app.Kind == artifact.KindJar:
+		var ran time.Duration
+		if se != nil {
+			ran = se.waited
+		}
+		hint := fmt.Sprintf("JVM sudah berjalan %s tetapi belum selesai start (log belum menulis \"Started …\"). Aplikasi Java dengan %s core butuh waktu; naikkan CPU di tab Lanjutan lalu deploy ulang.", plainDuration(ran), fmtCores(app.CPUMilli))
+		if last := lastLogLine(lines); last != "" {
+			hint += " Baris log terakhir: " + last
+		}
+		return hint
+	default:
+		return fmt.Sprintf("Runova mengisi PORT dengan %d. Pastikan aplikasi membaca PORT atau samakan Port aplikasi di tab Lanjutan.", want)
+	}
+}
+
+// fmtCores writes milli-cores as the panel does: 0,5 or 1.
+func fmtCores(milli int) string {
+	return strings.Replace(strconv.FormatFloat(float64(milli)/1000, 'f', -1, 64), ".", ",", 1)
 }
 
 // exitProblem explains a container that exited on its own.

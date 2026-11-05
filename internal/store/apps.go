@@ -15,10 +15,16 @@ type AppStatus string
 
 const (
 	AppDeploying AppStatus = "deploying"
-	AppRunning   AppStatus = "running"
-	AppStopped   AppStatus = "stopped"
-	AppFailed    AppStatus = "failed"
+	// AppStarting is a Restart or Start whose app has not opened its port yet.
+	AppStarting AppStatus = "starting"
+	AppRunning  AppStatus = "running"
+	AppStopped  AppStatus = "stopped"
+	AppFailed   AppStatus = "failed"
 )
+
+// Up reports whether the app's active container runs: running, or started and
+// not yet listening.
+func (s AppStatus) Up() bool { return s == AppRunning || s == AppStarting }
 
 type DeployStatus string
 

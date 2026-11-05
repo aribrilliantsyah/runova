@@ -117,6 +117,8 @@ func newTestEnv(t *testing.T) *testEnv {
 		HealthInterval: time.Millisecond,
 		ReconnectDelay: time.Millisecond,
 		DrainDelay:     time.Millisecond,
+		// Restart and Start wait for the port in the background; run it inline so tests see the end state.
+		Go: func(f func()) { f() },
 	}
 	return e
 }
