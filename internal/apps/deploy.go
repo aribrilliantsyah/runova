@@ -175,7 +175,7 @@ func (s *Service) rollout(ctx context.Context, owner store.User, app store.App, 
 		return "", atStep(stepPrepare, fmt.Errorf("database env: %w", err))
 	}
 	spec := s.ContainerSpec(app, owner, *d, env, dbEnv)
-	tr.done(ctx, stepPrepare, fmt.Sprintf("Port aplikasi %d, port server %d", d.InternalPort, d.HostPort))
+	tr.done(ctx, stepPrepare, fmt.Sprintf("Port aplikasi (di dalam container) %d, port host internal 127.0.0.1:%d", d.InternalPort, d.HostPort))
 
 	if replaceFirst && tr.find(stepStopOld) != nil {
 		tr.begin(ctx, stepStopOld, "")
