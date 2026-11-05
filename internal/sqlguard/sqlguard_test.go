@@ -290,7 +290,7 @@ func TestNULAndSizeRejected(t *testing.T) {
 func TestSQLDropsTrailingSemicolonsAndComments(t *testing.T) {
 	for in, want := range map[string]string{
 		"SELECT 1;":                 "SELECT 1",
-		"  SELECT 1 ; -- done\n  ":   "  SELECT 1",
+		"  SELECT 1 ; -- done\n  ":  "  SELECT 1",
 		"SELECT 1 -- trailing":      "SELECT 1",
 		"SELECT 1 /* c */ ;;":       "SELECT 1",
 		"-- head\nSELECT 1":         "-- head\nSELECT 1",
