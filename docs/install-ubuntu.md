@@ -2,7 +2,7 @@
 
 **English** · [Bahasa Indonesia](install-ubuntu.id.md)
 
-Guide for server admins. End result: the Runova panel running on your server, complete with Docker, Caddy (automated HTTPS), and PostgreSQL 18, ready for users to deploy applications.
+Guide for server admins, from an empty server to a working panel. If you only want the short version, the [README](../README.md#install) has the three-step install; this page adds the details: server size, firewall, DNS, backups and troubleshooting. End result: the Runova panel running on your server, complete with Docker, Caddy (automated HTTPS), and PostgreSQL 18, ready for users to deploy applications.
 
 ## 1. Server specifications
 
@@ -138,7 +138,7 @@ scripts/deploy.sh admin@IP-SERVER --domain panel.example.com
 
 This script verifies SSH, Ubuntu 26.04 amd64, and `sudo` on the server; builds a local release; copies it over; then runs the same installer. Additional options: `--version`, `-p/--ssh-port`, `-i/--identity`, and `RUNOVA_SSH_OPTS` (e.g. `RUNOVA_SSH_OPTS="-o ProxyJump=bastion"`).
 
-The installer installs `docker.io`, `caddy`, `postgresql-18`, `ufw`, `jq`, and `curl` from Ubuntu apt; creates the `runova` user, encryption key, and systemd service; configures Caddy and PostgreSQL; opens ports in `ufw` (SSH is allowed before `ufw` is enabled); then executes `runova check`. A complete summary is in the [README](../README.md#installation).
+The installer installs `docker.io`, `caddy`, `postgresql-18`, `ufw`, `jq`, and `curl` from Ubuntu apt; creates the `runova` user, encryption key, and systemd service; configures Caddy and PostgreSQL; opens ports in `ufw` (SSH is allowed before `ufw` is enabled); then executes `runova check`. What the installer changes on the server is listed in [Operations](operations.md#installer-details); for more on domains see [Domains and HTTPS](domains.md).
 
 ## 6. After installation
 
