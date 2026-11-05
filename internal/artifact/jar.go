@@ -170,6 +170,7 @@ func inspectZip(zr *zip.Reader, rep *Report) error {
 	}
 
 	env := envSet{}
+	var found folderSet
 	for _, name := range propertyFiles {
 		f := byName[name]
 		if f == nil {
@@ -188,8 +189,19 @@ func inspectZip(zr *zip.Reader, rep *Report) error {
 		for _, n := range placeholders(string(data), yaml) {
 			env.add(EnvVar{Name: n, Source: SourceProperties})
 		}
+		lines := configLines(string(data), yaml)
+		pairs := propertyPairs(lines)
+		if yaml {
+			pairs = yamlPairs(lines)
+		}
+		for _, kv := range pairs {
+			found.add(kv[0], kv[1], name[strings.LastIndexByte(name, '/')+1:])
+		}
 	}
 	rep.Env = env.list()
+	if found.list != nil {
+		rep.Folders = found.list
+	}
 	return nil
 }
 

@@ -102,6 +102,18 @@ func inspectFile(path, format string, envExample []EnvVar) (Report, error) {
 	}
 	rep.Env = set.list()
 
+	var found folderSet
+	for _, v := range envExample {
+		found.add(v.Name, v.Default, SourceEnvExample)
+	}
+	for _, d := range rep.Folders {
+		found.addFolder(d)
+	}
+	rep.Folders = found.list
+	if rep.Folders == nil {
+		rep.Folders = []DetectedFolder{}
+	}
+
 	if rep.Kind == KindStatic || rep.Kind == KindGlibc {
 		if port, ok := envPort(envExample); ok {
 			rep.Port, rep.PortSource = port, SourceEnvExample
