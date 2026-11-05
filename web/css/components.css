@@ -705,10 +705,11 @@ details.why ul{margin:6px 0 0;padding-left:18px}
 .fusage .t .lucide{width:14px;height:14px;color:var(--faint)}
 .fusage .t span{color:var(--muted)}
 .fusage p{margin:8px 0 0}
-.fusage.warn .bar i{background:var(--warn);opacity:1}
-.fusage.err .bar i,.meters .disk-full .bar i{background:var(--err);opacity:1}
+.fusage[data-level=warn] .bar i{background:var(--warn);opacity:1}
+.fusage[data-level=full] .bar i,.meters .disk-full .bar i{background:var(--err);opacity:1}
 .ftone{font-size:12.5px}
-.ftone.warn{color:var(--warn)}
-.ftone.err{color:var(--err)}
+.ftone[data-level=warn]{color:var(--warn)}
+.ftone[data-level=full]{color:var(--err)}
 .acard .ep .adisk .bar{flex:1;min-width:40px;height:4px;margin-left:4px}
-a.chip{text-decoration:none}
+a.chip,a.chip:hover{text-decoration:none}
+#diskfull{text-decoration:none}

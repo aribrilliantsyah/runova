@@ -102,7 +102,7 @@ export function renderGeneral(page) {
     const memLabel = stats ? `${fmtNum(stats.memory_bytes / 1048576)} / ${fmtMB(app.memory_mb)}` : `– / ${fmtMB(app.memory_mb)}`;
     const cpuLabel = stats ? `${fmtNum(stats.cpu_percent / 100)} / ${fmtNum(app.cpu_milli / 1000)} core` : `– / ${fmtNum(app.cpu_milli / 1000)} core`;
     const disk = diskMeter(app);
-    const diskRow = h("div", { class: disk.tone === "err" ? "disk-full" : "" }, h("div", { class: "t" }, h("b", {}, icon("hard-drive"), "Disk"), h("span", {}, disk.text)), bar(disk.percent, { hiAt: 80 }));
+    const diskRow = h("div", { class: disk.tone === "full" ? "disk-full" : "" }, h("div", { class: "t" }, h("b", {}, icon("hard-drive"), "Disk"), h("span", {}, disk.text)), bar(disk.percent, { hiAt: 80 }));
 
     const logPre = h("pre", { class: "log tail", "aria-label": "Log terbaru" });
     paintLog(logPre);

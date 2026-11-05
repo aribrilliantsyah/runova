@@ -28,16 +28,18 @@ async function cookieOf(username, password) {
   return r.headers.get("set-cookie").split(";")[0];
 }
 
-/** shoot(name): the page at 1550 and 360 wide, light and dark, into SHOTS. */
-async function shoot(name, { full = false } = {}) {
+/** shoot(name, {focus}): the page at 1550 and 360 wide, light and dark, into SHOTS; focus is scrolled into view. */
+async function shoot(name, { full = false, focus = "" } = {}) {
   if (!shots) return;
   fs.mkdirSync(shots, { recursive: true });
   for (const [w, h] of [[1550, 1000], [360, 780]]) {
     await page.setViewportSize({ width: w, height: h });
+    await page.waitForTimeout(300);
     for (const theme of ["light", "dark"]) {
       await page.evaluate((t) => document.documentElement.setAttribute("data-theme", t), theme);
       await page.waitForTimeout(150);
-      await page.screenshot({ path: path.join(shots, `${name}-${w}-${theme}.png`), fullPage: full });
+      if (focus) await page.locator(focus).evaluate((el) => el.scrollIntoView({ block: "center" }));
+      await page.screenshot({ path: path.join(shots, `${name}-${w}-${theme}.png`), fullPage: full && w > 400 });
     }
   }
   await page.setViewportSize({ width: 1550, height: 1000 });
@@ -77,7 +79,7 @@ try {
   await rows.nth(2).locator("button[aria-label='Hapus baris']").click();
   await page.waitForSelector(".dok");
   await store.scrollIntoViewIfNeeded();
-  await shoot("deploy-review-folders", { full: true });
+  await shoot("deploy-review-folders", { full: true, focus: "#d-store" });
 
   step("deploy runs");
   await page.click("#deploy");
@@ -140,7 +142,7 @@ try {
   await page.waitForSelector(".meters .disk-full");
   await shoot("disk-full-general");
   await page.click("[role=tab][data-tab='files']");
-  await page.waitForSelector("#fusage .ftone.err");
+  await page.waitForSelector("#fusage .ftone[data-level=full]");
   await shoot("disk-full-files");
   const bell = (await apiAs(admin, "GET", "/api/notifications")).body;
   const notes = bell.notifications || bell;

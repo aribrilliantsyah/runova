@@ -13,7 +13,7 @@ export function diskMeter(app) {
   const size = (app.disk_mb || 0) * 1048576;
   const p = size ? pct(used, size) : 0;
   const text = size ? `${fmtBytes(used)} / ${fmtMB(app.disk_mb)}` : `${fmtBytes(used)}, belum dibatasi`;
-  const tone = app.disk_level === "full" ? "err" : app.disk_level === "warn" ? "warn" : "";
+  const tone = app.disk_level === "full" ? "full" : app.disk_level === "warn" ? "warn" : "";
   return { text, percent: p, tone };
 }
 
@@ -145,11 +145,11 @@ export function renderFiles(page) {
     const warn = app.disk_level === "warn";
     return h(
       "div",
-      { class: `fusage ${m.tone}`.trim(), id: "fusage" },
+      { class: "fusage", "data-level": m.tone || null, id: "fusage" },
       h("div", { class: "t" }, h("b", {}, icon("hard-drive"), "Disk aplikasi"), h("span", {}, m.text)),
       bar(m.percent, { hiAt: 80 }),
-      full ? h("p", { class: "ftone err" }, "Disk penuh. Aplikasi tetap berjalan, tetapi deploy baru ditolak sampai ada file yang dihapus atau ukuran disk dinaikkan di tab Lanjutan.")
-        : warn ? h("p", { class: "ftone warn" }, "Disk hampir penuh. Hapus file yang tidak dipakai atau naikkan ukuran disk di tab Lanjutan.")
+      full ? h("p", { class: "ftone", "data-level": "full" }, "Disk penuh. Aplikasi tetap berjalan, tetapi deploy baru ditolak sampai ada file yang dihapus atau ukuran disk dinaikkan di tab Lanjutan.")
+        : warn ? h("p", { class: "ftone", "data-level": "warn" }, "Disk hampir penuh. Hapus file yang tidak dipakai atau naikkan ukuran disk di tab Lanjutan.")
         : h("p", { class: "hint" }, app.disk_scanned_at ? `Diukur ${fmtTime(app.disk_scanned_at)}; Runova mengukur ulang tiap 5 menit.` : "Belum diukur; Runova mengukur tiap 5 menit."),
     );
   }
