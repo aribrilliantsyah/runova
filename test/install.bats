@@ -172,6 +172,7 @@ line_of() { grep -n -m1 -- "$1" "$CALLS" | cut -d: -f1; }
 	grep -q 'CREATE ROLE runova LOGIN CREATEDB CREATEROLE' "$RUNOVA_ROOT/.psql-input"
 	grep -q 'GRANT EXECUTE ON FUNCTION pg_reload_conf() TO runova' "$RUNOVA_ROOT/.psql-input"
 	grep -q '172.30.0.0/16 scram-sha-256' "$RUNOVA_ROOT/etc/postgresql/18/main/pg_hba.d/runova.conf"
+	grep -q '^host all all 127.0.0.1/32 scram-sha-256$' "$RUNOVA_ROOT/etc/postgresql/18/main/pg_hba.d/runova.conf"
 	grep -q 'chown postgres:runova' "$CALLS"
 }
 

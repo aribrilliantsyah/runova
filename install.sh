@@ -559,6 +559,7 @@ EOF
 	if [[ ! -e $hba_d/runova.conf ]]; then
 		cat >"$hba_d/runova.conf" <<EOF
 # Managed by Runova; changes are overwritten.
+host all all 127.0.0.1/32 scram-sha-256
 host all all $RUNOVA_SUBNET scram-sha-256
 EOF
 		chown "postgres:$SERVICE_USER" "$hba_d/runova.conf"

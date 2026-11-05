@@ -33,8 +33,13 @@ func openDatabases(ctx context.Context, cfg config.Config, st *store.Store, box 
 		admin.Close()
 		return nil, nil, err
 	}
+	users, err := pg.NewUsers(cfg.PGDSN)
+	if err != nil {
+		admin.Close()
+		return nil, nil, err
+	}
 	svc := &dbs.Service{
-		Store: st, PG: admin, Box: box, BackupDir: cfg.BackupDir(),
+		Store: st, PG: admin, Users: users, Box: box, BackupDir: cfg.BackupDir(),
 		HBAPath: cfg.PGHBAPath, PGEnv: env, PGPort: port,
 	}
 

@@ -25,6 +25,7 @@ type Fake struct {
 	calls []string
 	roles map[string]Role
 	dbs   map[string]string // database → owner
+	users *Users
 
 	// PingErr and the other *Err fields make the matching call fail without changing state.
 	PingErr, EnsureRoleErr, SetConnLimitErr, SetPasswordErr, DropRoleErr      error

@@ -224,9 +224,9 @@ func (s *Service) Backup(ctx context.Context, u store.User, dbID int64) (Backup,
 	return s.BackupNow(ctx, d, true)
 }
 
-// Restore loads a backup into its database, replacing what is there. Other
-// connections are ended first. On failure the error is a *ToolError with the
-// start of pg_restore's stderr.
+// Restore loads a backup into its database, replacing what is there, with
+// the owner's role. Other connections are ended first. On failure the error
+// is a *ToolError with the start of pg_restore's stderr.
 func (s *Service) Restore(ctx context.Context, u store.User, dbID int64, backupID string) error {
 	d, err := s.owned(ctx, u, dbID)
 	if err != nil {
@@ -236,17 +236,11 @@ func (s *Service) Restore(ctx context.Context, u store.User, dbID int64, backupI
 	if err != nil {
 		return err
 	}
-	defer s.dbLock(d.Name)()
-	if err := s.PG.TerminateConnections(ctx, d.Name); err != nil {
-		return s.pgFail(ctx, "terminate connections of "+d.Name, err)
+	c, err := s.creds(ctx, u, d)
+	if err != nil {
+		return err
 	}
-	var stderr limitedBuffer
-	cmd := s.command(ctx, s.restoreBin(), "--clean", "--if-exists", "--no-owner", "--role="+u.Username, "-d", d.Name, path)
-	cmd.Stderr = &stderr
-	if err := cmd.Run(); err != nil {
-		return &ToolError{Tool: "pg_restore", Stderr: stderr.String(), Err: err}
-	}
-	return nil
+	return s.restoreFile(ctx, d, c, path)
 }
 
 // Prune removes backups older than seven days, manual ones included.

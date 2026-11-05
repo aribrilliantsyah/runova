@@ -1,0 +1,59 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>sqltools.js</title>
+<body>
+<script type="module">
+import { test, assert, eq, run } from "/test/harness.js";
+import { toCSV, historyKey, loadHistory, pushHistory, HISTORY_MAX, lineCount, resultSummary } from "/assets/js/components/sqltools.js";
+
+test("toCSV quotes what needs quoting and keeps NULL empty", () => {
+  const csv = toCSV([{ name: "id" }, { name: "memo, isi" }, { name: "x" }], [["1", 'kata "kutip"', null], ["2", "baris\nbaru", "=SUM(A1)"]]);
+  eq(csv, 'id,"memo, isi",x\r\n1,"kata ""kutip""",\r\n2,"baris\nbaru",\'=SUM(A1)\r\n');
+});
+
+test("toCSV defuses spreadsheet formulas", () => {
+  for (const v of ["=1+1", "+1+1", "-A1", "@SUM(A1)", "\tx", "\rx"]) {
+    const line = toCSV([{ name: "v" }], [[v]]).split("\r\n")[1];
+    assert(line.startsWith("'") || line.startsWith("\"'"), `${JSON.stringify(v)} → ${line}`);
+  }
+  eq(toCSV([{ name: "v" }], [["-12.5"]]).split("\r\n")[1], "-12.5", "plain negative numbers stay numbers");
+});
+
+test("history is per database, newest first, deduplicated and capped", () => {
+  const store = new Map();
+  const s = { getItem: (k) => store.get(k) ?? null, setItem: (k, v) => store.set(k, v) };
+  eq(loadHistory(7, s), []);
+  pushHistory(7, "SELECT 1", s);
+  pushHistory(7, "SELECT 2", s);
+  pushHistory(7, "  SELECT 1  ", s);
+  eq(loadHistory(7, s).map((x) => x.sql), ["SELECT 1", "SELECT 2"]);
+  eq(loadHistory(8, s), [], "other database");
+  for (let i = 0; i < HISTORY_MAX + 10; i++) pushHistory(7, `SELECT ${i + 100}`, s);
+  eq(loadHistory(7, s).length, HISTORY_MAX);
+  eq(loadHistory(7, s)[0].sql, `SELECT ${HISTORY_MAX + 109}`);
+  assert(historyKey(7) !== historyKey(8));
+});
+
+test("history survives broken storage", () => {
+  const bad = { getItem: () => "{not json", setItem: () => { throw new Error("quota"); } };
+  eq(loadHistory(1, bad), []);
+  pushHistory(1, "SELECT 1", bad);
+});
+
+test("lineCount counts lines including a trailing empty one", () => {
+  eq(lineCount(""), 1);
+  eq(lineCount("a"), 1);
+  eq(lineCount("a\nb"), 2);
+  eq(lineCount("a\n"), 2);
+});
+
+test("resultSummary names rows, affected rows and truncation", () => {
+  eq(resultSummary({ command: "SELECT", columns: [{}], rows: [[], []], duration_ms: 12 }), "SELECT · 2 baris · 12 ms");
+  eq(resultSummary({ command: "DELETE", columns: [], rows: [], affected: 3, duration_ms: 1 }), "DELETE · 3 baris terpengaruh · 1 ms");
+  eq(resultSummary({ command: "CREATE TABLE", columns: [], rows: [], affected: 0, duration_ms: 4 }), "CREATE TABLE · selesai · 4 ms");
+  eq(resultSummary({ command: "SELECT", columns: [{}], rows: new Array(1000).fill([]), truncated: true, duration_ms: 3 }), "SELECT · 1.000 baris pertama · 3 ms");
+});
+
+run();
+</script>
+</body>

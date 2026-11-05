@@ -81,7 +81,7 @@ for (const p of ["/api/apps", "/api/databases", "/api/info", "/api/notifications
   step("backup now, then restore needs the database name");
   await budi.click("button:has-text('Backup sekarang')");
   await budi.waitForSelector("#backupCard tbody tr");
-  await budi.click("#backupCard button:has-text('Restore')");
+  await budi.click("#backupCard tbody button:has-text('Restore')");
   await budi.fill(".dlg input", "wrong");
   check(await budi.locator(".dlg button[type=submit]").isDisabled(), "Restore must wait for the exact name");
   await budi.fill(".dlg input", "budi_billing");

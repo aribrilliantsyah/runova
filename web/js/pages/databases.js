@@ -1,11 +1,12 @@
 import * as api from "/assets/js/api.js";
-import { h, icon, fmtBytes, fmtDate, fmtDateTime, copyText, clear, fill } from "/assets/js/dom.js";
+import { h, icon, fmtBytes, fmtDate, fmtDateTime, copyText, fill, setBar } from "/assets/js/dom.js";
 import { act } from "/assets/js/components/act.js";
 import { dialog, confirm } from "/assets/js/components/dialog.js";
 import { pgLogo } from "/assets/js/kinds.js";
 import { dbSuffixError } from "/assets/js/validate.js";
 import * as session from "/assets/js/session.js";
 import { toast } from "/assets/js/toast.js";
+import { dbWork } from "/assets/js/components/dbwork.js";
 
 const POLL_MS = 5000;
 
@@ -168,26 +169,79 @@ export async function renderDatabases(root) {
       );
       return h("tr", {}, h("td", {}, fmtDateTime(b.at)), h("td", {}, b.manual ? h("span", { class: "chip" }, "manual") : h("span", { class: "muted" }, "otomatis")), h("td", { class: "num" }, fmtBytes(b.size_bytes)), h("td", { class: "num nowrap" }, dl, " ", restore));
     });
+    const exportBtn = h("a", { class: "btn sm", id: "exportBtn", href: `/api/databases/${d.id}/export`, download: "", "aria-disabled": data.pg_down ? "true" : null, title: "Unduh dump baru (pg_dump -Fc) dari isi database saat ini" }, icon("arrow-down-to-line"), "Export");
+    if (data.pg_down) exportBtn.addEventListener("click", (e) => e.preventDefault());
+    const fromFile = h("button", { class: "btn sm", type: "button", id: "restoreFileBtn", disabled: data.pg_down, onclick: () => restoreFromFile(d) }, icon("upload"), "Restore dari file");
     return h(
       "section",
       { class: "card backups", id: "backupCard" },
-      h("header", {}, h("div", {}, h("h3", {}, "Backup"), h("p", {}, "Otomatis tiap malam pukul 02:00, disimpan 7 hari.")), h("div", { class: "r" }, now)),
+      h("header", {}, h("div", { class: "hd" }, h("h3", {}, "Backup"), h("p", {}, "Otomatis tiap malam pukul 02:00, disimpan 7 hari.")), h("div", { class: "r" }, exportBtn, fromFile, now)),
       rows.length
         ? h("table", { class: "t" }, h("thead", {}, h("tr", {}, h("th", {}, "Waktu"), h("th", {}, "Jenis"), h("th", { class: "num" }, "Ukuran"), h("th", {}))), h("tbody", {}, rows))
         : h("div", { class: "bd muted" }, "Belum ada backup."),
     );
   }
 
+  function restoreFromFile(d) {
+    const limitMB = info.upload_limit_mb || 500;
+    const input = h("input", { type: "file", id: "restoreFile", accept: ".dump,application/octet-stream", class: "sr" });
+    const name = h("span", { class: "muted" }, "Belum ada file dipilih");
+    const pick = h("label", { class: "drop rdrop", for: "restoreFile" }, h("span", { class: "ic" }, icon("file-archive")), h("b", {}, "Pilih file .dump"), h("small", {}, `Format custom dari pg_dump -Fc, maksimal ${limitMB} MB`), name, input);
+    const bar = h("div", { class: "bar", hidden: true }, h("i"));
+    let file = null;
+    let job = null;
+    input.addEventListener("change", () => {
+      file = input.files[0] || null;
+      name.textContent = file ? `${file.name} · ${fmtBytes(file.size)}` : "Belum ada file dipilih";
+      name.className = file ? "mono" : "muted";
+    });
+    dialog({
+      title: `Restore ${d.name} dari file`,
+      submit: "Restore",
+      danger: true,
+      confirmWord: d.name,
+      body: [
+        h("p", {}, "Isi database diganti dengan isi file. Objek yang ada di file dihapus lalu dibuat ulang; koneksi yang sedang terbuka diputus. Restore berjalan dengan akun database milikmu, jadi pemilik objek tetap kamu."),
+        pick,
+        bar,
+        h("div", { class: "gnote" }, icon("info"), h("span", {}, "Buat file dengan ", h("b", { class: "mono" }, `pg_dump -Fc -d <database> -f data.dump`), ". File .sql biasa tidak bisa dipakai.")),
+      ],
+      onSubmit: async () => {
+        if (!file) throw new Error("Pilih file .dump dulu");
+        if (file.size > limitMB * 1024 * 1024) throw new Error(`File melebihi batas ${limitMB} MB`);
+        bar.hidden = false;
+        job = api.upload(`/api/databases/${d.id}/restore-upload`, file, (p) => setBar(bar, p * 100), { confirm: d.name });
+        await job.promise;
+        toast(`${d.name} di-restore dari ${file.name}`);
+        work?.reload();
+        await loadConn();
+      },
+    }).then((ok) => {
+      if (!ok) job?.abort();
+    });
+  }
+
+  // Cards, connection and backups re-render on every change; the workspace
+  // between them keeps its own state and is only rebuilt for another database.
+  const top = h("div");
+  const workSlot = h("div", { id: "workSlot" });
+  const bottom = h("div");
+  let work = null;
+  let workID = null;
+
   function render() {
     countChip.textContent = `${data.used} dari ${data.limit} database`;
     newBtn.disabled = blocked();
     newBtn.title = full() ? "Batas database tercapai" : data.pg_down ? "PostgreSQL tidak bisa diakses" : "";
-    if (!data.databases.length) {
-      fill(body, data.pg_down ? pgDownBanner() : null, h("div", { class: "dbgrid" }, newCard()));
-      return;
-    }
+    if (top.parentNode !== body) fill(body, top, workSlot, bottom);
     const sel = data.databases.find((d) => d.id === selected);
-    fill(body, data.pg_down ? pgDownBanner() : null, h("div", { class: "dbgrid" }, data.databases.map(card), newCard()), sel ? [connCard(sel), backupCard(sel)] : null);
+    fill(top, data.pg_down ? pgDownBanner() : null, h("div", { class: "dbgrid" }, data.databases.map(card), newCard()));
+    fill(bottom, sel ? [connCard(sel), backupCard(sel)] : null);
+    if ((sel?.id ?? null) !== workID) {
+      workID = sel?.id ?? null;
+      work = sel ? dbWork(sel, { pgDown: () => data.pg_down }) : null;
+      fill(workSlot, work?.el);
+    }
   }
 
   const pgDownBanner = () => h("div", { class: "banner warn", role: "status" }, icon("triangle-alert"), h("span", {}, "PostgreSQL tidak bisa diakses. Daftar tampil dari catatan Runova; ukuran dan koneksi mungkin tidak terbaru."));

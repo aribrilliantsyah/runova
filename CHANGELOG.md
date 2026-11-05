@@ -14,9 +14,14 @@ Upgrade any server with `sudo runova update` (servers on 0.2.0 or older: run the
 - Preview panel: PNG/JPEG/GIF/WebP images and text files up to 1 MB (line numbers), with size, detected type, time and paths. SVG, PDF and other files are download only.
 - Footer with item count, folder size and the app's disk bar (warning at 80 %, full at 100 %). Phones get compact rows and an action sheet.
 - API: `POST /api/apps/{id}/files/folder`, `POST …/files/move`, `GET …/files/zip`, `GET …/files/info`, `GET …/files/preview`; multi-file upload. Activity: `file.rename`, `file.mkdir`.
+- **Tabel and Query on the Database page.** After choosing a database: its tables (rows, size, columns with type, null, default and primary key), a table's rows 100 per page, Kosongkan (truncate) and Hapus tabel (drop) with the table name typed to confirm.
+- Query editor with line numbers and Ctrl+Enter: Baca mode (SELECT, WITH, EXPLAIN, SHOW in a read-only transaction, 10 s) or Tulis mode (also INSERT, UPDATE, DELETE, TRUNCATE, CREATE/ALTER/DROP TABLE or INDEX, 30 s). One statement per run, results up to 1,000 rows / 5 MB, rows affected for DML, PostgreSQL errors with the line. History of the last 50 queries per database in the browser; result as CSV.
+- Restore a database from an uploaded `pg_dump -Fc` file (up to the upload limit, database name typed to confirm) and **Export** a fresh dump as a download.
+- API: `GET /api/databases/{id}/tables`, `GET …/tables/{table}/data`, `POST …/tables/{table}/truncate`, `DELETE …/tables/{table}`, `POST …/query`, `POST …/restore-upload`, `GET …/export`. Activity: `db.query`, `db.table_truncate`, `db.table_drop`, `db.restore_upload`, `db.export`.
 
 ### Changed
 - `DELETE /api/apps/{id}/files` takes `{"paths": [...]}`; one refused path removes nothing.
+- The panel's own PostgreSQL work in a user's database (tables, queries, restores, exports) logs in as that user's role over `127.0.0.1`, never through Runova's role; restoring a stored backup does too. Runova's `pg_hba.d/runova.conf` now always allows `127.0.0.1/32` with `scram-sha-256`.
 - Lanjutan cards share one layout: title and description on the left, save action at the right of the card footer.
 
 ### Fixed

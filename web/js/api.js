@@ -60,10 +60,11 @@ export const put = (path, body) => request("PUT", path, body);
 export const del = (path, body = {}) => request("DELETE", path, body);
 
 /**
- * upload(path, file, onProgress) → {promise, abort}. A multipart POST through
- * XHR, because fetch cannot report upload progress. onProgress gets 0..1.
+ * upload(path, file, onProgress, fields) → {promise, abort}. A multipart POST through
+ * XHR, because fetch cannot report upload progress. onProgress gets 0..1. fields are
+ * sent before the file, so the server can check them before it reads the file.
  */
-export function upload(path, file, onProgress) {
+export function upload(path, file, onProgress, fields = {}) {
   const xhr = new XMLHttpRequest();
   const promise = new Promise((resolve, reject) => {
     xhr.open("POST", path);
@@ -84,6 +85,7 @@ export function upload(path, file, onProgress) {
     xhr.onerror = () => reject(new ApiError(0, "Unggahan terputus"));
     xhr.onabort = () => reject(new ApiError(0, "Unggahan dibatalkan"));
     const form = new FormData();
+    for (const [k, v] of Object.entries(fields)) form.append(k, v);
     form.append("file", file);
     xhr.send(form);
   });
