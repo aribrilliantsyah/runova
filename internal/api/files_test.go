@@ -1,6 +1,9 @@
 package api_test
 
 import (
+	"archive/zip"
+	"bytes"
+	"mime/multipart"
 	"os"
 	"path/filepath"
 	"strings"
@@ -71,7 +74,7 @@ func TestFilesAPI(t *testing.T) {
 	if r := andi.raw("GET", appPath(id, "/files/download?path=notes.txt"), "", nil, nil); r.status != 404 {
 		t.Errorf("andi downloads budi's file: %d %s", r.status, r.body)
 	}
-	if r := andi.do("DELETE", appPath(id, "/files"), obj{"path": "notes.txt"}); r.status != 404 {
+	if r := andi.do("DELETE", appPath(id, "/files"), obj{"paths": []string{"notes.txt"}}); r.status != 404 {
 		t.Errorf("andi deletes budi's file: %d", r.status)
 	}
 	ct, body = multipartBody(t, "file", "x.txt", []byte("x"))
@@ -88,13 +91,13 @@ func TestFilesAPI(t *testing.T) {
 		t.Errorf("upload beyond the app's disk: %d %s", r.status, r.body)
 	}
 
-	if r := budi.do("DELETE", appPath(id, "/files"), obj{"path": "notes.txt"}); r.status != 200 {
+	if r := budi.do("DELETE", appPath(id, "/files"), obj{"paths": []string{"notes.txt"}}); r.status != 200 {
 		t.Fatalf("delete: %d %s", r.status, r.body)
 	}
 	if _, err := os.Stat(filepath.Join(data, "notes.txt")); !os.IsNotExist(err) {
 		t.Errorf("deleted file still there: %v", err)
 	}
-	if r := budi.do("DELETE", appPath(id, "/files"), obj{"path": "storage"}); r.status != 400 {
+	if r := budi.do("DELETE", appPath(id, "/files"), obj{"paths": []string{"storage"}}); r.status != 400 {
 		t.Errorf("delete a saved folder: %d", r.status)
 	}
 
@@ -107,6 +110,151 @@ func TestFilesAPI(t *testing.T) {
 	}
 	if strings.Join(seen, ",") != "file.delete notes.txt,file.upload storage/foto.png" {
 		t.Errorf("activity = %v", seen)
+	}
+}
+
+func TestFileManagerAPI(t *testing.T) {
+	e := newAppEnv(t, 0)
+	e.addUser("budi", "budi-password-1", store.RoleUser)
+	e.addUser("andi", "andi-password-1", store.RoleUser)
+	budi := e.login("budi", "budi-password-1")
+	andi := e.login("andi", "andi-password-1")
+	id, _ := budi.createApp("starboom", obj{"folders": []obj{{"path": "/app/storage"}}, "disk_mb": 64})
+	budi.waitStatus(id, "running")
+	data := filepath.Join(e.dataDir, "data", "budi", "starboom")
+	src := filepath.Join(e.dataDir, "mounts", "budi", "starboom", "storage")
+	png := []byte("\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01\x08\x06\x00\x00\x00")
+	for name, b := range map[string][]byte{"logo.png": png, "page.png": []byte("<html><script>alert(1)</script>"), "icon.svg": []byte(`<svg xmlns="http://www.w3.org/2000/svg"></svg>`), "notes.txt": []byte("halo")} {
+		if err := os.WriteFile(filepath.Join(data, name), b, 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := os.Symlink("/etc", filepath.Join(data, "etc")); err != nil {
+		t.Fatal(err)
+	}
+
+	// Several files in one upload.
+	var buf bytes.Buffer
+	mw := multipart.NewWriter(&buf)
+	for _, n := range []string{"a.txt", "b.txt"} {
+		fw, _ := mw.CreateFormFile("file", n)
+		fw.Write([]byte(n))
+	}
+	mw.Close()
+	if r := budi.raw("POST", appPath(id, "/files?path=storage"), mw.FormDataContentType(), &buf, nil); r.status != 201 || !strings.Contains(string(r.body), `"saved":2`) {
+		t.Fatalf("multi upload: %d %s", r.status, r.body)
+	}
+
+	// Preview: whitelisted images inline with their sniffed type, sandboxed; text as text/plain.
+	r := budi.raw("GET", appPath(id, "/files/preview?path=logo.png"), "", nil, nil)
+	if r.status != 200 || r.header.Get("Content-Type") != "image/png" || r.header.Get("X-Content-Type-Options") != "nosniff" || !strings.Contains(r.header.Get("Content-Security-Policy"), "sandbox") || !strings.HasPrefix(r.header.Get("Content-Disposition"), "inline") {
+		t.Fatalf("image preview: %d %v", r.status, r.header)
+	}
+	r = budi.raw("GET", appPath(id, "/files/preview?path=page.png"), "", nil, nil)
+	if r.status != 200 || r.header.Get("Content-Type") != "text/plain; charset=utf-8" {
+		t.Errorf("HTML named .png: %d %v (must be plain text, never HTML or an image)", r.status, r.header)
+	}
+	for _, p := range []string{"icon.svg", "etc%2Fpasswd", "..%2Frunova.db", "storage"} {
+		if r := budi.raw("GET", appPath(id, "/files/preview?path="+p), "", nil, nil); r.status == 200 {
+			t.Errorf("preview %s = 200 %s", p, r.header.Get("Content-Type"))
+		}
+	}
+	var info struct {
+		MIME    string `json:"mime"`
+		Preview string `json:"preview"`
+	}
+	budi.do("GET", appPath(id, "/files/info?path=icon.svg"), nil).into(t, &info)
+	if info.MIME != "image/svg+xml" || info.Preview != "" {
+		t.Errorf("svg info = %+v", info)
+	}
+
+	// New folder, rename, move; existing names and saved folders refused.
+	if r := budi.do("POST", appPath(id, "/files/folder"), obj{"path": "", "name": "docs"}); r.status != 201 {
+		t.Fatalf("mkdir: %d %s", r.status, r.body)
+	}
+	for _, c := range []obj{{"path": "", "name": "docs"}, {"path": "", "name": "../x"}, {"path": "etc", "name": "x"}, {"path": "..", "name": "x"}} {
+		if r := budi.do("POST", appPath(id, "/files/folder"), c); r.status != 400 {
+			t.Errorf("mkdir %v: %d", c, r.status)
+		}
+	}
+	if r := budi.do("POST", appPath(id, "/files/move"), obj{"from": "notes.txt", "to": "docs/catatan.txt"}); r.status != 200 {
+		t.Fatalf("move: %d %s", r.status, r.body)
+	}
+	for _, c := range []obj{{"from": "logo.png", "to": "docs/catatan.txt"}, {"from": "storage", "to": "media"}, {"from": "logo.png", "to": "storage"}, {"from": "logo.png", "to": "../logo.png"}, {"from": "etc/passwd", "to": "passwd"}} {
+		if r := budi.do("POST", appPath(id, "/files/move"), c); r.status != 400 {
+			t.Errorf("move %v: %d %s", c, r.status, r.body)
+		}
+	}
+	if r := andi.do("POST", appPath(id, "/files/move"), obj{"from": "logo.png", "to": "x.png"}); r.status != 404 {
+		t.Errorf("andi moves: %d", r.status)
+	}
+	if r := andi.do("POST", appPath(id, "/files/folder"), obj{"path": "", "name": "x"}); r.status != 404 {
+		t.Errorf("andi mkdir: %d", r.status)
+	}
+	if r := andi.raw("GET", appPath(id, "/files/preview?path=logo.png"), "", nil, nil); r.status != 404 {
+		t.Errorf("andi previews: %d", r.status)
+	}
+	if r := andi.raw("GET", appPath(id, "/files/zip?path=logo.png"), "", nil, nil); r.status != 404 {
+		t.Errorf("andi zips: %d", r.status)
+	}
+
+	// Zip of a selection: the links are left out.
+	r = budi.raw("GET", appPath(id, "/files/zip?path=docs&path=storage&path=etc"), "", nil, nil)
+	if r.status != 200 || r.header.Get("Content-Type") != "application/zip" || !strings.Contains(r.header.Get("Content-Disposition"), "starboom.zip") {
+		t.Fatalf("zip: %d %v %s", r.status, r.header, r.body)
+	}
+	zr, err := zip.NewReader(bytes.NewReader(r.body), int64(len(r.body)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var names []string
+	for _, f := range zr.File {
+		names = append(names, f.Name)
+	}
+	if strings.Join(names, ",") != "docs/,docs/catatan.txt,storage/,storage/a.txt,storage/b.txt" {
+		t.Errorf("zip entries = %v", names)
+	}
+	if r := budi.raw("GET", appPath(id, "/files/zip?path=..%2F"), "", nil, nil); r.status != 400 {
+		t.Errorf("zip outside: %d", r.status)
+	}
+
+	// Delete several at once.
+	if r := budi.do("DELETE", appPath(id, "/files"), obj{"paths": []string{"logo.png", "storage/a.txt"}}); r.status != 200 {
+		t.Fatalf("delete many: %d %s", r.status, r.body)
+	}
+	if _, err := os.Stat(filepath.Join(src, "a.txt")); !os.IsNotExist(err) {
+		t.Errorf("storage/a.txt still there: %v", err)
+	}
+
+	acts, _ := e.store.ActivityList(t.Context(), store.ActivityFilter{})
+	seen := map[string]bool{}
+	for _, a := range acts {
+		seen[a.Action] = true
+	}
+	for _, want := range []string{store.ActFileUpload, store.ActFileMkdir, store.ActFileRename, store.ActFileDelete} {
+		if !seen[want] {
+			t.Errorf("activity lacks %s", want)
+		}
+	}
+}
+
+func TestZipDownloadLimit(t *testing.T) {
+	e := newAppEnv(t, 0)
+	e.addUser("budi", "budi-password-1", store.RoleUser)
+	budi := e.login("budi", "budi-password-1")
+	id, _ := budi.createApp("starboom", obj{"disk_mb": 64})
+	budi.waitStatus(id, "running")
+	s, _ := e.store.Settings(t.Context())
+	s.UploadLimitMB = 1
+	if err := e.store.SetSettings(t.Context(), s); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(e.dataDir, "data", "budi", "starboom", "big.bin"), make([]byte, 4<<20+1), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	r := budi.raw("GET", appPath(id, "/files/zip?path=big.bin"), "", nil, nil)
+	if r.status != 400 || !strings.Contains(r.errMsg(t), "melebihi batas 4 MB") {
+		t.Errorf("zip over 4× the upload limit: %d %s", r.status, r.body)
 	}
 }
 

@@ -1,9 +1,12 @@
 package apps_test
 
 import (
+	"archive/zip"
+	"bytes"
 	"context"
 	"errors"
 	"io"
+	"maps"
 	"os"
 	"path/filepath"
 	"slices"
@@ -324,15 +327,15 @@ func TestFilesBrowseDownloadDeleteUpload(t *testing.T) {
 			t.Errorf("ListFiles(%q) succeeded", p)
 		}
 	}
-	if err := e.svc.DeleteFile(ctx, u, app.ID, "escape/secret"); err == nil {
+	if err := e.svc.DeleteFiles(ctx, u, app.ID, []string{"escape/secret"}); err == nil {
 		t.Error("deleted through a link")
 	}
 	if _, err := os.Stat(outside + "/secret"); err != nil {
 		t.Fatalf("file outside the workspace is gone: %v", err)
 	}
 	for _, p := range []string{"", ".", "storage"} {
-		if err := e.svc.DeleteFile(ctx, u, app.ID, p); !errors.Is(err, apps.ErrValidation) {
-			t.Errorf("DeleteFile(%q) = %v, want refused (workspace or saved folder itself)", p, err)
+		if err := e.svc.DeleteFiles(ctx, u, app.ID, []string{p}); !errors.Is(err, apps.ErrValidation) {
+			t.Errorf("DeleteFiles(%q) = %v, want refused (workspace or saved folder itself)", p, err)
 		}
 	}
 
@@ -342,7 +345,7 @@ func TestFilesBrowseDownloadDeleteUpload(t *testing.T) {
 	if _, _, err := e.svc.OpenFile(ctx, other, app.ID, "notes.txt"); !errors.Is(err, apps.ErrAppNotFound) {
 		t.Errorf("another user downloads: %v", err)
 	}
-	if err := e.svc.DeleteFile(ctx, other, app.ID, "notes.txt"); !errors.Is(err, apps.ErrAppNotFound) {
+	if err := e.svc.DeleteFiles(ctx, other, app.ID, []string{"notes.txt"}); !errors.Is(err, apps.ErrAppNotFound) {
 		t.Errorf("another user deletes: %v", err)
 	}
 	if _, err := e.svc.ListFiles(ctx, admin, app.ID, ""); err != nil {
@@ -374,14 +377,14 @@ func TestFilesBrowseDownloadDeleteUpload(t *testing.T) {
 		t.Errorf("a refused upload left its file: %v", err)
 	}
 
-	if err := e.svc.DeleteFile(ctx, u, app.ID, "storage/foto.png"); err != nil {
+	if err := e.svc.DeleteFiles(ctx, u, app.ID, []string{"storage/foto.png"}); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := os.Stat(src + "/foto.png"); !os.IsNotExist(err) {
 		t.Errorf("deleted file still there: %v", err)
 	}
 	writeFile(t, data+"/dir/sub/f", 1)
-	if err := e.svc.DeleteFile(ctx, u, app.ID, "dir"); err != nil {
+	if err := e.svc.DeleteFiles(ctx, u, app.ID, []string{"dir"}); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := os.Stat(data + "/dir"); !os.IsNotExist(err) {
@@ -398,5 +401,324 @@ func TestDeleteAppRemovesMountedFolders(t *testing.T) {
 	}
 	if _, err := os.Stat(e.svc.DataDir + "/mounts/budi/starboom"); !os.IsNotExist(err) {
 		t.Errorf("mounted folders survived Delete: %v", err)
+	}
+}
+
+// filesEnv deploys starboom with a mounted saved folder (storage) and a relative one (public/uploads),
+// plus a link out of the workspace, and returns the app and its two host folders.
+func filesEnv(t *testing.T) (e *testEnv, u store.User, app store.App, data, src, outside string) {
+	t.Helper()
+	e = newTestEnv(t)
+	u = e.addUser("budi", store.RoleUser, roomyQuota)
+	app, _ = deployFirstWith(t, e, u, "starboom", folderReport("svc", folders.Folder{Path: "/app/storage", Dir: "storage"}, folders.Folder{Path: "public/uploads", Dir: "public/uploads"}), apps.CreateInput{DiskMB: 64})
+	data = e.svc.DataDir + "/data/budi/starboom"
+	src = e.svc.DataDir + "/mounts/budi/starboom/storage"
+	outside = t.TempDir()
+	writeFile(t, outside+"/secret", 3)
+	if err := os.Symlink(outside, data+"/escape"); err != nil {
+		t.Fatal(err)
+	}
+	return
+}
+
+func TestFilesMakeDir(t *testing.T) {
+	ctx := context.Background()
+	e, u, app, data, src, outside := filesEnv(t)
+	other := e.addUser("andi", store.RoleUser, roomyQuota)
+
+	if err := e.svc.MakeDir(ctx, u, app.ID, "", "laporan"); err != nil {
+		t.Fatal(err)
+	}
+	if fi, err := os.Stat(data + "/laporan"); err != nil || !fi.IsDir() {
+		t.Fatalf("folder not created: %v", err)
+	}
+	if got := e.chowned[data+"/laporan"]; got != 100000+int(u.ID) {
+		t.Errorf("new folder chowned to %d", got)
+	}
+	if err := e.svc.MakeDir(ctx, u, app.ID, "storage", "2026"); err != nil {
+		t.Fatal(err)
+	}
+	if fi, err := os.Stat(src + "/2026"); err != nil || !fi.IsDir() {
+		t.Fatalf("folder in the mounted folder: %v", err)
+	}
+	if err := e.svc.MakeDir(ctx, u, app.ID, "", "laporan"); !errors.Is(err, apps.ErrValidation) {
+		t.Errorf("existing name: %v", err)
+	}
+	for _, c := range []struct{ dir, name string }{
+		{"", ""}, {"", "."}, {"", ".."}, {"", "a/b"}, {"", "a\\b"}, {"", "x\x00"}, {"", strings.Repeat("a", 256)},
+		{"..", "x"}, {"/etc", "x"}, {"storage/../..", "x"}, {"escape", "x"}, {"nope", "x"},
+	} {
+		if err := e.svc.MakeDir(ctx, u, app.ID, c.dir, c.name); err == nil {
+			t.Errorf("MakeDir(%q, %q) succeeded", c.dir, c.name)
+		}
+	}
+	if _, err := os.Stat(outside + "/x"); !os.IsNotExist(err) {
+		t.Errorf("created through a link: %v", err)
+	}
+	if err := e.svc.MakeDir(ctx, other, app.ID, "", "x"); !errors.Is(err, apps.ErrAppNotFound) {
+		t.Errorf("another user: %v", err)
+	}
+	if acts := fileActs(t, e); !slices.Contains(acts, "file.mkdir laporan") || !slices.Contains(acts, "file.mkdir storage/2026") {
+		t.Errorf("activity = %v", acts)
+	}
+}
+
+func fileActs(t *testing.T, e *testEnv) []string {
+	t.Helper()
+	list, err := e.store.ActivityList(context.Background(), store.ActivityFilter{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var out []string
+	for _, a := range list {
+		if strings.HasPrefix(a.Action, "file.") {
+			out = append(out, a.Action+" "+a.Detail)
+		}
+	}
+	return out
+}
+
+func TestFilesMove(t *testing.T) {
+	ctx := context.Background()
+	e, u, app, data, src, outside := filesEnv(t)
+	other := e.addUser("andi", store.RoleUser, roomyQuota)
+	writeFile(t, data+"/a.txt", 3)
+	writeFile(t, data+"/b.txt", 4)
+	writeFile(t, data+"/docs/c.txt", 5)
+	writeFile(t, src+"/foto.png", 7)
+
+	// Rename in place, move into a folder, move across into the mounted folder and back out.
+	if err := e.svc.MoveFile(ctx, u, app.ID, "a.txt", "catatan.txt"); err != nil {
+		t.Fatal(err)
+	}
+	if err := e.svc.MoveFile(ctx, u, app.ID, "catatan.txt", "docs/catatan.txt"); err != nil {
+		t.Fatal(err)
+	}
+	if err := e.svc.MoveFile(ctx, u, app.ID, "docs", "storage/docs"); err != nil {
+		t.Fatal(err)
+	}
+	if b, err := os.ReadFile(src + "/docs/catatan.txt"); err != nil || len(b) != 3 {
+		t.Fatalf("moved into the mounted folder: %d bytes, %v", len(b), err)
+	}
+	if err := e.svc.MoveFile(ctx, u, app.ID, "storage/foto.png", "public/uploads/foto.png"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(data + "/public/uploads/foto.png"); err != nil {
+		t.Fatalf("moved out of the mounted folder: %v", err)
+	}
+
+	refused := []struct{ from, to string }{
+		{"b.txt", "storage/docs/catatan.txt"}, // destination exists
+		{"b.txt", "storage"},                  // a saved folder
+		{"b.txt", "public/uploads"},           // a saved folder
+		{"storage", "media"},                  // moving a saved folder
+		{"public/uploads", "up"},              // moving a saved folder
+		{"public", "pub"},                     // holds a saved folder
+		{"", "x"},
+		{"storage/docs", "storage/docs/in"}, // into itself
+		{"b.txt", "nope/b.txt"},             // no such folder
+		{"b.txt", "escape/b.txt"},           // through a link
+		{"escape/secret", "secret"},         // out through a link
+		{"../x", "x"}, {"b.txt", "../b.txt"}, {"b.txt", "/tmp/b.txt"}, {"b.txt", "storage/../../b.txt"},
+		{"b.txt", "a/.."}, {"b.txt", "x\x00"}, {"b.txt", "a\\b"}, {"b.txt", strings.Repeat("a", 256)},
+		{"missing", "x"},
+	}
+	for _, c := range refused {
+		if err := e.svc.MoveFile(ctx, u, app.ID, c.from, c.to); err == nil {
+			t.Errorf("MoveFile(%q, %q) succeeded", c.from, c.to)
+		}
+	}
+	if b, err := os.ReadFile(data + "/b.txt"); err != nil || len(b) != 4 {
+		t.Errorf("a refused move touched b.txt: %v", err)
+	}
+	if b, err := os.ReadFile(src + "/docs/catatan.txt"); err != nil || len(b) != 3 {
+		t.Errorf("an existing destination was replaced: %d bytes, %v", len(b), err)
+	}
+	if _, err := os.Stat(outside + "/secret"); err != nil {
+		t.Errorf("the file outside the workspace moved: %v", err)
+	}
+	if err := e.svc.MoveFile(ctx, other, app.ID, "b.txt", "c.txt"); !errors.Is(err, apps.ErrAppNotFound) {
+		t.Errorf("another user: %v", err)
+	}
+	if acts := fileActs(t, e); !slices.Contains(acts, "file.rename a.txt → catatan.txt") {
+		t.Errorf("activity = %v", acts)
+	}
+}
+
+func TestFilesDeleteMany(t *testing.T) {
+	ctx := context.Background()
+	e, u, app, data, src, outside := filesEnv(t)
+	writeFile(t, data+"/a.txt", 3)
+	writeFile(t, data+"/dir/sub/f", 1)
+	writeFile(t, src+"/foto.png", 7)
+
+	// One bad path refuses the whole request before anything is removed.
+	for _, bad := range [][]string{{"a.txt", "storage"}, {"a.txt", "public"}, {"a.txt", ""}, {"a.txt", "escape/secret"}, {"a.txt", "../x"}, {}} {
+		if err := e.svc.DeleteFiles(ctx, u, app.ID, bad); err == nil {
+			t.Errorf("DeleteFiles(%q) succeeded", bad)
+		}
+	}
+	if _, err := os.Stat(data + "/a.txt"); err != nil {
+		t.Fatalf("a refused request removed a.txt: %v", err)
+	}
+	if _, err := os.Stat(outside + "/secret"); err != nil {
+		t.Fatalf("file outside the workspace is gone: %v", err)
+	}
+	if err := e.svc.DeleteFiles(ctx, u, app.ID, []string{"a.txt", "dir", "storage/foto.png", "escape"}); err != nil {
+		t.Fatal(err)
+	}
+	for _, p := range []string{data + "/a.txt", data + "/dir", src + "/foto.png", data + "/escape"} {
+		if _, err := os.Lstat(p); !os.IsNotExist(err) {
+			t.Errorf("%s still there: %v", p, err)
+		}
+	}
+	if _, err := os.Stat(outside + "/secret"); err != nil {
+		t.Errorf("deleting the link removed its target: %v", err)
+	}
+	if acts := fileActs(t, e); !slices.Contains(acts, "file.delete storage/foto.png") || !slices.Contains(acts, "file.delete dir") {
+		t.Errorf("activity = %v", acts)
+	}
+}
+
+func TestFilesZip(t *testing.T) {
+	ctx := context.Background()
+	e, u, app, data, src, _ := filesEnv(t)
+	other := e.addUser("andi", store.RoleUser, roomyQuota)
+	if err := os.WriteFile(data+"/a.txt", []byte("halo"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	writeFile(t, data+"/docs/sub/b.bin", 10)
+	if err := os.Symlink("/etc", data+"/docs/etc-link"); err != nil {
+		t.Fatal(err)
+	}
+	writeFile(t, src+"/foto.png", 7)
+
+	read := func(plan *apps.ZipPlan) map[string]int {
+		t.Helper()
+		var buf bytes.Buffer
+		if err := plan.Write(&buf); err != nil {
+			t.Fatal(err)
+		}
+		zr, err := zip.NewReader(bytes.NewReader(buf.Bytes()), int64(buf.Len()))
+		if err != nil {
+			t.Fatal(err)
+		}
+		out := map[string]int{}
+		for _, f := range zr.File {
+			rc, err := f.Open()
+			if err != nil {
+				t.Fatal(err)
+			}
+			b, _ := io.ReadAll(rc)
+			rc.Close()
+			out[f.Name] = len(b)
+		}
+		return out
+	}
+
+	plan, err := e.svc.PrepareZip(ctx, u, app.ID, []string{"a.txt", "docs", "escape"}, 1<<20)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := read(plan)
+	want := map[string]int{"a.txt": 4, "docs/": 0, "docs/sub/": 0, "docs/sub/b.bin": 10}
+	if !maps.Equal(got, want) {
+		t.Errorf("zip = %v, want %v (links are left out)", got, want)
+	}
+	if plan.Name != "starboom.zip" || plan.Size != 14 {
+		t.Errorf("plan name %q size %d", plan.Name, plan.Size)
+	}
+
+	// The whole workspace includes the mounted folder's files under its workspace name.
+	plan, err = e.svc.PrepareZip(ctx, u, app.ID, []string{""}, 1<<20)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := read(plan); got["starboom/storage/foto.png"] != 7 || got["starboom/a.txt"] != 4 {
+		t.Errorf("workspace zip = %v", got)
+	}
+	plan, err = e.svc.PrepareZip(ctx, u, app.ID, []string{"storage"}, 1<<20)
+	if err != nil || plan.Name != "storage.zip" {
+		t.Fatalf("one folder: %+v %v", plan, err)
+	}
+
+	if _, err := e.svc.PrepareZip(ctx, u, app.ID, []string{"a.txt", "docs"}, 13); !errors.Is(err, apps.ErrValidation) || !strings.Contains(err.Error(), "melebihi") {
+		t.Errorf("over the limit: %v", err)
+	}
+	for _, bad := range [][]string{{}, {"../x"}, {"escape/secret"}, {"a.txt", "docs/sub/b.bin"}, {"missing"}, {"a.txt", "a.txt"}} {
+		if _, err := e.svc.PrepareZip(ctx, u, app.ID, bad, 1<<20); err == nil {
+			t.Errorf("PrepareZip(%q) succeeded", bad)
+		}
+	}
+	if _, err := e.svc.PrepareZip(ctx, other, app.ID, []string{"a.txt"}, 1<<20); !errors.Is(err, apps.ErrAppNotFound) {
+		t.Errorf("another user: %v", err)
+	}
+}
+
+func TestFileInfoDetectsTypeAndPreview(t *testing.T) {
+	ctx := context.Background()
+	e, u, app, data, _, _ := filesEnv(t)
+	png := []byte("\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01\x08\x06\x00\x00\x00")
+	files := map[string][]byte{
+		"logo.png":   png,
+		"fake.png":   []byte("<html><script>alert(1)</script></html>"),
+		"icon.svg":   []byte(`<svg xmlns="http://www.w3.org/2000/svg"><script>alert(1)</script></svg>`),
+		"notes.txt":  []byte("halo\ndunia\n"),
+		"conf.json":  []byte(`{"a":1}`),
+		"doc.pdf":    []byte("%PDF-1.7\n"),
+		"data.bin":   {0, 1, 2, 3, 0, 0, 7},
+		"pic.gif":    []byte("GIF89a\x01\x00\x01\x00"),
+		"huge.log":   bytes.Repeat([]byte("x"), 1<<20+1),
+		"photo.webp": []byte("RIFF\x00\x00\x00\x00WEBPVP8 "),
+	}
+	for name, b := range files {
+		if err := os.WriteFile(data+"/"+name, b, 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	cases := []struct{ name, mime, preview string }{
+		{"logo.png", "image/png", "image"},
+		{"pic.gif", "image/gif", "image"},
+		{"photo.webp", "image/webp", "image"},
+		{"fake.png", "text/html; charset=utf-8", "text"}, // sniffed, never trusted from the name
+		{"icon.svg", "image/svg+xml", ""},                // never rendered; download only
+		{"notes.txt", "text/plain; charset=utf-8", "text"},
+		{"conf.json", "text/plain; charset=utf-8", "text"},
+		{"doc.pdf", "application/pdf", ""},
+		{"data.bin", "application/octet-stream", ""},
+		{"huge.log", "text/plain; charset=utf-8", ""}, // text over 1 MB
+	}
+	for _, c := range cases {
+		got, err := e.svc.FileInfo(ctx, u, app.ID, c.name)
+		if err != nil {
+			t.Fatalf("%s: %v", c.name, err)
+		}
+		if got.MIME != c.mime || got.Preview != c.preview || got.Size != int64(len(files[c.name])) || got.Name != c.name {
+			t.Errorf("%s: %+v, want mime %q preview %q", c.name, got, c.mime, c.preview)
+		}
+	}
+	for _, p := range []string{"escape/secret", "escape", "../x", "", "public"} {
+		if _, err := e.svc.FileInfo(ctx, u, app.ID, p); err == nil {
+			t.Errorf("FileInfo(%q) succeeded", p)
+		}
+	}
+}
+
+func TestListFilesCountsFolderItems(t *testing.T) {
+	ctx := context.Background()
+	e, u, app, data, src, _ := filesEnv(t)
+	writeFile(t, data+"/docs/a", 1)
+	writeFile(t, data+"/docs/b", 1)
+	writeFile(t, src+"/foto.png", 1)
+	list, err := e.svc.ListFiles(ctx, u, app.ID, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	items := map[string]int{}
+	for _, f := range list {
+		items[f.Name] = f.Items
+	}
+	if items["docs"] != 2 || items["storage"] != 1 || items["public"] != 1 {
+		t.Errorf("items = %v", items)
 	}
 }

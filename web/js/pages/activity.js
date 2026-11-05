@@ -45,6 +45,8 @@ const ACTIONS = {
   "db.reveal": ["eye", "Password database dilihat", () => "Password database dilihat"],
   "file.upload": ["upload", "File diunggah", (a) => `File ${a.detail || ""} diunggah ke workspace`.replace("  ", " ")],
   "file.delete": ["trash-2", "File dihapus", (a) => `${a.detail || "File"} dihapus dari workspace`],
+  "file.rename": ["pencil", "File dipindah", (a) => (a.detail ? `${a.detail.replace(" → ", " dipindah ke ")}` : "File dipindah atau diganti namanya")],
+  "file.mkdir": ["folder-plus", "Folder dibuat", (a) => `Folder ${a.detail || ""} dibuat di workspace`.replace("  ", " ")],
 };
 const FAILED = new Set(["login_failed"]);
 
