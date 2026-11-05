@@ -290,7 +290,7 @@ func TestHBAFile(t *testing.T) {
 			lines = append(lines, l)
 		}
 	}
-	want := []string{"host all all 172.30.0.0/16 scram-sha-256", "host all all 10.20.0.0/16 scram-sha-256"}
+	want := []string{"host all all 127.0.0.1/32 scram-sha-256", "host all all 172.30.0.0/16 scram-sha-256", "host all all 10.20.0.0/16 scram-sha-256"}
 	if !slices.Equal(lines, want) {
 		t.Fatalf("lines = %q", lines)
 	}

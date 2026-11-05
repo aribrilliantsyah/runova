@@ -60,6 +60,7 @@ const (
 	rolePasswordLen  = 32
 	rolePasswordAlph = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"
 	dockerSubnet     = "172.30.0.0/16"
+	loopbackNet      = "127.0.0.1/32"
 )
 
 // Service is the database domain logic. Store, PG, Box and BackupDir are
@@ -514,6 +515,9 @@ func (s *Service) WriteHBA(ctx context.Context) error {
 	}
 	var b strings.Builder
 	b.WriteString("# Managed by Runova; changes are overwritten.\n")
+	// The panel's query editor, table browser, restore and export log in as the
+	// user's own role over TCP on loopback (the admin's Unix socket uses peer).
+	fmt.Fprintf(&b, "host all all %s scram-sha-256\n", loopbackNet)
 	for _, n := range append([]string{dockerSubnet}, settings.PGAllowedNets...) {
 		fmt.Fprintf(&b, "host all all %s scram-sha-256\n", n)
 	}
