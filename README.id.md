@@ -165,7 +165,7 @@ sudo -u runova env RUNOVA_DATA=/var/lib/runova runova db version
 
 ## Merilis versi baru
 
-Rilis dibangun GitHub Actions (`.github/workflows/release.yml`) setiap ada tag `v*.*.*`: test, `scripts/release.sh`, attestation, lalu GitHub Release berisi arsip, `SHA256SUMS`, dan `get.sh`.
+Semua perubahan dicatat di [CHANGELOG.id.md](CHANGELOG.id.md) (Inggris: [CHANGELOG.md](CHANGELOG.md)). Untuk merilis, tambahkan bagian `## [X.Y.Z] - tanggal` di kedua berkas, lalu buat tag. Rilis dibangun GitHub Actions (`.github/workflows/release.yml`) setiap ada tag `v*.*.*`: catatan rilis diambil dari bagian changelog itu (`scripts/changelog.sh`; tag tanpa bagian itu gagal), lalu test, `scripts/release.sh`, attestation, dan GitHub Release berisi arsip, `SHA256SUMS`, dan `get.sh`.
 
 ```bash
 git tag v0.4.0
@@ -225,8 +225,6 @@ Saat domain diisi, Runova menampilkan panduan yang sudah terisi subdomain, domai
 Untuk DNS langsung dan proxy, sertifikat diterbitkan Caddy di server. Untuk Tunnel, HTTPS diurus Cloudflare.
 
 Server Runova yang hanya punya IP lokal di belakang server lain ber-nginx dibahas di [nginx di depan Runova](docs/nginx-front-proxy.id.md), termasuk sertifikat wildcard untuk domain hosting. Bila proxy tepercaya diisi, Caddy menerbitkan semua sertifikat dari CA internalnya (nginx memegang yang publik), sehingga subdomain baru langsung berfungsi dan nginx boleh mengalihkan port 80 sendiri.
-
-**0.3.4 (belum rilis):** di belakang nginx subdomain hosting baru gagal dengan `remote error: tls: internal error` dan nginx menjawab 502, karena Caddy terus meminta sertifikat Let's Encrypt yang tidak bisa didapat di belakang nginx. Mode front proxy memperbaikinya; status domain menyebut penyebabnya (Caddy atau nginx) dan semua domain dicek ulang saat proxy tepercaya berubah. Setelah update: pastikan proxy tepercaya terisi; berkas nginx tidak perlu diubah (meneruskan port 80 tetap berfungsi, `return 301` kini juga berfungsi).
 
 ## Tampilan
 

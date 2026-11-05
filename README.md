@@ -165,7 +165,7 @@ sudo -u runova env RUNOVA_DATA=/var/lib/runova runova db version
 
 ## Releasing a new version
 
-Releases are built by GitHub Actions (`.github/workflows/release.yml`) on every `v*.*.*` tag: tests, `scripts/release.sh`, attestations, followed by a GitHub Release containing archives, `SHA256SUMS`, and `get.sh`.
+Every change is recorded in [CHANGELOG.md](CHANGELOG.md) (Indonesian: [CHANGELOG.id.md](CHANGELOG.id.md)). To release, add a `## [X.Y.Z] - date` section to both files, then tag. Releases are built by GitHub Actions (`.github/workflows/release.yml`) on every `v*.*.*` tag: the release notes come from that changelog section (`scripts/changelog.sh`; a tag without one fails), then tests, `scripts/release.sh`, attestations, and a GitHub Release containing archives, `SHA256SUMS`, and `get.sh`.
 
 ```bash
 git tag v0.4.0
@@ -225,8 +225,6 @@ When a domain is entered, Runova displays a setup guide prefilled with the subdo
 For Direct DNS and Proxy, certificates are issued by Caddy on the server. For Tunnel, HTTPS is handled by Cloudflare.
 
 A Runova server with only a local IP behind another server running nginx is covered by [nginx in front of Runova](docs/nginx-front-proxy.md), including wildcard certificates for the domain hosting. With a trusted proxy set, Caddy issues every certificate from its internal CA (nginx holds the public ones), so new subdomains work at once and nginx may redirect port 80 itself.
-
-**0.3.4 (unreleased):** behind nginx a new hosting subdomain failed with `remote error: tls: internal error` and nginx answered 502, because Caddy kept asking Let's Encrypt for a certificate it could not get behind nginx. Front-proxy mode fixes it; the domain status names the cause (Caddy or nginx) and every domain is checked again when the trusted proxies change. After updating: make sure the trusted proxy is set; the nginx file needs no change (forwarding port 80 keeps working, `return 301` now works too).
 
 ## Interface
 

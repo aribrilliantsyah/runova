@@ -17,6 +17,14 @@ jobs:
       - uses: actions/setup-go@v7
         with:
           go-version-file: go.mod
+      - name: release notes from CHANGELOG.md
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          {
+            scripts/changelog.sh "$version"
+            printf '\n## Upgrade\n\n```bash\nsudo runova update\n```\n\nIndonesian: [CHANGELOG.id.md](https://github.com/%s/blob/%s/CHANGELOG.id.md). All changes: [CHANGELOG.md](https://github.com/%s/blob/%s/CHANGELOG.md).\n' \
+              "$GITHUB_REPOSITORY" "$GITHUB_REF_NAME" "$GITHUB_REPOSITORY" "$GITHUB_REF_NAME"
+          } >"$RUNNER_TEMP/notes.md"
       - name: unit tests
         run: go test -count=1 ./...
       - name: installer tests (bats, shellcheck)
@@ -40,5 +48,5 @@ jobs:
         run: |
           gh release create "$GITHUB_REF_NAME" \
             --title "Runova ${{ steps.build.outputs.version }}" \
-            --generate-notes \
+            --notes-file "$RUNNER_TEMP/notes.md" \
             dist/runova-*-linux-amd64.tar.gz dist/SHA256SUMS dist/get.sh
