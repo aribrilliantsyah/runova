@@ -154,7 +154,7 @@ func (s *Service) rollout(ctx context.Context, owner store.User, app store.App, 
 	if err := s.Engine.EnsureNetwork(ctx, networkName(owner.ID), subnet); err != nil {
 		return "", atStep(stepPrepare, fmt.Errorf("ensure network: %w", err))
 	}
-	if err := s.ensureDataDir(owner, app.Name); err != nil {
+	if err := s.ensureWorkspace(owner, app, d.FileName); err != nil {
 		return "", atStep(stepPrepare, err)
 	}
 
@@ -375,7 +375,7 @@ func (s *Service) cloneDeployment(ctx context.Context, actor store.User, src sto
 // that copies the old one's artifact, environment snapshot, Java version, JVM
 // options and port. Run it with Deploy.
 func (s *Service) PrepareRollback(ctx context.Context, user store.User, appID, deploymentID int64) (store.Deployment, error) {
-	app, _, err := s.load(ctx, user, appID)
+	app, owner, err := s.load(ctx, user, appID)
 	if err != nil {
 		return store.Deployment{}, err
 	}
@@ -388,6 +388,9 @@ func (s *Service) PrepareRollback(ctx context.Context, user store.User, appID, d
 	}
 	if old.Status != store.DeploySuperseded && old.Status != store.DeployActive {
 		return store.Deployment{}, invalid("Hanya deployment yang pernah berjalan yang bisa dikembalikan")
+	}
+	if err := s.refuseFullDisk(ctx, owner, app); err != nil {
+		return store.Deployment{}, err
 	}
 	if _, err := os.Stat(old.ArtifactPath); err != nil {
 		return store.Deployment{}, invalid("File artefak deployment ini sudah tidak ada")
@@ -413,7 +416,7 @@ func (s *Service) Rollback(ctx context.Context, user store.User, appID, deployme
 // newest one when it is still pending; otherwise a new deployment cloned from
 // it with the app's current settings and environment, so changes take effect.
 func (s *Service) PrepareRedeploy(ctx context.Context, user store.User, appID int64) (store.Deployment, error) {
-	app, _, err := s.load(ctx, user, appID)
+	app, owner, err := s.load(ctx, user, appID)
 	if err != nil {
 		return store.Deployment{}, err
 	}
@@ -427,6 +430,9 @@ func (s *Service) PrepareRedeploy(ctx context.Context, user store.User, appID in
 	latest := ds[0]
 	if latest.Status == store.DeployPending {
 		return latest, nil
+	}
+	if err := s.refuseFullDisk(ctx, owner, app); err != nil {
+		return store.Deployment{}, err
 	}
 	if _, err := os.Stat(latest.ArtifactPath); err != nil {
 		return store.Deployment{}, invalid("File artefak sudah tidak ada; unggah versi baru")
@@ -589,7 +595,7 @@ func (s *Service) Delete(ctx context.Context, user store.User, appID int64) erro
 			return fmt.Errorf("remove container: %w", err)
 		}
 	}
-	for _, dir := range []string{s.artifactsRoot(owner.Username, app.Name), s.appDataDir(owner.Username, app.Name)} {
+	for _, dir := range []string{s.artifactsRoot(owner.Username, app.Name), s.appDataDir(owner.Username, app.Name), s.mountsRoot(owner.Username, app.Name)} {
 		if err := os.RemoveAll(dir); err != nil {
 			return fmt.Errorf("remove %s: %w", dir, err)
 		}

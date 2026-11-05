@@ -56,7 +56,7 @@ func (e *env) user(t *testing.T, name string, role store.Role) store.User {
 	t.Helper()
 	u, err := e.st.CreateUser(context.Background(), store.NewUser{
 		Username: name, PasswordHash: "h", Role: role,
-		Quota: store.Quota{Apps: 3, MemoryMB: 1024, CPUMilli: 1000, Databases: 3, PGConnections: 20},
+		Quota: store.Quota{Apps: 3, MemoryMB: 1024, CPUMilli: 1000, Databases: 3, PGConnections: 20, DiskMB: 4096},
 	}, 1000)
 	if err != nil {
 		t.Fatal(err)

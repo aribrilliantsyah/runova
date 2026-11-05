@@ -504,7 +504,7 @@ func TestUserHooks(t *testing.T) {
 		t.Error("role password not stored")
 	}
 
-	quota := store.Quota{Apps: 3, MemoryMB: 1024, CPUMilli: 1000, Databases: 3, PGConnections: 9}
+	quota := store.Quota{Apps: 3, MemoryMB: 1024, CPUMilli: 1000, Databases: 3, PGConnections: 9, DiskMB: 4096}
 	if r := admin.do("PATCH", "/api/users/"+strconv.FormatInt(u.ID, 10), obj{"quota": quota}); r.status != 200 {
 		t.Fatalf("patch quota = %d %s", r.status, r.body)
 	}

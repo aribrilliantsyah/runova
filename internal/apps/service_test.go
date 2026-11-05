@@ -17,7 +17,7 @@ import (
 func TestCreateValidations(t *testing.T) {
 	ctx := context.Background()
 	e := newTestEnv(t)
-	u := e.addUser("budi", store.RoleUser, store.Quota{Apps: 1, MemoryMB: 1024, CPUMilli: 1000, Databases: 3, PGConnections: 20})
+	u := e.addUser("budi", store.RoleUser, store.Quota{Apps: 1, MemoryMB: 1024, CPUMilli: 1000, Databases: 3, PGConnections: 20, DiskMB: 4096})
 
 	try := func(name string, rep artifact.Report, in apps.CreateInput) error {
 		in.UploadID = e.upload(u, rep)
@@ -84,11 +84,11 @@ func TestCreateConflictAndOtherUsersUpload(t *testing.T) {
 func TestQuotaBelowUsage(t *testing.T) {
 	ctx := context.Background()
 	e := newTestEnv(t)
-	u := e.addUser("budi", store.RoleUser, store.Quota{Apps: 5, MemoryMB: 1024, CPUMilli: 2000, Databases: 3, PGConnections: 20})
+	u := e.addUser("budi", store.RoleUser, store.Quota{Apps: 5, MemoryMB: 1024, CPUMilli: 2000, Databases: 3, PGConnections: 20, DiskMB: 4096})
 	a1, _ := e.create(u, "one", staticReport("one"), apps.CreateInput{MemoryMB: 256, CPUMilli: 500})
 	e.create(u, "two", staticReport("two"), apps.CreateInput{MemoryMB: 512, CPUMilli: 500})
 
-	lowered := store.Quota{Apps: 5, MemoryMB: 512, CPUMilli: 2000, Databases: 3, PGConnections: 20}
+	lowered := store.Quota{Apps: 5, MemoryMB: 512, CPUMilli: 2000, Databases: 3, PGConnections: 20, DiskMB: 4096}
 	u, err := e.store.UpdateUser(ctx, u.ID, store.UserPatch{Quota: &lowered})
 	if err != nil {
 		t.Fatal(err)
@@ -143,7 +143,7 @@ func TestValidateResourcesMessages(t *testing.T) {
 func TestPortAllocation(t *testing.T) {
 	ctx := context.Background()
 	e := newTestEnv(t)
-	u := e.addUser("budi", store.RoleUser, store.Quota{Apps: 10, MemoryMB: 4096, CPUMilli: 4000, Databases: 3, PGConnections: 20})
+	u := e.addUser("budi", store.RoleUser, store.Quota{Apps: 10, MemoryMB: 4096, CPUMilli: 4000, Databases: 3, PGConnections: 20, DiskMB: 4096})
 	e.setSettings(func(s *store.Settings) { s.PortMin, s.PortMax = 20000, 20002 })
 
 	var ports []int

@@ -39,6 +39,8 @@ const (
 	ActDBRestore      = "db.restore"
 	ActDBPassword     = "db.password"
 	ActDBReveal       = "db.reveal"
+	ActFileUpload     = "file.upload"
+	ActFileDelete     = "file.delete"
 )
 
 type Activity struct {

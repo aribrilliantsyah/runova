@@ -18,6 +18,7 @@ import (
 
 	"runova/internal/artifact"
 	"runova/internal/docker"
+	"runova/internal/folders"
 	"runova/internal/hostdns"
 	"runova/internal/secret"
 	"runova/internal/store"
@@ -162,8 +163,8 @@ func (s *Service) Get(ctx context.Context, actor store.User, appID int64) (store
 
 // UsageOf returns what the user's apps have allocated.
 func (s *Service) UsageOf(ctx context.Context, userID int64) (Usage, error) {
-	apps, mem, cpu, err := s.Store.UserUsage(ctx, userID)
-	return Usage{Apps: apps, MemoryMB: mem, CPUMilli: cpu}, err
+	u, err := s.Store.UserUsage(ctx, userID)
+	return Usage{Apps: u.Apps, MemoryMB: u.MemoryMB, CPUMilli: u.CPUMilli, DiskMB: u.DiskMB, DiskUsedBytes: u.DiskUsedBytes}, err
 }
 
 func (s *Service) notify(ctx context.Context, app store.App, level store.NotificationLevel, title, body string) {
@@ -198,6 +199,10 @@ type CreateInput struct {
 	Env          []store.EnvEntry `json:"env"`
 	// DatabaseID binds the app to one of the user's PostgreSQL databases; nil means none.
 	DatabaseID *int64 `json:"database_id"`
+	// Folders are the saved folders; nil means the ones detected in the artifact.
+	Folders []folders.Folder `json:"folders"`
+	// DiskMB is the app's share of the disk quota; 0 means the default (256 MB or what is left).
+	DiskMB int `json:"disk_mb"`
 }
 
 // takeUpload loads the user's upload and requires a clean report.
@@ -344,6 +349,20 @@ func (s *Service) Create(ctx context.Context, user store.User, in CreateInput) (
 			return store.App{}, store.Deployment{}, invalid("Admin menonaktifkan runtime %s di server ini", rep.Kind)
 		}
 	}
+	if in.Folders == nil {
+		in.Folders = make([]folders.Folder, 0, len(rep.Folders))
+		for _, f := range rep.Folders {
+			in.Folders = append(in.Folders, f.Folder)
+		}
+	}
+	if app.Folders, err = folders.Check(in.Folders, rep.FileName); err != nil {
+		return store.App{}, store.Deployment{}, invalid("%s", err.Error())
+	}
+	if in.DiskMB != 0 {
+		if err := validateDisk(in.DiskMB); err != nil {
+			return store.App{}, store.Deployment{}, err
+		}
+	}
 	if err := validateRange(app.MemoryMB, app.CPUMilli); err != nil {
 		return store.App{}, store.Deployment{}, err
 	}
@@ -373,6 +392,13 @@ func (s *Service) Create(ctx context.Context, user store.User, in CreateInput) (
 		return store.App{}, store.Deployment{}, err
 	}
 	if err := checkCPU(user.Quota, used, app.CPUMilli); err != nil {
+		return store.App{}, store.Deployment{}, err
+	}
+	if app.DiskMB = in.DiskMB; app.DiskMB == 0 {
+		if app.DiskMB, err = defaultDisk(user.Quota, used); err != nil {
+			return store.App{}, store.Deployment{}, err
+		}
+	} else if err := checkDisk(user.Quota, used, app.DiskMB); err != nil {
 		return store.App{}, store.Deployment{}, err
 	}
 	if app.IPPort, err = s.allocIPPort(ctx, settings); err != nil {
@@ -457,6 +483,12 @@ func (s *Service) NewVersion(ctx context.Context, user store.User, appID int64, 
 	if app.Kind == artifact.KindJar && app.JavaVersion != nil && *app.JavaVersion < up.Report.MinJava {
 		return store.Deployment{}, invalid("Versi ini butuh Java %d atau lebih baru; ubah versi Java aplikasi dulu", up.Report.MinJava)
 	}
+	if _, err := folders.Check(app.Folders, up.Report.FileName); err != nil {
+		return store.Deployment{}, invalid("Folder tersimpan: %s", err.Error())
+	}
+	if err := s.refuseFullDisk(ctx, owner, app); err != nil {
+		return store.Deployment{}, err
+	}
 	snapshot, err := s.snapshotEnv(ctx, app.ID)
 	if err != nil {
 		return store.Deployment{}, err
@@ -475,6 +507,10 @@ type SettingsInput struct {
 	DeployMode   *string `json:"deploy_mode"`
 	// DatabaseID binds the app to one of the owner's databases; 0 detaches it. A change needs a redeploy.
 	DatabaseID *int64 `json:"database_id"`
+	// Folders replaces the saved folders; a change needs a redeploy.
+	Folders *[]folders.Folder `json:"folders"`
+	// DiskMB changes the app's share of the disk quota; it applies at once.
+	DiskMB *int `json:"disk_mb"`
 }
 
 // deployModes lists the modes this build can run.
@@ -572,6 +608,29 @@ func (s *Service) UpdateSettings(ctx context.Context, user store.User, appID int
 		}
 		patch.MemoryMB, patch.CPUMilli = &mem, &cpu
 		redeploy = redeploy || mem != app.MemoryMB || cpu != app.CPUMilli
+	}
+	if in.Folders != nil {
+		list, err := s.checkFolders(ctx, app, *in.Folders)
+		if err != nil {
+			return store.App{}, false, err
+		}
+		patch.Folders = &list
+		redeploy = redeploy || !slices.Equal(list, app.Folders)
+	}
+	if in.DiskMB != nil {
+		if err := validateDisk(*in.DiskMB); err != nil {
+			return store.App{}, false, err
+		}
+		if *in.DiskMB > app.DiskMB {
+			used, err := s.UsageOf(ctx, owner.ID)
+			if err != nil {
+				return store.App{}, false, err
+			}
+			if err := checkDisk(owner.Quota, used, *in.DiskMB-app.DiskMB); err != nil {
+				return store.App{}, false, err
+			}
+		}
+		patch.DiskMB = in.DiskMB
 	}
 	updated, err := s.Store.UpdateApp(ctx, appID, patch)
 	if err != nil {

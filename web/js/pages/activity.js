@@ -43,6 +43,8 @@ const ACTIONS = {
   "db.restore": ["archive", "Restore", () => "Backup di-restore"],
   "db.password": ["key-round", "Password database", () => "Password database diganti"],
   "db.reveal": ["eye", "Password database dilihat", () => "Password database dilihat"],
+  "file.upload": ["upload", "File diunggah", (a) => `File ${a.detail || ""} diunggah ke workspace`.replace("  ", " ")],
+  "file.delete": ["trash-2", "File dihapus", (a) => `${a.detail || "File"} dihapus dari workspace`],
 };
 const FAILED = new Set(["login_failed"]);
 
