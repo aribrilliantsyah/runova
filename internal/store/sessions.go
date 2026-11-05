@@ -16,7 +16,7 @@ func (s *Store) CreateSession(ctx context.Context, tokenHash string, userID, exp
 // SessionUser returns the owner of a live session; expired or unknown sessions give ErrNotFound.
 func (s *Store) SessionUser(ctx context.Context, tokenHash string, now int64) (User, error) {
 	u, err := scanUser(s.db.QueryRowContext(ctx,
-		`SELECT u.id, u.username, u.display_name, u.email, u.role, u.quota_apps, u.quota_memory_mb, u.quota_cpu_milli, u.quota_databases, u.quota_pg_connections, u.created_at
+		`SELECT `+prefixed(userCols, "u.")+`
 		 FROM sessions s JOIN users u ON u.id = s.user_id
 		 WHERE s.token_hash = ? AND s.expires_at > ?`, tokenHash, now))
 	return u, notFound(err, "session")
