@@ -9,6 +9,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"runova/internal/artifact"
@@ -241,10 +242,12 @@ func (s *Service) removeContainerOf(ctx context.Context, d store.Deployment) err
 // and then closes them at once, so a connect alone proves nothing: a healthy
 // app stays quiet (the read times out) or sends data, while EOF or a reset
 // means nobody is home. Every round also checks that the container still
-// runs; one that exited fails at once. A JAR whose log still moves at the
-// timeout and that has not logged "Started …" is still starting: the wait
-// goes on, up to twice the timeout. Errors name the container port, the one
-// the user configures. tr may be nil (Restart, Start).
+// runs and has not been restarted; one that exited, or that Docker's restart
+// policy started again (an OOM kill looks "running" a moment later), fails at
+// once. A JAR whose log still moves at the timeout and that has not logged
+// "Started …" is still starting: the wait goes on, up to twice the timeout.
+// Errors name the container port, the one the user configures. tr may be nil
+// (Restart, Start).
 func (s *Service) waitHealthy(ctx context.Context, app store.App, containerID string, hostPort, appPort int, tr *tracer) error {
 	dial := s.Dial
 	if dial == nil {
@@ -255,6 +258,9 @@ func (s *Service) waitHealthy(ctx context.Context, app store.App, containerID st
 	start := s.healthNow()
 	deadline, limit := start.Add(timeout), start.Add(2*timeout)
 	jvm := app.Kind == artifact.KindJar
+	deaths := s.watchDeaths(ctx, app, containerID)
+	defer deaths.stop()
+	var first *docker.ContainerState
 	var (
 		logMoved, logChecked time.Time
 		lastLine             string
@@ -288,6 +294,12 @@ func (s *Service) waitHealthy(ctx context.Context, app store.App, containerID st
 		if !st.Running {
 			return &stepError{step: stepHealth, state: &st, err: fmt.Errorf("aplikasi berhenti saat dijalankan (%s, exit code %d)", st.Status, st.ExitCode)}
 		}
+		if first == nil {
+			first = &st
+		}
+		if restarted(*first, st) {
+			return deaths.restartError(st)
+		}
 		if s.accepts(dial, addr) {
 			tr.done(ctx, stepHealth, fmt.Sprintf("Port %d menerima koneksi setelah %s", appPort, plainDuration(s.healthNow().Sub(start))))
 			return nil
@@ -311,6 +323,89 @@ func (s *Service) waitHealthy(ctx context.Context, app store.App, containerID st
 		case <-time.After(s.healthInterval()):
 		}
 	}
+}
+
+// restarted reports whether the container died since it was started, even if
+// Docker's restart policy has it running again: Docker's start resets
+// RestartCount to 0, so any restart shows as a count above 0, a new StartedAt
+// or the "restarting" state (which still carries the OOM kill).
+func restarted(first, now docker.ContainerState) bool {
+	return now.RestartCount > 0 || now.Status == "restarting" || now.OOMKilled || !now.StartedAt.Equal(first.StartedAt)
+}
+
+// deathWatch collects the die and oom events of one container while the
+// health wait runs: once the restart policy started it again, the inspected
+// state has lost the exit code and the OOM kill, and only the events keep them.
+type deathWatch struct {
+	cancel context.CancelFunc
+	done   chan struct{}
+
+	mu       sync.Mutex
+	exitCode int // of the last die; -1 before any
+	oom      bool
+}
+
+func (s *Service) watchDeaths(ctx context.Context, app store.App, containerID string) *deathWatch {
+	ctx, cancel := context.WithCancel(ctx)
+	w := &deathWatch{cancel: cancel, done: make(chan struct{}), exitCode: -1}
+	events, errc := s.Engine.Events(ctx, map[string]string{appLabel: strconv.FormatInt(app.ID, 10)})
+	go func() {
+		defer close(w.done)
+		for ev := range events {
+			if ev.ContainerID != containerID {
+				continue
+			}
+			w.mu.Lock()
+			switch ev.Action {
+			case "oom":
+				w.oom = true
+			case "die":
+				if n, err := strconv.Atoi(ev.Labels["exitCode"]); err == nil {
+					w.exitCode = n
+				}
+			}
+			w.mu.Unlock()
+		}
+		<-errc
+	}()
+	return w
+}
+
+func (w *deathWatch) stop() {
+	w.cancel()
+	<-w.done
+}
+
+// deathEventWait is how long a restart found by inspect waits for its die event.
+const deathEventWait = time.Second
+
+// restartError describes a container that died and was started again, with
+// the exit code and OOM kill from the inspected state or the events.
+func (w *deathWatch) restartError(st docker.ContainerState) error {
+	code, oom := st.ExitCode, st.OOMKilled
+	if st.Status != "restarting" {
+		// Running again: the state was reset; the die event (sent before the
+		// restart, read asynchronously) has the reason.
+		for end := time.Now().Add(deathEventWait); ; {
+			w.mu.Lock()
+			code, oom = w.exitCode, w.oom
+			w.mu.Unlock()
+			if code >= 0 || time.Now().After(end) {
+				break
+			}
+			time.Sleep(10 * time.Millisecond)
+		}
+	}
+	st.ExitCode, st.OOMKilled = code, oom
+	msg := "aplikasi berhenti dan dinyalakan ulang oleh Docker"
+	if code >= 0 {
+		msg += fmt.Sprintf(" (exit code %d", code)
+		if st.OOMKilled {
+			msg += ", OOMKilled"
+		}
+		msg += ")"
+	}
+	return &stepError{step: stepHealth, state: &st, restarted: true, err: errors.New(msg)}
 }
 
 // accepts reports whether addr holds a connection open or sends data.
@@ -590,6 +685,15 @@ func (s *Service) awaitStart(ctx context.Context, app store.App) {
 		p := diagnose(cur, d, werr, lines, s.now().UnixMilli())
 		if err := s.Store.SetAppStatus(ctx, app.ID, store.AppFailed); err != nil {
 			slog.Error("set app failed after start", "app", app.Name, "err", err)
+		}
+		var se *stepError
+		if errors.As(werr, &se) && se.restarted {
+			// Docker's restart policy would keep the dying app looping while
+			// the crash monitor ignores a failed app: stop it; its log stays.
+			s.noteStop(app.ID)
+			if err := s.Engine.StopContainer(ctx, d.ContainerID, stopGrace); err != nil && !errors.Is(err, docker.ErrNotFound) {
+				slog.Error("stop restarting container", "app", app.Name, "err", err)
+			}
 		}
 		s.markActive(ctx, cur, p)
 		s.notify(ctx, cur, store.LevelError, fmt.Sprintf("Aplikasi %s tidak siap setelah dijalankan", app.Name), p.Title)
