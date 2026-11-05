@@ -173,13 +173,14 @@ try {
     after: runQuery("-- semua tagihan\nSELECT * FROM invoices;"),
   });
   await shot("desktop-activity.png", { width: 1440, height: 900, scheme: "light", route: "/activity", wait: "#actrows tr.act-row" });
+  // Domain hosting is the subject; the stat cards above it would show the dev seed's oversubscribed totals.
   await shot("desktop-server-hosting.png", {
-    width: 1440, height: 1000, scheme: "light", route: "/server", wait: "#hostrows tr",
+    width: 1440, height: 800, scheme: "light", route: "/server", wait: "#hostrows tr",
     after: async (p) => {
       await tidyServer(p);
-      await p.locator("#hostingcard").scrollIntoViewIfNeeded();
       await p.fill("#hostname", "*.baru.perusahaan.co.id");
       await p.waitForSelector("#hostdns");
+      await p.evaluate(() => document.querySelector("#hostingcard").scrollIntoView({ block: "start" }));
     },
   });
   await shot("mobile-apps.png", { width: 390, height: 844, scheme: "light", route: "/apps", wait: ".acard:has-text('notif-relay')" });
