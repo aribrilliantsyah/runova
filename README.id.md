@@ -65,14 +65,22 @@ Deploy dibagi empat langkah:
 
 Tombol **Deploy** baru aktif setelah semua yang wajib terpenuhi. Panel ringkasan menunjukkan apa yang masih kurang.
 
-Setelah jalan, halaman aplikasi berisi kontrol (unggah versi baru, restart, stop, terminal), environment, domain, riwayat deployment dengan tombol kembalikan, log, monitoring, dan pengaturan lanjutan.
+Setelah jalan, halaman aplikasi berisi kontrol (unggah versi baru, restart, stop, terminal), environment, domain, riwayat deployment dengan tombol kembalikan, log, monitoring, file, dan pengaturan lanjutan.
+
+## File aplikasi
+
+Setiap aplikasi punya **folder kerja**, yang di panel ditampilkan sebagai `<app>/` (misalnya `starboom/`). Folder ini adalah working directory container (`/data`, juga di `RUNOVA_DATA_DIR`), berada di server di `/var/lib/runova/data/<user>/<app>/`, dan isinya tetap ada saat deploy ulang, restart, maupun kembalikan versi. Bagian lain container read-only.
+
+- Aplikasi yang menulis ke path relatif seperti `./storage` sudah menulis ke folder kerja (`starboom/storage`).
+- Aplikasi yang menulis ke path absolut seperti `/app/storage` atau `/var/www/uploads` mendapat path itu **di-mount otomatis** dari subfolder folder kerja (`starboom/storage`). Runova menemukan folder semacam itu di `.env.example`, `application.properties`, dan `application.yml` (`spring.servlet.multipart.location`, `*.upload-dir`, `*.storage.*path*`, `STORAGE_PATH`, `UPLOAD_DIR`, …) tanpa menjalankan aplikasi; halaman Tinjau menampilkannya sudah tercentang di **Folder tersimpan**, dan bisa diubah di sana atau di tab **Lanjutan** aplikasi. Folder sistem (`/etc`, `/usr`, `/proc`, …), `/tmp`, dan file artefak sendiri ditolak.
+- Tab **File** menampilkan isi folder kerja, mengunduh dan menghapus file, serta mengunggah file kecil.
 
 ## Pengguna dan kuota
 
 - **Admin** mendaftarkan pengguna. Tidak ada pendaftaran mandiri.
 - Setiap pengguna hanya melihat dan mengelola aplikasinya sendiri.
-- Admin menentukan kuota per pengguna: **jumlah aplikasi, memori, CPU, dan jumlah database** (bawaan 3). Pengguna membagi kuota itu ke aplikasinya.
-- Storage tidak dikuota, supaya Runova jalan di Ubuntu Server apa adanya tanpa menyiapkan disk khusus. Admin tetap bisa memantau pemakaian disk server di halaman Server.
+- Admin menentukan kuota per pengguna: **jumlah aplikasi, memori, CPU, jumlah database** (bawaan 3) **dan disk** (bawaan 1 GB). Pengguna membagi kuota itu ke aplikasinya; tiap aplikasi mendapat ukuran disk saat deploy (bawaan 256 MB, bisa diubah di **Lanjutan**).
+- Disk menghitung seluruh isi folder kerja aplikasi (termasuk folder tersimpan); artefak, log, dan database PostgreSQL tidak dihitung. Runova mengukur setiap folder kerja tiap 5 menit dan sebelum deploy. Di 80% pemilik diberi peringatan; di 100% aplikasi bertanda **Disk penuh**, pemilik mendapat notifikasi error, dan deploy baru aplikasi itu ditolak sampai ada file yang dihapus atau ukurannya dinaikkan. Aplikasi yang berjalan **tidak** dihentikan, jadi tidak ada data yang hilang. Ini batas lunak: aplikasi bisa menulis melewatinya sampai pengukuran berikutnya. Batas keras butuh filesystem dengan project quota (XFS `prjquota`) yang tidak ada di instalasi Ubuntu bawaan; itu pekerjaan lanjutan. Admin melihat pemakaian disk server dan bagian aplikasi di halaman **Server**.
 - Aplikasi yang memakai memori melebihi batasnya dihentikan dan dijalankan ulang oleh Docker tanpa mengganggu aplikasi lain.
 
 ## Database

@@ -1,5 +1,5 @@
 import * as api from "/assets/js/api.js";
-import { h, icon, fmtMB, fmtNum, fmtTime, pct, bar, clear, poll, fill } from "/assets/js/dom.js";
+import { h, icon, fmtMB, fmtNum, fmtTime, fmtBytes, pct, bar, clear, poll, fill } from "/assets/js/dom.js";
 import { act } from "/assets/js/components/act.js";
 import { dialog } from "/assets/js/components/dialog.js";
 import { hostingCard } from "/assets/js/components/hostingcard.js";
@@ -47,7 +47,7 @@ export async function renderServer(root) {
         { class: "stats" },
         stat("cpu", "CPU dialokasikan", fmtNum(host.cpu_alloc_milli / 1000), `dari ${host.cpus} core`, pct(host.cpu_alloc_milli, host.cpus * 1000)),
         stat("memory-stick", "Memori dialokasikan", gb(host.mem_alloc_mb), `dari ${gb(host.mem_total_mb)}`, pct(host.mem_alloc_mb, host.mem_total_mb)),
-        stat("hard-drive", "Disk", gb(host.disk_used_mb), `dari ${gb(host.disk_total_mb)}`, pct(host.disk_used_mb, host.disk_total_mb)),
+        stat("hard-drive", "Disk server", gb(host.disk_used_mb), `dari ${gb(host.disk_total_mb)}; aplikasi ${fmtBytes(host.app_disk_used_bytes || 0)} terpakai dari ${fmtMB(host.app_disk_alloc_mb || 0)} dialokasikan`, pct(host.disk_used_mb, host.disk_total_mb)),
         stat("package", "Aplikasi", String(apps.total), `${apps.running} berjalan, ${apps.stopped + apps.failed} berhenti`, pct(apps.running, apps.total)),
       ),
       h(

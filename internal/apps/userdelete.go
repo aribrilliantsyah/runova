@@ -24,7 +24,7 @@ func (s *Service) DeleteAllForUser(ctx context.Context, actor, owner store.User)
 			return fmt.Errorf("delete app %s: %w", app.Name, err)
 		}
 	}
-	for _, sub := range []string{"artifacts", "data"} {
+	for _, sub := range []string{"artifacts", "data", "mounts"} {
 		dir := filepath.Join(s.DataDir, sub, owner.Username)
 		if err := os.RemoveAll(dir); err != nil {
 			return fmt.Errorf("remove %s: %w", dir, err)

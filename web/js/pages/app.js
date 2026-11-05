@@ -12,6 +12,7 @@ import { renderEnv } from "/assets/js/pages/app/env.js";
 import { renderLogs } from "/assets/js/pages/app/logs.js";
 import { renderMonitor } from "/assets/js/pages/app/monitor.js";
 import { renderAdvanced } from "/assets/js/pages/app/advanced.js";
+import { renderFiles } from "/assets/js/pages/app/files.js";
 
 const POLL_MS = 5000;
 const HISTORY = 60;
@@ -23,6 +24,7 @@ const TABS = [
   ["deployments", "deployments", "Deployment", renderDeployments],
   ["logs", "logs", "Log", renderLogs],
   ["monitor", "monitor", "Monitoring", renderMonitor],
+  ["files", "files", "File", renderFiles],
   ["advanced", "advanced", "Lanjutan", renderAdvanced],
 ];
 
@@ -92,7 +94,7 @@ export async function renderApp(root, params) {
     const language = deployment?.report?.language;
     logoBox.replaceChildren(kindLogo(app.kind, language));
     const busyOther = page.state.busy && !st.live;
-    fill(title, app.name, " ", h("span", { class: `chip ${st.cls}`, id: "appstatus" }, h("span", { class: `dot ${st.cls}` }), busyOther ? "Sedang diproses" : st.label));
+    fill(title, app.name, " ", h("span", { class: `chip ${st.cls}`, id: "appstatus" }, h("span", { class: `dot ${st.cls}` }), busyOther ? "Sedang diproses" : st.label), app.disk_level === "full" ? h("a", { class: "chip err", id: "diskfull", href: page.path("files"), title: "Deploy baru ditolak sampai ada file yang dihapus atau ukuran disk dinaikkan" }, "Disk penuh") : null);
     why.hidden = !st.line;
     if (st.line) {
       const tone = st.live ? "warn" : st.warn ? "warn" : st.cls === "err" ? "err" : "";

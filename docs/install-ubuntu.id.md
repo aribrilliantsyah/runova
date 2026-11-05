@@ -200,7 +200,7 @@ Yang harus dicadangkan:
 | Yang | Isi |
 |---|---|
 | `/etc/runova/secret.key` | **Kunci enkripsi.** Semua rahasia (environment rahasia, password database) terenkripsi dengan kunci ini. **Tanpa kunci ini rahasia tidak bisa dibuka**, dan tidak ada cara memulihkannya. Simpan salinannya di tempat terpisah dari server. |
-| `/var/lib/runova` | Database Runova (`runova.db`), artefak yang diunggah, data aplikasi (`data/`), dan backup harian database (`backup/`). |
+| `/var/lib/runova` | Database Runova (`runova.db`), artefak yang diunggah, **file aplikasi** (`data/` dan `mounts/`: folder kerja tiap aplikasi, termasuk file unggahan), dan backup harian database (`backup/`). |
 | PostgreSQL | Database pengguna. |
 
 Contoh cadangan folder data (hentikan Runova sebentar agar `runova.db` konsisten):
@@ -212,6 +212,8 @@ sudo systemctl start runova
 ```
 
 Aplikasi yang berjalan tidak ikut berhenti; Runova menyambung kembali saat menyala.
+
+**File aplikasi tidak ikut backup PostgreSQL.** Yang ditulis aplikasi ke folder kerjanya (`./storage`, `/app/storage`, …) hanya ada di `/var/lib/runova/data/<user>/<app>/` dan `/var/lib/runova/mounts/<user>/<app>/`; tar di atas sudah mencakupnya. File tetap dimiliki UID aplikasi (`100000 + id pengguna`), jadi pulihkan sebagai root dengan `tar --same-owner`.
 
 **PostgreSQL:** Runova sudah membuat `pg_dump` per database tiap pukul 02:00 dan menyimpannya 7 hari di `/var/lib/runova/backup/<database>/`, tetapi itu di disk yang sama dengan datanya. Salin folder itu ke luar server, dan/atau buat dump seluruh klaster:
 

@@ -6,18 +6,19 @@ import { uploader } from "/assets/js/components/uploader.js";
 import { envForm } from "/assets/js/components/envform.js";
 import { dbPick } from "/assets/js/components/dbpick.js";
 import { resourceCards } from "/assets/js/components/resource.js";
+import { folderList } from "/assets/js/components/folders.js";
 import { addressControl } from "/assets/js/components/address.js";
 import { ipHost } from "/assets/js/components/iphost.js";
 import { FOLLOW_KEY } from "/assets/js/components/deploytrace.js";
 import { kindLogo } from "/assets/js/kinds.js";
-import { appNameError, jvmOptsError, portError, suggestName } from "/assets/js/validate.js";
+import { appNameError, jvmOptsError, portError, suggestName, workspaceLabel } from "/assets/js/validate.js";
 import { JAVA_VERSIONS, LTS_NOTE, runtimeImage } from "/assets/js/kinds.js";
 
 // Sizes on offer before "Atur sendiri": what most JAR and binary apps need.
 const PRESETS = [
-  { id: "s", name: "Kecil", mb: 256, milli: 250, note: "Binary kecil, worker" },
-  { id: "m", name: "Sedang", mb: 512, milli: 500, note: "Kebanyakan aplikasi Spring" },
-  { id: "l", name: "Besar", mb: 1024, milli: 1000, note: "Aplikasi berat, banyak pengguna" },
+  { id: "s", name: "Kecil", mb: 256, milli: 250, disk: 256, note: "Binary kecil, worker" },
+  { id: "m", name: "Sedang", mb: 512, milli: 500, disk: 512, note: "Kebanyakan aplikasi Spring" },
+  { id: "l", name: "Besar", mb: 1024, milli: 1000, disk: 1024, note: "Aplikasi berat, banyak pengguna" },
 ];
 
 /**
@@ -38,6 +39,7 @@ export async function renderDeploy(root) {
   let submitting = false;
   let env = null;
   let pick = null;
+  let saved = null;
   let preset = "m";
 
   const uploadCtl = uploader({
@@ -61,7 +63,7 @@ export async function renderDeploy(root) {
 
   // Inputs that outlive a rebuild of the review (a new file keeps what the user typed).
   const name = h("input", { class: "f mono nmbig", id: "nm", "aria-label": "Nama aplikasi", autocomplete: "off", spellcheck: "false", "aria-describedby": "nm-hint nm-err" });
-  name.addEventListener("input", () => { nameTouched = true; refresh(); });
+  name.addEventListener("input", () => { nameTouched = true; if (saved) saved.refresh(); else refresh(); });
   const nameErr = h("div", { class: "errtext", id: "nm-err", hidden: true });
   const port = h("input", { class: "f mono", id: "pt", inputmode: "numeric", "aria-describedby": "pt-hint" });
   // An emptied field means the detected (or default) port; it is sent explicitly so the app stores it.
@@ -135,17 +137,17 @@ export async function renderDeploy(root) {
 
   function sizes() {
     const max = (opts) => opts[opts.length - 1] ?? 0;
-    const fitsPreset = (p) => max(res.memOpts) >= p.mb && max(res.cpuOpts) >= p.milli;
+    const fitsPreset = (p) => max(res.memOpts) >= p.mb && max(res.cpuOpts) >= p.milli && max(res.diskOpts) >= Math.min(p.disk, 64);
     if (preset !== "c" && !fitsPreset(PRESETS.find((p) => p.id === preset))) preset = PRESETS.filter(fitsPreset).pop()?.id || "c";
     const custom = h("details", { class: "dcustom", open: preset === "c" }, h("summary", {}, "Atur sendiri"), res.node);
     const btns = PRESETS.map((p) => {
       const ok = fitsPreset(p);
       const b = h("button", { class: "opt preset", type: "button", "aria-pressed": String(preset === p.id), "aria-disabled": ok ? null : "true", title: ok ? null : "Melebihi sisa kuota", "data-size": p.id },
-        h("b", {}, p.name), h("small", {}, `${fmtMB(p.mb)} · ${fmtNum(p.milli / 1000)} core`), h("small", { class: "pn" }, ok ? p.note : "Melebihi sisa kuota"));
+        h("b", {}, p.name), h("small", {}, `${fmtMB(p.mb)} · ${fmtNum(p.milli / 1000)} core · disk ${fmtMB(Math.min(p.disk, max(res.diskOpts)))}`), h("small", { class: "pn" }, ok ? p.note : "Melebihi sisa kuota"));
       b.addEventListener("click", () => {
         if (!ok) return;
         preset = p.id;
-        res.set(p.mb, p.milli);
+        res.set(p.mb, p.milli, p.disk);
         custom.open = false;
         for (const x of btns) x.setAttribute("aria-pressed", String(x === b));
       });
@@ -158,9 +160,26 @@ export async function renderDeploy(root) {
       refresh();
     });
     const cur = PRESETS.find((p) => p.id === preset);
-    if (cur) res.set(cur.mb, cur.milli);
+    if (cur) res.set(cur.mb, cur.milli, cur.disk);
     const q = usage.quota;
-    return [h("div", { class: "presets", role: "group", "aria-label": "Ukuran" }, btns), h("p", { class: "hint" }, `Kuotamu: sisa ${fmtMB(Math.max(q.memory_mb - usage.memory_mb, 0))} memori dan ${fmtNum(Math.max(q.cpu_milli - usage.cpu_milli, 0) / 1000)} core CPU. Bisa diubah kapan saja setelah deploy.`), custom];
+    return [h("div", { class: "presets", role: "group", "aria-label": "Ukuran" }, btns), h("p", { class: "hint" }, `Kuotamu: sisa ${fmtMB(Math.max(q.memory_mb - usage.memory_mb, 0))} memori, ${fmtNum(Math.max(q.cpu_milli - usage.cpu_milli, 0) / 1000)} core CPU, dan ${fmtMB(Math.max(q.disk_mb - usage.disk_mb, 0))} disk. Disk menampung isi folder kerja aplikasi, termasuk file unggahan. Bisa diubah kapan saja setelah deploy.`), custom];
+  }
+
+  // Where the app's files are kept: the detected folders, ticked, and any the user adds.
+  function storage() {
+    const n = saved.value().length;
+    const lead = h("p", { class: "hint" }, "Folder kerja aplikasi (", h("span", { class: "mono", id: "d-store-ws" }, `${name.value || "aplikasi"}/`), ") tersimpan di server dan tidak hilang saat deploy ulang. Path relatif seperti ./storage sudah ada di dalamnya; path absolut seperti /app/storage di-mount otomatis dari sana.");
+    return h(
+      "details",
+      { class: "dsec dadv", id: "d-store", open: n > 0 },
+      h("summary", {}, h("h2", {}, "Folder tersimpan"), h("span", { class: "hint", id: "d-store-sum" }, storeSummary())),
+      h("div", { class: "dadv-bd" }, lead, saved.node),
+    );
+  }
+  function storeSummary() {
+    const list = saved?.value() || [];
+    if (!list.length) return "Tidak ada yang terdeteksi";
+    return list.map((f) => workspaceLabel(name.value || "aplikasi", f)).join(", ");
   }
 
   function advanced() {
@@ -194,6 +213,7 @@ export async function renderDeploy(root) {
     const r = up.report;
     pick = dbPick({ databases: dbData.databases, used: dbData.used, limit: dbData.limit, username: user.username, pgDown: dbData.pg_down, dbEnv: up.db_env || [], onChange: () => { env.setAuto(pick.auto()); refresh(); } });
     env = envForm({ detected: r.env, onChange: () => refresh(), foldOptional: true });
+    saved = folderList({ appName: () => name.value || "aplikasi", detected: r.folders || [], onChange: () => refresh() });
     env.setAuto(pick.auto());
     const usable = !r.problems.length;
     fill(
@@ -211,7 +231,8 @@ export async function renderDeploy(root) {
         sec("d-addr", ["Alamat ", opt("opsional")], "Subdomain siap pakai tanpa mengatur DNS. Bisa ditambah nanti.", address.node),
         sec("d-db", ["Database ", opt("opsional")], "PostgreSQL untuk aplikasi ini. Variabel koneksinya diisi otomatis.", pick.node),
         sec("d-env", "Environment", env.missing().length ? "Isi variabel bertanda * sebelum deploy." : "Variabel yang dibaca aplikasi saat berjalan.", env.node),
-        sec("d-size", "Ukuran", "Memori dan CPU dari kuota akunmu.", ...sizes()),
+        sec("d-size", "Ukuran", "Memori, CPU, dan disk dari kuota akunmu.", ...sizes()),
+        storage(),
         advanced(),
       ] : null,
     );
@@ -239,7 +260,9 @@ export async function renderDeploy(root) {
       const ne = env.nameError();
       if (ne) out.push({ at: "d-env", text: ne });
     }
-    if (!res.fits()) out.push({ at: "d-size", text: "Kuota memori atau CPU habis" });
+    if (!res.fits()) out.push({ at: "d-size", text: "Kuota memori, CPU, atau disk habis" });
+    const fe = saved?.error();
+    if (fe) out.push({ at: "d-store", text: fe });
     if (usage.apps >= usage.quota.apps) out.push({ at: "d-size", text: `Kuota aplikasi habis (${usage.apps} dari ${usage.quota.apps})` });
     const addrBad = address.error();
     if (addrBad) out.push({ at: "d-addr", text: addrBad });
@@ -264,8 +287,13 @@ export async function renderDeploy(root) {
       rowsum("Port aplikasi", rep ? String(effectivePort()) : "–", "mono"),
       rowsum("Alamat", addr ? (addr.host || `${addr.label}.${(hostingData.domains || []).find((d) => d.id === addr.hosting_domain_id)?.name.replace(/^\*\./, "") || ""}`) : "Belum ada", addr ? "mono" : "muted"),
       rowsum("Database", pick ? pick.label() : "–", pick && pick.choice() !== "none" ? "mono" : ""),
-      rowsum("Ukuran", `${fmtMB(res.memory())} · ${fmtNum(res.cpu() / 1000)} core`),
+      rowsum("Ukuran", `${fmtMB(res.memory())} · ${fmtNum(res.cpu() / 1000)} core · disk ${fmtMB(res.disk())}`),
+      rowsum("Folder", saved && saved.value().length ? saved.value().map((f) => workspaceLabel(name.value || "aplikasi", f)).join(", ") : "–", saved && saved.value().length ? "mono" : ""),
     );
+    const sumEl = document.getElementById("d-store-sum");
+    if (sumEl) sumEl.textContent = storeSummary();
+    const wsEl = document.getElementById("d-store-ws");
+    if (wsEl) wsEl.textContent = `${name.value || "aplikasi"}/`;
     const list = problems();
     fill(missing, list.length ? [h("li", { class: "dmh" }, "Sebelum deploy:"), list.map((p) => h("li", {}, h("button", { type: "button", onclick: () => jump(p.at) }, icon("circle"), p.text)))] : h("li", { class: "dok" }, icon("circle-check"), "Semua siap. Deploy membangun container dan menyalakannya."));
     const ready = list.length === 0 && !submitting;
@@ -311,6 +339,8 @@ export async function renderDeploy(root) {
         internal_port: effectivePort(),
         memory_mb: res.memory(),
         cpu_milli: res.cpu(),
+        disk_mb: res.disk(),
+        folders: saved.value(),
         ip_access: ipSw.getAttribute("aria-checked") === "true",
         env: env.entries(),
         database_id: databaseId,

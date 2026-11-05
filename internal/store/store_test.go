@@ -183,7 +183,7 @@ func TestSettingsDefaults(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got.DefaultQuota != (store.Quota{Apps: 3, MemoryMB: 1024, CPUMilli: 1000, Databases: 3, PGConnections: 20}) {
+	if got.DefaultQuota != (store.Quota{Apps: 3, MemoryMB: 1024, CPUMilli: 1000, Databases: 3, PGConnections: 20, DiskMB: 1024}) {
 		t.Errorf("DefaultQuota = %+v", got.DefaultQuota)
 	}
 	if got.UploadLimitMB != 500 || got.PortMin != 20000 || got.PortMax != 20999 || got.PublicIP != "" {

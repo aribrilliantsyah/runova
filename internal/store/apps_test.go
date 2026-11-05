@@ -156,13 +156,13 @@ func TestUserUsage(t *testing.T) {
 	newApp(t, s, u, "one", 20000, 256, 500)
 	newApp(t, s, u, "two", 20001, 512, 250)
 	newApp(t, s, other, "three", 20002, 1024, 1000)
-	apps, mem, cpu, err := s.UserUsage(context.Background(), u.ID)
-	if err != nil || apps != 2 || mem != 768 || cpu != 750 {
-		t.Fatalf("usage = %d, %d, %d, %v; want 2, 768, 750", apps, mem, cpu, err)
+	got, err := s.UserUsage(context.Background(), u.ID)
+	if err != nil || got.Apps != 2 || got.MemoryMB != 768 || got.CPUMilli != 750 {
+		t.Fatalf("usage = %+v, %v; want 2, 768, 750", got, err)
 	}
-	apps, mem, cpu, err = s.UserUsage(context.Background(), 999)
-	if err != nil || apps != 0 || mem != 0 || cpu != 0 {
-		t.Fatalf("empty usage = %d, %d, %d, %v", apps, mem, cpu, err)
+	got, err = s.UserUsage(context.Background(), 999)
+	if err != nil || got != (store.AppUsage{}) {
+		t.Fatalf("empty usage = %+v, %v", got, err)
 	}
 }
 

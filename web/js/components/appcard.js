@@ -1,4 +1,4 @@
-import { h, icon, fmtTime, fmtMB, fmtCPU } from "/assets/js/dom.js";
+import { h, icon, fmtTime, fmtMB, fmtCPU, fmtBytes, pct, bar } from "/assets/js/dom.js";
 import { kindLogo, runtimeSub, statusOf } from "/assets/js/kinds.js";
 import { ipHost } from "/assets/js/components/iphost.js";
 
@@ -19,6 +19,12 @@ export function appCard(app, summary, info) {
   const foot = settled
     ? [h("span", {}, `${fmtMB(app.memory_mb)} · ${fmtCPU(app.cpu_milli)}`)]
     : [h("span", { class: `chip ${cls}` }, label)];
+  if (app.disk_level === "full") foot.push(h("span", { class: "chip err" }, "Disk penuh"));
+  else if (app.disk_level === "warn") foot.push(h("span", { class: "chip warn" }, "Disk hampir penuh"));
+  const diskSize = (app.disk_mb || 0) * 1048576;
+  const diskRow = h("div", { class: "adisk", title: diskSize ? `Disk ${fmtBytes(app.disk_used_bytes || 0)} dari ${fmtMB(app.disk_mb)}` : "Disk belum dibatasi" },
+    icon("hard-drive"), h("span", {}, diskSize ? `${fmtBytes(app.disk_used_bytes || 0)} / ${fmtMB(app.disk_mb)}` : `${fmtBytes(app.disk_used_bytes || 0)}, belum dibatasi`),
+    diskSize ? bar(pct(app.disk_used_bytes || 0, diskSize), { hiAt: 80 }) : null);
   const when = summary?.deployed_at ? fmtTime(summary.deployed_at) : "belum pernah";
   return h(
     "a",
@@ -30,7 +36,7 @@ export function appCard(app, summary, info) {
       h("div", {}, h("b", {}, app.name), h("div", { class: "sub" }, runtimeSub(app, summary?.language))),
       h("span", { class: `dot ${cls}`, title: label }),
     ),
-    h("div", { class: "ep" }, domainRow, ipRow),
+    h("div", { class: "ep" }, domainRow, ipRow, diskRow),
     h("div", { class: "ft" }, ...foot, h("span", { style: { "margin-left": "auto" } }, when)),
   );
 }

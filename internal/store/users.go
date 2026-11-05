@@ -23,6 +23,8 @@ type Quota struct {
 	CPUMilli      int `json:"cpu_milli"`
 	Databases     int `json:"databases"`
 	PGConnections int `json:"pg_connections"`
+	// DiskMB is the disk all of the user's app workspaces may use together.
+	DiskMB int `json:"disk_mb"`
 }
 
 func (q Quota) Validate() error {
@@ -35,6 +37,7 @@ func (q Quota) Validate() error {
 		{"CPU", q.CPUMilli, 0, 256000},
 		{"Jumlah database", q.Databases, 0, 100},
 		{"Koneksi PostgreSQL", q.PGConnections, 1, 500},
+		{"Disk", q.DiskMB, 0, 10485760},
 	} {
 		if f.v < f.min || f.v > f.max {
 			return fmt.Errorf("%s harus antara %d dan %d", f.name, f.min, f.max)
@@ -83,14 +86,14 @@ type NewUser struct {
 	Quota                                      Quota
 }
 
-const userCols = `id, username, display_name, email, role, quota_apps, quota_memory_mb, quota_cpu_milli, quota_databases, quota_pg_connections, created_at`
+const userCols = `id, username, display_name, email, role, quota_apps, quota_memory_mb, quota_cpu_milli, quota_databases, quota_pg_connections, quota_disk_mb, created_at`
 
 type scanner interface{ Scan(dest ...any) error }
 
 func scanUser(r scanner, extra ...any) (User, error) {
 	var u User
 	dest := []any{&u.ID, &u.Username, &u.DisplayName, &u.Email, &u.Role,
-		&u.Quota.Apps, &u.Quota.MemoryMB, &u.Quota.CPUMilli, &u.Quota.Databases, &u.Quota.PGConnections, &u.CreatedAt}
+		&u.Quota.Apps, &u.Quota.MemoryMB, &u.Quota.CPUMilli, &u.Quota.Databases, &u.Quota.PGConnections, &u.Quota.DiskMB, &u.CreatedAt}
 	if err := r.Scan(append(dest, extra...)...); err != nil {
 		return User{}, err
 	}
@@ -99,10 +102,10 @@ func scanUser(r scanner, extra ...any) (User, error) {
 
 func (s *Store) CreateUser(ctx context.Context, n NewUser, now int64) (User, error) {
 	res, err := s.db.ExecContext(ctx,
-		`INSERT INTO users(username, display_name, email, password_hash, role, quota_apps, quota_memory_mb, quota_cpu_milli, quota_databases, quota_pg_connections, created_at)
-		 VALUES(?,?,?,?,?,?,?,?,?,?,?)`,
+		`INSERT INTO users(username, display_name, email, password_hash, role, quota_apps, quota_memory_mb, quota_cpu_milli, quota_databases, quota_pg_connections, quota_disk_mb, created_at)
+		 VALUES(?,?,?,?,?,?,?,?,?,?,?,?)`,
 		n.Username, n.DisplayName, n.Email, n.PasswordHash, n.Role,
-		n.Quota.Apps, n.Quota.MemoryMB, n.Quota.CPUMilli, n.Quota.Databases, n.Quota.PGConnections, now)
+		n.Quota.Apps, n.Quota.MemoryMB, n.Quota.CPUMilli, n.Quota.Databases, n.Quota.PGConnections, n.Quota.DiskMB, now)
 	if isUnique(err) {
 		return User{}, ErrConflict
 	}
@@ -190,8 +193,8 @@ func (s *Store) UpdateUser(ctx context.Context, id int64, p UserPatch) (User, er
 			u.Role = *p.Role
 		}
 		_, err = tx.ExecContext(ctx,
-			`UPDATE users SET display_name=?, email=?, role=?, quota_apps=?, quota_memory_mb=?, quota_cpu_milli=?, quota_databases=?, quota_pg_connections=? WHERE id=?`,
-			u.DisplayName, u.Email, u.Role, u.Quota.Apps, u.Quota.MemoryMB, u.Quota.CPUMilli, u.Quota.Databases, u.Quota.PGConnections, id)
+			`UPDATE users SET display_name=?, email=?, role=?, quota_apps=?, quota_memory_mb=?, quota_cpu_milli=?, quota_databases=?, quota_pg_connections=?, quota_disk_mb=? WHERE id=?`,
+			u.DisplayName, u.Email, u.Role, u.Quota.Apps, u.Quota.MemoryMB, u.Quota.CPUMilli, u.Quota.Databases, u.Quota.PGConnections, u.Quota.DiskMB, id)
 		if err != nil {
 			return fmt.Errorf("update user: %w", err)
 		}

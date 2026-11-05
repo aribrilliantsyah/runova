@@ -65,14 +65,22 @@ Deployment is divided into four steps:
 
 The **Deploy** button is only enabled after all required fields are satisfied. The summary panel indicates what is still missing.
 
-Once running, the application page provides controls (upload new version, restart, stop, terminal), environment variables, domains, deployment history with rollback support, logs, monitoring, and advanced settings.
+Once running, the application page provides controls (upload new version, restart, stop, terminal), environment variables, domains, deployment history with rollback support, logs, monitoring, files, and advanced settings.
+
+## Application files
+
+Every application has a **workspace**, shown in the panel as `<app>/` (for example `starboom/`). It is the container's working directory (`/data`, also in `RUNOVA_DATA_DIR`), lives on the server at `/var/lib/runova/data/<user>/<app>/`, and keeps its files across redeploys, restarts and rollbacks. The rest of the container is read-only.
+
+- An app that writes to a relative path such as `./storage` already writes into the workspace (`starboom/storage`).
+- An app that writes to an absolute path such as `/app/storage` or `/var/www/uploads` gets that path **mounted automatically** from a workspace folder (`starboom/storage`). Runova finds such folders in `.env.example`, `application.properties` and `application.yml` (`spring.servlet.multipart.location`, `*.upload-dir`, `*.storage.*path*`, `STORAGE_PATH`, `UPLOAD_DIR`, …) without running the app; the review page lists them ticked under **Folder tersimpan**, and they can be changed there or in the app's **Lanjutan** tab. System folders (`/etc`, `/usr`, `/proc`, …), `/tmp` and the artifact itself are refused.
+- The **File** tab lists the workspace, downloads and deletes files, and uploads small files.
 
 ## Users and quotas
 
 - **Admin** registers users. There is no self-registration.
 - Each user only sees and manages their own applications.
-- Admins configure quotas per user: **number of applications, memory, CPU, and number of databases** (default 3). Users allocate that quota across their applications.
-- Storage is not subject to quotas, allowing Runova to run on stock Ubuntu Server without dedicated disk provisioning. Admins can still monitor server disk usage on the **Server** page.
+- Admins configure quotas per user: **number of applications, memory, CPU, number of databases** (default 3) **and disk** (default 1 GB). Users allocate that quota across their applications; each app gets a disk size at deploy (256 MB by default, changeable in **Lanjutan**).
+- Disk counts everything in an app's workspace (its saved folders included); artifacts, logs and PostgreSQL databases do not count. Runova measures every workspace every 5 minutes and before each deploy. At 80% the owner is warned; at 100% the app shows **Disk penuh**, the owner gets an error notification and new deploys of that app are refused until files are deleted or the size is raised. The running app is **not** stopped, so no data is lost. This is a soft limit: an app can write past it until the next measurement. A hard limit needs a filesystem with project quotas (XFS `prjquota`), which stock Ubuntu installs do not have; that is future work. Admins see server disk use and the apps' share on the **Server** page.
 - Applications exceeding their memory limit are killed and restarted by Docker without affecting other applications.
 
 ## Database

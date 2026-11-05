@@ -9,6 +9,7 @@ import (
 	"slices"
 
 	"runova/internal/artifact"
+	"runova/internal/folders"
 )
 
 type AppStatus string
@@ -63,7 +64,25 @@ type App struct {
 	DeployMode          string        `json:"deploy_mode"`
 	CreatedAt           int64         `json:"created_at"`
 	DatabaseID          *int64        `json:"database_id"`
+	// Folders are the app's saved folders (paths kept in its workspace).
+	Folders []folders.Folder `json:"folders"`
+	// DiskMB is the disk allocated to the app's workspace; 0 means not limited
+	// (apps created before disk quotas until a size is chosen).
+	DiskMB int `json:"disk_mb"`
+	// DiskUsedBytes is what the last scan of the workspace found, at DiskScannedAt (Unix ms).
+	DiskUsedBytes int64     `json:"disk_used_bytes"`
+	DiskScannedAt int64     `json:"disk_scanned_at"`
+	DiskLevel     DiskLevel `json:"disk_level"`
 }
+
+// DiskLevel is how full an app's workspace was at the last scan.
+type DiskLevel string
+
+const (
+	DiskOK   DiskLevel = ""
+	DiskWarn DiskLevel = "warn" // 80% of DiskMB or more
+	DiskFull DiskLevel = "full" // DiskMB or more
+)
 
 // EnvEntry is one environment variable. Secret values are sealed in the
 // store; the API blanks them before sending.
@@ -100,21 +119,38 @@ type Deployment struct {
 	FinishedAt   int64        `json:"finished_at"`
 }
 
-const appCols = `id, user_id, name, kind, java_version, jvm_opts, internal_port, ip_port, ip_access, memory_mb, cpu_milli, status, current_deployment_id, deploy_mode, created_at, database_id`
+const appCols = `id, user_id, name, kind, java_version, jvm_opts, internal_port, ip_port, ip_access, memory_mb, cpu_milli, status, current_deployment_id, deploy_mode, created_at, database_id, folders, disk_mb, disk_used_bytes, disk_scanned_at, disk_level`
 
 func scanApp(r scanner) (App, error) {
 	var a App
+	var rawFolders string
 	err := r.Scan(&a.ID, &a.UserID, &a.Name, &a.Kind, &a.JavaVersion, &a.JVMOpts, &a.InternalPort, &a.IPPort, &a.IPAccess,
-		&a.MemoryMB, &a.CPUMilli, &a.Status, &a.CurrentDeploymentID, &a.DeployMode, &a.CreatedAt, &a.DatabaseID)
-	return a, err
+		&a.MemoryMB, &a.CPUMilli, &a.Status, &a.CurrentDeploymentID, &a.DeployMode, &a.CreatedAt, &a.DatabaseID,
+		&rawFolders, &a.DiskMB, &a.DiskUsedBytes, &a.DiskScannedAt, &a.DiskLevel)
+	if err != nil {
+		return a, err
+	}
+	a.Folders = []folders.Folder{}
+	if err := json.Unmarshal([]byte(rawFolders), &a.Folders); err != nil {
+		return a, fmt.Errorf("decode folders of app %d: %w", a.ID, err)
+	}
+	return a, nil
+}
+
+func encodeFolders(list []folders.Folder) string {
+	if list == nil {
+		list = []folders.Folder{}
+	}
+	raw, _ := json.Marshal(list) // plain strings: cannot fail
+	return string(raw)
 }
 
 // CreateApp inserts a; ErrConflict when the name is taken for that user or the IP port is in use.
 func (s *Store) CreateApp(ctx context.Context, a App) (App, error) {
 	res, err := s.db.ExecContext(ctx,
-		`INSERT INTO apps(user_id, name, kind, java_version, jvm_opts, internal_port, ip_port, ip_access, memory_mb, cpu_milli, status, deploy_mode, created_at, database_id)
-		 VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
-		a.UserID, a.Name, a.Kind, a.JavaVersion, a.JVMOpts, a.InternalPort, a.IPPort, a.IPAccess, a.MemoryMB, a.CPUMilli, a.Status, a.DeployMode, a.CreatedAt, a.DatabaseID)
+		`INSERT INTO apps(user_id, name, kind, java_version, jvm_opts, internal_port, ip_port, ip_access, memory_mb, cpu_milli, status, deploy_mode, created_at, database_id, folders, disk_mb)
+		 VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+		a.UserID, a.Name, a.Kind, a.JavaVersion, a.JVMOpts, a.InternalPort, a.IPPort, a.IPAccess, a.MemoryMB, a.CPUMilli, a.Status, a.DeployMode, a.CreatedAt, a.DatabaseID, encodeFolders(a.Folders), a.DiskMB)
 	if isUnique(err) {
 		return App{}, ErrConflict
 	}
@@ -124,6 +160,9 @@ func (s *Store) CreateApp(ctx context.Context, a App) (App, error) {
 	a.ID, err = res.LastInsertId()
 	if err != nil {
 		return App{}, fmt.Errorf("create app: %w", err)
+	}
+	if a.Folders == nil {
+		a.Folders = []folders.Folder{}
 	}
 	return a, nil
 }
@@ -170,6 +209,8 @@ type AppPatch struct {
 	CPUMilli     *int
 	IPAccess     *bool
 	DeployMode   *string
+	DiskMB       *int
+	Folders      *[]folders.Folder
 }
 
 func (s *Store) UpdateApp(ctx context.Context, id int64, p AppPatch) (App, error) {
@@ -200,9 +241,18 @@ func (s *Store) UpdateApp(ctx context.Context, id int64, p AppPatch) (App, error
 		if p.DeployMode != nil {
 			a.DeployMode = *p.DeployMode
 		}
+		if p.DiskMB != nil {
+			a.DiskMB = *p.DiskMB
+		}
+		if p.Folders != nil {
+			a.Folders = *p.Folders
+			if a.Folders == nil {
+				a.Folders = []folders.Folder{}
+			}
+		}
 		if _, err := tx.ExecContext(ctx,
-			`UPDATE apps SET java_version=?, jvm_opts=?, internal_port=?, memory_mb=?, cpu_milli=?, ip_access=?, deploy_mode=? WHERE id=?`,
-			a.JavaVersion, a.JVMOpts, a.InternalPort, a.MemoryMB, a.CPUMilli, a.IPAccess, a.DeployMode, id); err != nil {
+			`UPDATE apps SET java_version=?, jvm_opts=?, internal_port=?, memory_mb=?, cpu_milli=?, ip_access=?, deploy_mode=?, disk_mb=?, folders=? WHERE id=?`,
+			a.JavaVersion, a.JVMOpts, a.InternalPort, a.MemoryMB, a.CPUMilli, a.IPAccess, a.DeployMode, a.DiskMB, encodeFolders(a.Folders), id); err != nil {
 			return fmt.Errorf("update app: %w", err)
 		}
 		out = a
@@ -225,6 +275,14 @@ func (s *Store) SetAppStatus(ctx context.Context, id int64, status AppStatus) er
 	}
 	if n, _ := res.RowsAffected(); n == 0 {
 		return ErrNotFound
+	}
+	return nil
+}
+
+// SetAppDiskUsage records the result of a workspace scan.
+func (s *Store) SetAppDiskUsage(ctx context.Context, id, usedBytes, at int64, level DiskLevel) error {
+	if _, err := s.db.ExecContext(ctx, `UPDATE apps SET disk_used_bytes = ?, disk_scanned_at = ?, disk_level = ? WHERE id = ?`, usedBytes, at, level, id); err != nil {
+		return fmt.Errorf("set app disk usage: %w", err)
 	}
 	return nil
 }
@@ -536,15 +594,22 @@ func (s *Store) UsedIPPorts(ctx context.Context) (map[int]bool, error) {
 	return s.usedPorts(ctx, `SELECT ip_port FROM apps`)
 }
 
-// UserUsage sums the user's apps and their allocated memory and CPU.
-func (s *Store) UserUsage(ctx context.Context, userID int64) (apps, memoryMB, cpuMilli int, err error) {
-	err = s.db.QueryRowContext(ctx,
-		`SELECT count(*), coalesce(sum(memory_mb), 0), coalesce(sum(cpu_milli), 0) FROM apps WHERE user_id = ?`, userID).
-		Scan(&apps, &memoryMB, &cpuMilli)
+// AppUsage is what a user's apps have allocated, and the disk they used at the last scans.
+type AppUsage struct {
+	Apps, MemoryMB, CPUMilli, DiskMB int
+	DiskUsedBytes                    int64
+}
+
+// UserUsage sums the user's apps and their allocated memory, CPU and disk.
+func (s *Store) UserUsage(ctx context.Context, userID int64) (AppUsage, error) {
+	var u AppUsage
+	err := s.db.QueryRowContext(ctx,
+		`SELECT count(*), coalesce(sum(memory_mb), 0), coalesce(sum(cpu_milli), 0), coalesce(sum(disk_mb), 0), coalesce(sum(disk_used_bytes), 0) FROM apps WHERE user_id = ?`, userID).
+		Scan(&u.Apps, &u.MemoryMB, &u.CPUMilli, &u.DiskMB, &u.DiskUsedBytes)
 	if err != nil {
 		err = fmt.Errorf("user usage: %w", err)
 	}
-	return
+	return u, err
 }
 
 // NetIndex returns the user's Docker network slot (1–254), allocating the

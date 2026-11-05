@@ -37,8 +37,11 @@ func overQuota(format string, a ...any) error {
 
 func conflict(msg string) error { return &userError{store.ErrConflict, msg} }
 
-// Usage is what a user's apps have allocated.
-type Usage struct{ Apps, MemoryMB, CPUMilli int }
+// Usage is what a user's apps have allocated, and the disk their workspaces used at the last scans.
+type Usage struct {
+	Apps, MemoryMB, CPUMilli, DiskMB int
+	DiskUsedBytes                    int64
+}
 
 const (
 	minMemoryMB   = 128

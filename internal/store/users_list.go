@@ -13,6 +13,9 @@ type Usage struct {
 	MemoryMB  int `json:"memory_mb"`
 	CPUMilli  int `json:"cpu_milli"`
 	Databases int `json:"databases"`
+	// DiskMB is allocated to the user's apps; DiskUsedBytes what their workspaces held at the last scans.
+	DiskMB        int   `json:"disk_mb"`
+	DiskUsedBytes int64 `json:"disk_used_bytes"`
 }
 
 // UserRow is a user in the Users table with its usage and last successful login (0 = never).
@@ -56,6 +59,7 @@ var userSortCols = map[string]string{
 	"memory":     "memory_mb",
 	"cpu":        "cpu_milli",
 	"databases":  "dbs",
+	"disk":       "disk_used",
 	"created":    "u.created_at",
 	"last_login": "last_login",
 }
@@ -133,10 +137,11 @@ func (s *Store) UserList(ctx context.Context, f UserListFilter) (UserPage, error
 	rows, err := s.db.QueryContext(ctx, `
 		SELECT `+prefixed(userCols, "u.")+`,
 			COALESCE(a.n, 0) AS apps, COALESCE(a.mem, 0) AS memory_mb, COALESCE(a.cpu, 0) AS cpu_milli,
+			COALESCE(a.disk, 0) AS disk_mb, COALESCE(a.used, 0) AS disk_used,
 			COALESCE(d.n, 0) AS dbs,
 			COALESCE((SELECT MAX(at) FROM activity WHERE action = 'login' AND actor_id = u.id), 0) AS last_login
 		FROM users u
-		LEFT JOIN (SELECT user_id, COUNT(*) n, SUM(memory_mb) mem, SUM(cpu_milli) cpu FROM apps GROUP BY user_id) a ON a.user_id = u.id
+		LEFT JOIN (SELECT user_id, COUNT(*) n, SUM(memory_mb) mem, SUM(cpu_milli) cpu, SUM(disk_mb) disk, SUM(disk_used_bytes) used FROM apps GROUP BY user_id) a ON a.user_id = u.id
 		LEFT JOIN (SELECT user_id, COUNT(*) n FROM databases GROUP BY user_id) d ON d.user_id = u.id
 		WHERE `+match+roleCond+`
 		ORDER BY `+order+`
@@ -148,7 +153,7 @@ func (s *Store) UserList(ctx context.Context, f UserListFilter) (UserPage, error
 	defer rows.Close()
 	for rows.Next() {
 		var r UserRow
-		u, err := scanUser(rows, &r.Usage.Apps, &r.Usage.MemoryMB, &r.Usage.CPUMilli, &r.Usage.Databases, &r.LastLoginAt)
+		u, err := scanUser(rows, &r.Usage.Apps, &r.Usage.MemoryMB, &r.Usage.CPUMilli, &r.Usage.DiskMB, &r.Usage.DiskUsedBytes, &r.Usage.Databases, &r.LastLoginAt)
 		if err != nil {
 			return UserPage{}, fmt.Errorf("list users: %w", err)
 		}

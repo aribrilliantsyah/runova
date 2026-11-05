@@ -49,6 +49,8 @@ type Report struct {
 	// Language is the programming language the artifact was written in
 	// (the Lang* constants); "" when it could not be told.
 	Language string `json:"language"`
+	// Folders are the folders the app's configuration says it writes to.
+	Folders []DetectedFolder `json:"folders"`
 }
 
 // OK reports whether the artifact has no problem blocking a deploy.
@@ -61,6 +63,7 @@ func newReport(kind Kind) Report {
 		Port:       defaultPort,
 		PortSource: portSourceDefault,
 		Env:        []EnvVar{},
+		Folders:    []DetectedFolder{},
 		Problems:   []string{},
 	}
 }

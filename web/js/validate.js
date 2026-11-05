@@ -118,3 +118,38 @@ export function cpuChoices(left) {
   if (top >= 100) set.add(top);
   return [...set].sort((a, b) => a - b);
 }
+
+/** diskChoices(leftMB): disk sizes on offer within what is left of the quota (64 MB steps, like the server). */
+export function diskChoices(left) {
+  const set = new Set([64, 128, 256, 512, 1024, 2048, 5120, 10240, 20480, 51200].filter((v) => v <= left));
+  const top = left - (left % 64);
+  if (top >= 64) set.add(top);
+  return [...set].sort((a, b) => a - b);
+}
+
+const FOLDER_CHARS = /^[A-Za-z0-9._/-]+$/;
+const BLOCKED_EXACT = ["/", "/var", "/opt", "/srv", "/home", "/mnt", "/media", "/app", "/data", "/tmp"];
+const BLOCKED_TREE = ["/proc", "/sys", "/dev", "/etc", "/usr", "/bin", "/sbin", "/boot", "/run", "/root", "/var/run", "/tmp", "/opt/java"];
+const under = (p, dir) => p === dir || p.startsWith(`${dir}/`);
+
+/** folderError(path): the server's rules for a saved folder (internal/folders), or "". */
+export function folderError(raw) {
+  const p = raw.trim();
+  if (!p) return "Isi path folder";
+  if (p.length > 200) return "Path folder maksimal 200 karakter";
+  if (!FOLDER_CHARS.test(p)) return "Path hanya boleh huruf, angka, titik, garis bawah, tanda hubung, dan /";
+  if (p.split("/").includes("..")) return "Path tidak boleh memakai ..";
+  const clean = (s) => s.split("/").filter((x) => x && x !== ".").join("/");
+  if (!p.startsWith("/")) return clean(p) ? "" : "Pilih subfolder, misalnya storage";
+  const abs = `/${clean(p)}`;
+  if (under(abs, "/data")) return abs === "/data" ? "/data sudah tersimpan seluruhnya; pilih subfolder" : "";
+  if (BLOCKED_EXACT.includes(abs)) return `${abs} tidak bisa dijadikan folder tersimpan`;
+  if (BLOCKED_TREE.some((b) => under(abs, b)) || abs.startsWith("/lib")) return `${abs} adalah folder sistem`;
+  return "";
+}
+
+/** workspaceLabel(app, folder|path): how the panel names a place in the workspace, "starboom/storage". */
+export function workspaceLabel(appName, x) {
+  const rel = typeof x === "string" ? x : x.dir;
+  return `${appName}/${rel}`;
+}

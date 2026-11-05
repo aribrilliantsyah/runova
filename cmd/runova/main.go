@@ -171,6 +171,7 @@ func serve(cfg config.Config, stderr io.Writer) int {
 	}()
 	go syncer.Run(ctx)
 	go svc.WatchDomains(ctx)
+	go svc.WatchDisk(ctx)
 	go cleanupLoop(ctx, st, cfg.DataDir)
 	go dbSvc.RunSchedule(ctx)
 	updates := newUpdateChecker(cfg, st)

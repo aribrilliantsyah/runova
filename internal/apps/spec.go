@@ -107,10 +107,10 @@ func (s *Service) ContainerSpec(app store.App, user store.User, d store.Deployme
 		Network:      networkName(user.ID),
 		InternalPort: d.InternalPort,
 		HostPort:     d.HostPort,
-		Binds: []string{
+		Binds: append([]string{
 			d.ArtifactPath + ":" + file + ":ro",
 			s.appDataDir(user.Username, app.Name) + ":" + dataMount,
-		},
+		}, s.folderBinds(user, app)...),
 		Tmpfs:       map[string]string{"/tmp": tmpOptions},
 		MemoryBytes: int64(app.MemoryMB) << 20,
 		NanoCPUs:    int64(app.CPUMilli) * 1_000_000,

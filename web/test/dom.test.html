@@ -5,7 +5,7 @@
 <script type="module">
 import { test, assert, eq, run } from "/test/harness.js";
 import { h, icon, fmtBytes, fmtMB, fmtCPU, fmtTime, pct } from "/assets/js/dom.js";
-import { labelError, hostingNameError, parseDotenv, suggestName, appNameError, envError, uploadError, memoryChoices } from "/assets/js/validate.js";
+import { labelError, hostingNameError, parseDotenv, suggestName, appNameError, envError, uploadError, memoryChoices, diskChoices, folderError, workspaceLabel } from "/assets/js/validate.js";
 import { splitHost } from "/assets/js/components/guide.js";
 import { kindLogo, runtimeSub } from "/assets/js/kinds.js";
 
@@ -112,6 +112,27 @@ test("memoryChoices stay within what is left", () => {
   assert(c.every((v) => v <= 640 && v % 64 === 0), JSON.stringify(c));
   assert(c.includes(640));
   eq(memoryChoices(100), []);
+});
+
+test("diskChoices stay within what is left, in 64 MB steps", () => {
+  const c = diskChoices(700);
+  assert(c.every((v) => v <= 700 && v % 64 === 0 && v >= 64), JSON.stringify(c));
+  assert(c.includes(256) && c.includes(640));
+  eq(diskChoices(50), []);
+});
+
+test("folderError follows the server's rules", () => {
+  for (const ok of ["./storage", "storage/", "public/uploads", "/app/storage", "/var/www/uploads", "/data/storage"]) eq(folderError(ok), "", ok);
+  for (const bad of ["", ".", "..", "../x", "a/../b", "/", "/etc", "/etc/x", "/proc", "/usr/local/x", "/lib64", "/tmp", "/tmp/x", "/app", "/data", "/var", "with space", "a:b"]) {
+    assert(folderError(bad) !== "", `${bad} accepted`);
+  }
+});
+
+test("workspaceLabel names folders by the app, never a host path", () => {
+  eq(workspaceLabel("starboom", { path: "storage", dir: "storage" }), "starboom/storage");
+  eq(workspaceLabel("starboom", { path: "/app/storage", dir: "storage-2" }), "starboom/storage-2");
+  eq(workspaceLabel("starboom", ""), "starboom/");
+  eq(workspaceLabel("starboom", "storage/foto.png"), "starboom/storage/foto.png");
 });
 
 test("splitHost handles second-level suffixes", () => {
