@@ -6,7 +6,7 @@ Perbarui server dengan `sudo runova update` (server 0.2.0 atau lebih lama: jalan
 
 ## [0.3.11] - 2026-11-05
 
-### Changed
+### Diubah
 - README dibuat singkat untuk orang yang memasang Runova: apa yang didapat, screenshot baru (file manager, tabel dan query database, timeline deploy, aktivitas), cara pasang enam langkah, update, dan rollback.
 - Materi teknis dipindah dari README ke dokumen sendiri, dalam bahasa Inggris dan Indonesia: `docs/architecture.md`, `docs/domains.md`, `docs/operations.md`, dan `docs/development.md`. Panduan instalasi menautkan ke dokumen itu.
 
