@@ -4,6 +4,24 @@ Semua perubahan penting Runova. Versi mengikuti [semantic versioning](https://se
 
 Perbarui server dengan `sudo runova update` (server 0.2.0 atau lebih lama: jalankan perintah `curl … get.sh | sudo bash` sekali). Perubahan skema database dimigrasikan otomatis setelah cadangan (`runova.db.bak-v<N>-*`); `sudo runova rollback` kembali ke versi sebelumnya beserta database-nya.
 
+## [Unreleased]
+
+### Ditambahkan
+- **Pengelola file di tab File.** Breadcrumb yang bisa diklik dengan folder tersimpan di URL (`#/apps/<id>/files?path=storage/2026`), tombol naik satu folder, pencarian, tampilan daftar dan kisi (gambar kecil), urutan Nama/Ukuran/Diubah dengan folder selalu di atas, jumlah isi tiap folder.
+- Pilih banyak item (checkbox, Shift-klik, Ctrl+A) untuk diunduh sebagai satu ZIP atau dihapus bersama; keyboard: panah, Enter membuka, Backspace naik, Delete menghapus (dengan konfirmasi), F2 ganti nama.
+- Menu baris (⋯ dan klik kanan): pratinjau, unduh (folder sebagai ZIP), ganti nama, pindahkan ke folder lain, salin path di aplikasi (`./storage/x.png`, `/data/storage/x.png`, `/app/storage/x.png`), hapus. Folder tersimpan menjelaskan kenapa tidak bisa diganti nama, dipindah, atau dihapus.
+- Unggah banyak file sekaligus atau tarik ke daftar, dengan progres per file; folder baru.
+- Panel pratinjau: gambar PNG/JPEG/GIF/WebP dan file teks sampai 1 MB (nomor baris), dengan ukuran, tipe terdeteksi, waktu, dan path. SVG, PDF, dan file lain hanya diunduh.
+- Footer berisi jumlah item, ukuran folder, dan bar disk aplikasi (peringatan 80 %, penuh 100 %). Di ponsel baris ringkas dan aksi lewat sheet.
+- API: `POST /api/apps/{id}/files/folder`, `POST …/files/move`, `GET …/files/zip`, `GET …/files/info`, `GET …/files/preview`; unggah banyak file. Aktivitas: `file.rename`, `file.mkdir`.
+
+### Diubah
+- `DELETE /api/apps/{id}/files` menerima `{"paths": [...]}`; satu path yang ditolak membatalkan semuanya.
+- Kartu di tab Lanjutan memakai satu tata letak: judul dan deskripsi di kiri, tombol simpan di kanan footer kartu.
+
+### Diperbaiki
+- Folder tersimpan: tombol "Tambah folder" dan "Simpan folder" tidak lagi berhimpitan. Kartu punya keadaan kosong yang jelas, tiap baris menyebut asalnya (terdeteksi atau manual), "Tambah folder" ada di header (di bawah daftar pada halaman Tinjau), "Simpan folder" di footer, aktif hanya setelah ada perubahan dan ditandai "Belum disimpan".
+
 ## [0.3.9] - 2026-11-05
 
 ### Ditambahkan
