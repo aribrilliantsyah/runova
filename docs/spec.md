@@ -135,7 +135,7 @@ Deteksi:
 - Caddy dikelola lewat admin API (`127.0.0.1:2019`). Server `runova-https` (`:80`, `:443`) berisi satu route per domain → `127.0.0.1:<port acak aplikasi>`; server `runova-ip-<port>` per aplikasi yang akses IP-nya nyala.
 - Domain: nama host valid (huruf kecil, label 1–63, total ≤253, minimal dua label), unik di seluruh server, maksimal 5 per aplikasi. Status sertifikat diambil dari Caddy (`/pki` tidak cukup; Runova mencoba koneksi TLS ke domain di 127.0.0.1:443 dengan SNI).
 - Panel sendiri: saat instalasi pilih domain (HTTPS otomatis) atau `IP:port`. Bisa diubah di Pengaturan; flag installer `--domain` / `--port`, disimpan lewat `runova panel set`.
-- Panduan domain tiga cara (DNS langsung, Proxy Cloudflare, Cloudflare Tunnel) sesuai README. Hanya admin yang boleh menambah domain sendiri (bebas); pengguna biasa memakai domain hosting di bawah.
+- Panduan domain tiga cara (DNS langsung, Proxy Cloudflare, Cloudflare Tunnel) sesuai `docs/domains.id.md`. Hanya admin yang boleh menambah domain sendiri (bebas); pengguna biasa memakai domain hosting di bawah.
 - **Domain hosting bersama.** Admin mendaftarkan domain wildcard (mis. `porto.devkriyanesia.my.id`, record `A` `*.porto` ke IP server, DNS only); setiap pengguna memberi aplikasinya `<nama>.<domain terdaftar>` sebanyak kuota aplikasinya (`Quota.Apps`), tanpa mengurus DNS. Satu sertifikat Let's Encrypt per subdomain (HTTP/TLS-ALPN, tanpa sertifikat wildcard); halaman Server memperingatkan mendekati batas 50 sertifikat per minggu. Tabel `hosting_domains` (migrasi `0002`), kolom `domains.hosting_domain_id` dan `domains.label`. Desain lengkap: [`docs/superpowers/specs/2026-11-03-hosting-domains-design.md`](superpowers/specs/2026-11-03-hosting-domains-design.md).
 
 ## 7. Database PostgreSQL

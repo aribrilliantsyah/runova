@@ -2,7 +2,7 @@
 
 [English](install-ubuntu.md) · **Bahasa Indonesia**
 
-Panduan untuk admin server. Hasil akhirnya: panel Runova berjalan di server Anda, lengkap dengan Docker, Caddy (HTTPS otomatis), dan PostgreSQL 18, siap dipakai pengguna untuk men-deploy aplikasi.
+Panduan untuk admin server, dari server kosong sampai panel berjalan. Kalau hanya butuh versi singkat, [README](../README.id.md#pasang) punya langkah pasang yang ringkas; halaman ini menambahkan detailnya: ukuran server, firewall, DNS, cadangan, dan pemecahan masalah. Hasil akhirnya: panel Runova berjalan di server Anda, lengkap dengan Docker, Caddy (HTTPS otomatis), dan PostgreSQL 18, siap dipakai pengguna untuk men-deploy aplikasi.
 
 ## 1. Spesifikasi server
 
@@ -138,7 +138,7 @@ scripts/deploy.sh admin@IP-SERVER --domain panel.contoh.id
 
 Skrip ini memeriksa SSH, Ubuntu 26.04 amd64, dan `sudo` di server; membangun rilis lokal; menyalinnya; lalu menjalankan installer yang sama. Opsi tambahan: `--version`, `-p/--ssh-port`, `-i/--identity`, dan `RUNOVA_SSH_OPTS` (misalnya `RUNOVA_SSH_OPTS="-o ProxyJump=bastion"`).
 
-Installer memasang `docker.io`, `caddy`, `postgresql-18`, `ufw`, `jq`, dan `curl` dari apt Ubuntu; membuat user `runova`, kunci enkripsi, dan layanan systemd; mengatur Caddy dan PostgreSQL; membuka port di `ufw` (SSH diizinkan lebih dulu sebelum `ufw` diaktifkan); lalu menjalankan `runova check`. Ringkasan lengkap ada di [README](../README.id.md#instalasi).
+Installer memasang `docker.io`, `caddy`, `postgresql-18`, `ufw`, `jq`, dan `curl` dari apt Ubuntu; membuat user `runova`, kunci enkripsi, dan layanan systemd; mengatur Caddy dan PostgreSQL; membuka port di `ufw` (SSH diizinkan lebih dulu sebelum `ufw` diaktifkan); lalu menjalankan `runova check`. Daftar perubahan yang dibuat installer ada di [Operasional](operations.id.md#detail-installer); soal domain lihat [Domain dan HTTPS](domains.id.md).
 
 ## 6. Setelah instalasi
 

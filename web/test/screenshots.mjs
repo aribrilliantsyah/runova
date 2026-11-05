@@ -114,7 +114,6 @@ try {
   };
   await withBanner(true);
   await shot("desktop-update-banner.png", { width: 1440, height: 900, scheme: "light", route: "/apps", wait: ".app > .main > .banner.upd:not([hidden])" });
-  await shot("mobile-update-banner-dark.png", { width: 390, height: 844, scheme: "dark", route: "/apps", wait: ".app > .main > .banner.upd:not([hidden])" });
   await withBanner(false);
 
   const pickDb = (p) => p.click("button[data-conn='admin_billing']");
@@ -189,13 +188,6 @@ try {
   await shot("mobile-database-query.png", {
     width: 390, height: 844, scheme: "light", route: "/databases", wait: ".dbcard[data-db='admin_billing']",
     after: runQuery("SELECT * FROM invoices;"),
-  });
-  await shot("mobile-server-hosting.png", {
-    width: 390, height: 844, scheme: "dark", route: "/server", wait: "#hostrows tr",
-    after: async (p) => {
-      await tidyServer(p);
-      await p.locator("#hostingcard").scrollIntoViewIfNeeded();
-    },
   });
 } finally {
   await browser.close();
