@@ -332,13 +332,15 @@ func (s *Service) refuseFullDisk(ctx context.Context, owner store.User, app stor
 	return nil
 }
 
-// FileEntry is one item of a workspace folder. Saved marks a saved folder.
+// FileEntry is one item of a workspace folder. Saved marks a saved folder;
+// Items counts what a folder holds (one level, links included).
 type FileEntry struct {
 	Name    string `json:"name"`
 	Type    string `json:"type"` // "dir", "file" or "link"
 	Size    int64  `json:"size"`
 	ModTime int64  `json:"mod_time"`
 	Saved   bool   `json:"saved"`
+	Items   int    `json:"items"`
 }
 
 var errOutside = &userError{ErrValidation, "Path keluar dari workspace aplikasi"}
@@ -402,6 +404,44 @@ func isSaved(app store.App, rel string) bool {
 	return slices.ContainsFunc(app.Folders, func(f folders.Folder) bool { return f.Dir == rel })
 }
 
+// holdsSaved reports whether rel is a saved folder or a folder with one inside it.
+func holdsSaved(app store.App, rel string) bool {
+	return slices.ContainsFunc(app.Folders, func(f folders.Folder) bool { return under(f.Dir, rel) })
+}
+
+// under reports whether p is dir or inside it; "" is the whole workspace.
+func under(p, dir string) bool {
+	return dir == "" || p == dir || strings.HasPrefix(p, dir+"/")
+}
+
+// validName checks one file or folder name typed by the user.
+func validName(name, what string) error {
+	if name == "" || name == "." || name == ".." || len(name) > maxFileName || strings.ContainsAny(name, "/\\\x00") {
+		return invalid("Nama %s tidak valid", what)
+	}
+	return nil
+}
+
+func joinRel(dir, name string) string {
+	if dir == "" {
+		return name
+	}
+	return dir + "/" + name
+}
+
+// savedRefusal explains why rel cannot be removed, renamed or moved, or returns nil.
+func savedRefusal(app store.App, rel string) error {
+	switch {
+	case rel == "":
+		return invalid("Workspace aplikasi tidak bisa diubah dari sini")
+	case isSaved(app, rel):
+		return invalid("%s adalah folder tersimpan; isinya bisa diubah, foldernya diatur di tab Lanjutan", rel)
+	case holdsSaved(app, rel):
+		return invalid("%s berisi folder tersimpan; folder ini tidak bisa dihapus, diganti namanya, atau dipindah", rel)
+	}
+	return nil
+}
+
 // ListFiles lists one folder of the app's workspace.
 func (s *Service) ListFiles(ctx context.Context, actor store.User, appID int64, rel string) ([]FileEntry, error) {
 	app, owner, err := s.load(ctx, actor, appID)
@@ -437,10 +477,7 @@ func (s *Service) ListFiles(ctx context.Context, actor store.User, appID int64, 
 	}
 	out := make([]FileEntry, 0, len(entries))
 	for _, e := range entries {
-		child := e.Name()
-		if rel != "" {
-			child = rel + "/" + child
-		}
+		child := joinRel(rel, e.Name())
 		info, err := e.Info()
 		if err != nil {
 			continue
@@ -451,6 +488,7 @@ func (s *Service) ListFiles(ctx context.Context, actor store.User, appID int64, 
 			fe.Type, fe.Size = "link", 0
 		case e.IsDir():
 			fe.Type, fe.Size = "dir", 0
+			fe.Items = s.countItems(owner, app, child)
 		}
 		out = append(out, fe)
 	}
@@ -466,6 +504,22 @@ func (s *Service) ListFiles(ctx context.Context, actor store.User, appID int64, 
 	return out, nil
 }
 
+// countItems counts the entries of one workspace folder; 0 when it cannot be read.
+func (s *Service) countItems(owner store.User, app store.App, rel string) int {
+	root, _, name, err := s.workspaceRoot(owner, app, rel)
+	if err != nil {
+		return 0
+	}
+	defer root.Close()
+	d, err := root.Open(name)
+	if err != nil {
+		return 0
+	}
+	defer d.Close()
+	names, _ := d.Readdirnames(-1)
+	return len(names)
+}
+
 // OpenFile opens one regular file of the app's workspace for download.
 func (s *Service) OpenFile(ctx context.Context, actor store.User, appID int64, rel string) (*os.File, fs.FileInfo, error) {
 	app, owner, err := s.load(ctx, actor, appID)
@@ -478,6 +532,11 @@ func (s *Service) OpenFile(ctx context.Context, actor store.User, appID int64, r
 	if rel == "" {
 		return nil, nil, invalid("Pilih file yang akan diunduh")
 	}
+	return s.openRegular(owner, app, rel)
+}
+
+// openRegular opens a regular file of the workspace; a link is refused, not followed.
+func (s *Service) openRegular(owner store.User, app store.App, rel string) (*os.File, fs.FileInfo, error) {
 	root, _, name, err := s.workspaceRoot(owner, app, rel)
 	if err != nil {
 		return nil, nil, fileErr(err)
@@ -503,36 +562,187 @@ func (s *Service) OpenFile(ctx context.Context, actor store.User, appID int64, r
 	return f, fi, nil
 }
 
-// DeleteFile removes a file or a folder with everything in it. The workspace
-// and the saved folders themselves stay; their contents can go.
-func (s *Service) DeleteFile(ctx context.Context, actor store.User, appID int64, rel string) error {
+// DeleteFiles removes files and folders with everything in them. Every path
+// is checked first, so one refused path removes nothing. The workspace, the
+// saved folders and the folders holding them stay; their contents can go.
+// A link is removed itself, never what it points to.
+func (s *Service) DeleteFiles(ctx context.Context, actor store.User, appID int64, paths []string) error {
 	app, owner, err := s.load(ctx, actor, appID)
 	if err != nil {
 		return err
 	}
-	if rel, err = cleanRel(rel); err != nil {
+	if len(paths) == 0 {
+		return invalid("Pilih file yang akan dihapus")
+	}
+	list := make([]string, 0, len(paths))
+	for _, p := range paths {
+		rel, err := cleanRel(p)
+		if err != nil {
+			return err
+		}
+		if err := savedRefusal(app, rel); err != nil {
+			return err
+		}
+		root, _, name, err := s.workspaceRoot(owner, app, rel)
+		if err != nil {
+			return fileErr(err)
+		}
+		_, err = root.Lstat(name)
+		root.Close()
+		if err != nil {
+			return fileErr(err)
+		}
+		if !slices.Contains(list, rel) {
+			list = append(list, rel)
+		}
+	}
+	for _, rel := range list {
+		root, _, name, err := s.workspaceRoot(owner, app, rel)
+		if err != nil {
+			return fileErr(err)
+		}
+		err = root.RemoveAll(name)
+		root.Close()
+		if err != nil {
+			s.remeasure(ctx, owner, app)
+			return fileErr(err)
+		}
+		s.logActivity(ctx, actor, store.ActFileDelete, app.Name, rel)
+	}
+	s.remeasure(ctx, owner, app)
+	return nil
+}
+
+// MakeDir creates the folder dir/name, owned by the app's UID.
+func (s *Service) MakeDir(ctx context.Context, actor store.User, appID int64, dir, name string) error {
+	app, owner, err := s.load(ctx, actor, appID)
+	if err != nil {
 		return err
 	}
-	if rel == "" {
-		return invalid("Workspace aplikasi tidak bisa dihapus")
+	if dir, err = cleanRel(dir); err != nil {
+		return err
 	}
-	if isSaved(app, rel) {
-		return invalid("%s adalah folder tersimpan; hapus isinya, atau hapus foldernya dari daftar di tab Lanjutan", rel)
+	if err := validName(name, "folder"); err != nil {
+		return err
 	}
-	root, _, name, err := s.workspaceRoot(owner, app, rel)
+	rel := joinRel(dir, name)
+	root, base, inner, err := s.workspaceRoot(owner, app, rel)
 	if err != nil {
 		return fileErr(err)
 	}
 	defer root.Close()
-	if _, err := root.Lstat(name); err != nil {
+	if inner == "." {
+		return invalid("%s sudah ada", name)
+	}
+	if fi, err := root.Lstat(path.Dir(inner)); err != nil {
+		return fileErr(err)
+	} else if !fi.IsDir() {
+		return errOutside
+	}
+	if err := root.Mkdir(inner, dirMode); err != nil {
+		if errors.Is(err, fs.ErrExist) {
+			return invalid("%s sudah ada", name)
+		}
 		return fileErr(err)
 	}
-	if err := root.RemoveAll(name); err != nil {
+	if err := s.chownIn(root, base, inner, containerUID(owner)); err != nil {
+		root.Remove(inner)
+		return err
+	}
+	s.logActivity(ctx, actor, store.ActFileMkdir, app.Name, rel)
+	return nil
+}
+
+// MoveFile renames or moves from to to inside the workspace, also between the
+// data folder and a mounted folder. It never replaces an existing file, never
+// moves a saved folder (or one holding it), and never moves through a link.
+func (s *Service) MoveFile(ctx context.Context, actor store.User, appID int64, from, to string) error {
+	app, owner, err := s.load(ctx, actor, appID)
+	if err != nil {
+		return err
+	}
+	if from, err = cleanRel(from); err != nil {
+		return err
+	}
+	if to, err = cleanRel(to); err != nil {
+		return err
+	}
+	if err := savedRefusal(app, from); err != nil {
+		return err
+	}
+	if to == "" || holdsSaved(app, to) {
+		return invalid("%s sudah ada", to)
+	}
+	if err := validName(path.Base(to), "baru"); err != nil {
+		return err
+	}
+	if under(to, from) {
+		return invalid("Folder tidak bisa dipindah ke dalam dirinya sendiri")
+	}
+	src, err := s.openParent(owner, app, from)
+	if err != nil {
+		return err
+	}
+	defer src.close()
+	if _, err := src.root.Lstat(src.inner); err != nil {
 		return fileErr(err)
 	}
-	s.logActivity(ctx, actor, store.ActFileDelete, app.Name, rel)
+	dst, err := s.openParent(owner, app, to)
+	if err != nil {
+		return err
+	}
+	defer dst.close()
+	if err := renameNoReplace(src.dir, path.Base(src.inner), dst.dir, path.Base(dst.inner)); err != nil {
+		switch {
+		case errors.Is(err, fs.ErrExist):
+			return invalid("%s sudah ada", to)
+		case errors.Is(err, errCrossDevice):
+			return invalid("%s tidak bisa dipindah ke %s: keduanya di disk yang berbeda", from, to)
+		}
+		return fileErr(err)
+	}
+	s.logActivity(ctx, actor, store.ActFileRename, app.Name, from+" → "+to)
 	s.remeasure(ctx, owner, app)
 	return nil
+}
+
+// parentDir is the opened folder that holds a workspace path.
+type parentDir struct {
+	root  *os.Root
+	dir   *os.File
+	inner string
+}
+
+func (p parentDir) close() {
+	p.dir.Close()
+	p.root.Close()
+}
+
+// openParent opens the folder holding rel inside its host folder. The folder
+// must be a real folder in the workspace, not a link.
+func (s *Service) openParent(owner store.User, app store.App, rel string) (parentDir, error) {
+	root, _, inner, err := s.workspaceRoot(owner, app, rel)
+	if err != nil {
+		return parentDir{}, fileErr(err)
+	}
+	if inner == "." {
+		root.Close()
+		return parentDir{}, invalid("%s adalah folder tersimpan", rel)
+	}
+	parent := path.Dir(inner)
+	if fi, err := root.Lstat(parent); err != nil {
+		root.Close()
+		return parentDir{}, fileErr(err)
+	} else if !fi.IsDir() {
+		root.Close()
+		return parentDir{}, errOutside
+	}
+	dir, err := root.Open(parent)
+	if err != nil {
+		root.Close()
+		return parentDir{}, fileErr(err)
+	}
+	return parentDir{root, dir, inner}, nil
 }
 
 // SaveFile writes r as dir/name in the app's workspace, owned by the app's
@@ -546,12 +756,12 @@ func (s *Service) SaveFile(ctx context.Context, actor store.User, appID int64, d
 	if dir, err = cleanRel(dir); err != nil {
 		return err
 	}
-	if name == "" || name == "." || name == ".." || len(name) > maxFileName || strings.ContainsAny(name, "/\\\x00") {
-		return invalid("Nama file tidak valid")
+	if err := validName(name, "file"); err != nil {
+		return err
 	}
-	rel := name
-	if dir != "" {
-		rel = dir + "/" + name
+	rel := joinRel(dir, name)
+	if isSaved(app, rel) {
+		return invalid("%s adalah folder tersimpan", rel)
 	}
 	root, base, inner, err := s.workspaceRoot(owner, app, rel)
 	if err != nil {
@@ -563,6 +773,9 @@ func (s *Service) SaveFile(ctx context.Context, actor store.User, appID int64, d
 		return fileErr(err)
 	} else if !fi.IsDir() {
 		return errOutside
+	}
+	if fi, err := root.Lstat(inner); err == nil && !fi.Mode().IsRegular() {
+		return invalid("%s sudah ada dan bukan file", rel)
 	}
 	limit := int64(-1)
 	if app.DiskMB > 0 {

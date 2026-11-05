@@ -13,10 +13,12 @@ const clean = (p) => {
 const isMount = (p) => p.startsWith("/");
 
 /**
- * folderList({appName, detected, folders, onChange}) → {node, value(), error(), changed()}.
- * The saved folders of an app: "path in the app → folder in its workspace". detected are the
+ * folderList({appName, detected, folders, onChange}) → {node, addButton, value(), error(), changed(), refresh()}.
+ * The saved folders of an app, one row each: "path in the app → folder in its workspace", where the
+ * row came from (detected in a file, or added by hand) and a remove button. detected are the
  * report's folders (ticked by default when folders is not given); the user can untick, add and
- * remove rows. appName() names the workspace as the panel shows it.
+ * remove rows. appName() names the workspace as the panel shows it. The caller places addButton:
+ * in the card header (Lanjutan) or under the list (review page).
  */
 export function folderList({ appName, detected = [], folders = null, onChange }) {
   const rows = [];
@@ -39,12 +41,16 @@ export function folderList({ appName, detected = [], folders = null, onChange })
     const check = h("input", { type: "checkbox", checked: on, "aria-label": `Simpan ${path || "folder ini"}` });
     const input = h("input", { class: "f mono", value: path, placeholder: "./storage atau /app/storage", spellcheck: "false", autocomplete: "off", "aria-label": "Path di aplikasi" });
     const label = h("span", { class: "mono fldto" });
-    const note = h("small", { class: "faint" });
-    const rm = h("button", { class: "ibtn", type: "button", "aria-label": "Hapus baris" }, icon("x"));
+    const note = h("small", { class: "fldnote" });
+    const origin = source
+      ? h("span", { class: "chip fldsrc", title: `Terdeteksi di ${SOURCES[source] || source}${key ? ` (${key})` : ""}` }, "terdeteksi")
+      : h("span", { class: "chip fldsrc", title: "Ditambahkan sendiri" }, "manual");
+    const rm = h("button", { class: "ibtn", type: "button", "aria-label": "Hapus baris", title: "Hapus dari daftar" }, icon("x"));
     let ownDir = fixedDir ? dir : "";
     const row = {
       on: () => check.checked,
       path: () => clean(input.value),
+      raw: () => input.value,
       dir() {
         const p = row.path();
         if (!isMount(p)) return p;
@@ -56,13 +62,23 @@ export function folderList({ appName, detected = [], folders = null, onChange })
         const bad = input.value.trim() ? folderError(input.value) : "";
         input.setAttribute("aria-invalid", String(Boolean(bad)));
         label.textContent = !p || bad ? "–" : workspaceLabel(appName(), row.dir());
-        note.textContent = bad || (source ? `Terdeteksi di ${SOURCES[source] || source}${key ? ` (${key})` : ""}` : isMount(p) ? "Di-mount dari folder kerja" : p ? "Sudah di folder kerja" : "");
+        note.textContent = bad || [
+          source ? `Dari ${SOURCES[source] || source}${key ? ` (${key})` : ""}.` : "",
+          !p ? "" : isMount(p) ? "Di-mount dari folder kerja." : "Sudah di dalam folder kerja.",
+        ].filter(Boolean).join(" ");
         note.classList.toggle("bad", Boolean(bad));
         li.classList.toggle("off", !check.checked);
       },
       li: null,
     };
-    const li = h("li", {}, check, h("div", { class: "fldmain" }, h("div", { class: "fldline" }, input, h("span", { class: "fldarr", "aria-hidden": "true" }, icon("arrow-right")), label), note), rm);
+    const li = h(
+      "li",
+      {},
+      check,
+      h("div", { class: "fldmain" }, h("div", { class: "fldline" }, input, h("span", { class: "fldarr", "aria-hidden": "true" }, icon("arrow-right")), label), note),
+      origin,
+      rm,
+    );
     row.li = li;
     check.addEventListener("change", () => update());
     input.addEventListener("input", () => {
@@ -94,23 +110,32 @@ export function folderList({ appName, detected = [], folders = null, onChange })
     for (const d of detected) if (!folders.some((f) => f.path === d.path)) addRow({ ...d, on: false, fixedDir: true });
   }
 
-  const addBtn = h("button", { class: "btn sm", type: "button" }, icon("plus"), "Tambah folder");
-  addBtn.addEventListener("click", () => {
+  const addButton = h("button", { class: "btn sm", type: "button" }, icon("plus"), "Tambah folder");
+  addButton.addEventListener("click", () => {
     addRow({}).li.querySelector("input.f").focus();
     update();
   });
 
-  const empty = h("p", { class: "hint fldempty" }, "Tidak ada folder yang terdeteksi. Tambahkan bila aplikasi menyimpan unggahan di path absolut seperti /app/storage.");
+  const empty = h(
+    "div",
+    { class: "fldempty" },
+    h("span", { class: "ic" }, icon("folder-input")),
+    h(
+      "div",
+      {},
+      h("b", {}, "Belum ada folder tersimpan"),
+      h("p", {}, "Tidak ada yang terdeteksi dari file aplikasi. Tambahkan folder bila aplikasi menyimpan unggahan di luar folder kerja, misalnya ", h("code", {}, "/app/storage"), " atau ", h("code", {}, "./uploads"), "."),
+    ),
+  );
 
   function value() {
-    return rows.filter((r) => r.on() && r.path() && !folderError(r.li.querySelector("input.f").value)).map((r) => ({ path: r.path(), dir: r.dir() }));
+    return rows.filter((r) => r.on() && r.path() && !folderError(r.raw())).map((r) => ({ path: r.path(), dir: r.dir() }));
   }
   function error() {
     for (const r of rows) {
       if (!r.on()) continue;
-      const raw = r.li.querySelector("input.f").value;
-      if (!raw.trim()) return "Isi path folder tersimpan atau hapus barisnya";
-      const bad = folderError(raw);
+      if (!r.raw().trim()) return "Isi path folder tersimpan atau hapus barisnya";
+      const bad = folderError(r.raw());
       if (bad) return bad;
     }
     const seen = new Set();
@@ -123,6 +148,7 @@ export function folderList({ appName, detected = [], folders = null, onChange })
   function update() {
     for (const r of rows) r.paint();
     empty.hidden = rows.length > 0;
+    listEl.hidden = rows.length === 0;
     const e = error();
     errEl.textContent = e;
     errEl.hidden = !e;
@@ -131,7 +157,8 @@ export function folderList({ appName, detected = [], folders = null, onChange })
   update();
 
   return {
-    node: h("div", { class: "folders" }, empty, listEl, errEl, h("div", { class: "actions start" }, addBtn)),
+    node: h("div", { class: "folders" }, empty, listEl, errEl),
+    addButton,
     value,
     error,
     changed: () => JSON.stringify(value()) !== initial,

@@ -4,6 +4,24 @@ All notable changes to Runova. Versions follow [semantic versioning](https://sem
 
 Upgrade any server with `sudo runova update` (servers on 0.2.0 or older: run the `curl … get.sh | sudo bash` command once). Database schema changes are migrated automatically after a backup (`runova.db.bak-v<N>-*`); `sudo runova rollback` returns to the previous version and its database.
 
+## [Unreleased]
+
+### Added
+- **File manager in the File tab.** Clickable breadcrumb with the folder kept in the URL (`#/apps/<id>/files?path=storage/2026`), up button, filter, list and grid view (image thumbnails), sortable Name/Size/Modified with folders on top, folder item counts.
+- Select several items (checkbox, Shift-click, Ctrl+A) to download them as one ZIP or delete them together; keyboard: arrows, Enter opens, Backspace goes up, Delete deletes (with confirmation), F2 renames.
+- Row menu (⋯ and right-click): preview, download (folders as ZIP), rename, move to another folder, copy the app's path (`./storage/x.png`, `/data/storage/x.png`, `/app/storage/x.png`), delete. Saved folders show why they cannot be renamed, moved or deleted.
+- Upload several files at once or drag them onto the list, with progress per file; new folder.
+- Preview panel: PNG/JPEG/GIF/WebP images and text files up to 1 MB (line numbers), with size, detected type, time and paths. SVG, PDF and other files are download only.
+- Footer with item count, folder size and the app's disk bar (warning at 80 %, full at 100 %). Phones get compact rows and an action sheet.
+- API: `POST /api/apps/{id}/files/folder`, `POST …/files/move`, `GET …/files/zip`, `GET …/files/info`, `GET …/files/preview`; multi-file upload. Activity: `file.rename`, `file.mkdir`.
+
+### Changed
+- `DELETE /api/apps/{id}/files` takes `{"paths": [...]}`; one refused path removes nothing.
+- Lanjutan cards share one layout: title and description on the left, save action at the right of the card footer.
+
+### Fixed
+- Folder tersimpan: "Tambah folder" and "Simpan folder" no longer stack against each other. The card has a clear empty state, rows show where each folder came from (detected or added), "Tambah folder" sits in the header (under the list on the review page) and "Simpan folder" in the footer, enabled only after a change and marked "Belum disimpan".
+
 ## [0.3.9] - 2026-11-05
 
 ### Added

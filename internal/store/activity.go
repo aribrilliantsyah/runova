@@ -41,6 +41,8 @@ const (
 	ActDBReveal       = "db.reveal"
 	ActFileUpload     = "file.upload"
 	ActFileDelete     = "file.delete"
+	ActFileRename     = "file.rename"
+	ActFileMkdir      = "file.mkdir"
 )
 
 type Activity struct {

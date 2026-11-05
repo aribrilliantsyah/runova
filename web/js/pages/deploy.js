@@ -173,7 +173,7 @@ export async function renderDeploy(root) {
       "details",
       { class: "dsec dadv", id: "d-store", open: n > 0 },
       h("summary", {}, h("h2", {}, "Folder tersimpan"), h("span", { class: "hint", id: "d-store-sum" }, storeSummary())),
-      h("div", { class: "dadv-bd" }, lead, saved.node),
+      h("div", { class: "dadv-bd" }, lead, saved.node, h("div", { class: "fldadd" }, saved.addButton)),
     );
   }
   function storeSummary() {
