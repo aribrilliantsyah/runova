@@ -95,7 +95,7 @@ Deteksi:
 - **JAR:** ZIP valid dengan `META-INF/MANIFEST.MF` berisi `Main-Class` (atau Spring Boot `Start-Class`). Versi Java minimal = versi bytecode tertinggi dari kelas aplikasi (major 52=8, 55=11, 61=17, 65=21, 69=25; versi di antara dibulatkan ke LTS berikutnya). Versi Java di bawah minimal tidak bisa dipilih, dengan alasannya.
 - **ELF:** harus `ELFCLASS64`, `EM_X86_64`, OS Linux. Tanpa `PT_INTERP` = statis; dengan interpreter glibc (`/lib64/ld-linux-x86-64.so.2`) = glibc. Interpreter musl atau lainnya ditolak dengan pesan jelas. PE (`MZ`) dan Mach-O ditolak dengan pesan jelas.
 - **Env:** `.env.example` (sumber utama; komentar `# secret` atau nama berisi `PASSWORD|SECRET|TOKEN|KEY` = rahasia). Cadangan: properti di `application.properties`/`application.yml` di dalam JAR yang merujuk `${NAMA}`, lalu scan string binary untuk pola `[A-Z][A-Z0-9_]{2,}` yang muncul bersama `Getenv`/`env::var`/`getenv`; hasil scan ditandai "kemungkinan".
-- **Port internal:** `server.port` di JAR; untuk binary dari `.env.example` (`PORT`); bawaan `8080`. Runova selalu mengisi env `PORT` dengan port internal.
+- **Port internal (port aplikasi di dalam container):** `server.port` di JAR; untuk binary dari `.env.example` (`PORT`); bawaan `8080`. Bila dikosongkan saat deploy, nilai terdeteksi/bawaan itu yang disimpan di aplikasi, dan setiap deploy ulang memakai nilai tersimpan. Runova selalu mengisi env `PORT` (JAR juga `SERVER_PORT`) dengan port internal. Port ini berbeda dari port akses IP (20000–20999, listener Caddy) dan port host internal `127.0.0.1:<30000–39999>` (tujuan Caddy, acak per deployment).
 
 ## 5. Menjalankan aplikasi
 
@@ -107,7 +107,8 @@ Deteksi:
 - Container berjalan sebagai UID pengguna (`100000 + user.id`), `--read-only` rootfs dengan `/tmp` tmpfs, `--cap-drop ALL`, `--security-opt no-new-privileges`, batas `--memory` dan `--cpus` dari alokasi aplikasi, `--restart on-failure`.
 - **Akses IP:** port tetap dari rentang 20000–20999, dialokasikan saat aplikasi dibuat dan tidak berubah. Nyala: Caddy mendengarkan `:<port>` (HTTP, tanpa HTTPS otomatis) dan meneruskan ke aplikasi; mati: listener itu dihapus.
 - Container mendapat `host.docker.internal` → gateway host (untuk PostgreSQL), env `HOME=/tmp`.
-- **Deploy:** mode *tanpa jeda* (bawaan: container baru jalan dan sehat dulu, lalu Caddy dialihkan, lalu container lama dihentikan) atau *stop-start* per aplikasi. Sehat = port internal menerima koneksi TCP dalam 60 detik.
+- **Deploy:** mode *tanpa jeda* (bawaan: container baru jalan dan sehat dulu, lalu Caddy dialihkan, lalu container lama dihentikan) atau *stop-start* per aplikasi. Sehat = port internal menerima koneksi TCP (dan tidak langsung ditutup) dalam batas waktu: binary 60 detik; JAR 90 detik ÷ core CPU (minimal 3 menit, maksimal 15 menit; 0,5 core = 3 menit, 0,25 core = 6 menit). JAR yang log-nya masih bertambah dan belum menulis `Started …` ditunggu terus sampai dua kali batas itu.
+- **Restart/Jalankan:** status "Memulai…" (`starting`) sampai port internal sehat dengan aturan yang sama, lalu "Berjalan"; bila tidak pernah sehat → "Gagal" dengan diagnosis di deployment aktif. Container tidak dihapus.
 - **Versi dan rollback:** 10 versi terakhir disimpan; kembalikan = deploy ulang versi lama dengan env saat itu.
 - **Crash:** Docker menjalankan ulang. Lebih dari 5 restart dalam 10 menit → status "Gagal", container dihentikan, notifikasi di panel (ikon lonceng). Email/Telegram tidak termasuk versi pertama.
 - **Log:** dari Docker (`json-file`, maks 3×10 MB per container), ditampilkan live di panel.
