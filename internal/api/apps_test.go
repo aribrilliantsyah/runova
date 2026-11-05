@@ -214,9 +214,8 @@ func TestCreateAppFlow(t *testing.T) {
 			t.Fatalf("%s = %d %s", action, r.status, r.body)
 		}
 	}
-	if got := c.appStatus(id); got != "running" {
-		t.Fatalf("status after stop/start/restart = %s", got)
-	}
+	// Restart answers at once; the app is "starting" until its port opens.
+	c.waitStatus(id, "running")
 	if r := c.do("POST", appPath(id, "/deploy"), nil); r.status != 202 {
 		t.Fatalf("deploy = %d %s", r.status, r.body)
 	}

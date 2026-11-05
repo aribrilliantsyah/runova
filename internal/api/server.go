@@ -112,7 +112,7 @@ func (s *server) serverStatus(w http.ResponseWriter, r *http.Request) {
 		out.Host.MemAllocMB += a.MemoryMB
 		out.Host.CPUAllocMilli += a.CPUMilli
 		switch a.Status {
-		case store.AppRunning, store.AppDeploying:
+		case store.AppRunning, store.AppStarting, store.AppDeploying:
 			out.Apps.Running++
 		case store.AppFailed:
 			out.Apps.Failed++

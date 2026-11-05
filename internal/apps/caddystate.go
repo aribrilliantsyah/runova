@@ -76,7 +76,7 @@ func CaddyState(ctx context.Context, st *store.Store, panelUpstream string) (cad
 	}
 	upstream := map[int64]string{}
 	for _, app := range list {
-		if (app.Status != store.AppRunning && app.Status != store.AppDeploying) || app.CurrentDeploymentID == nil {
+		if (!app.Status.Up() && app.Status != store.AppDeploying) || app.CurrentDeploymentID == nil {
 			continue
 		}
 		d, err := st.Deployment(ctx, *app.CurrentDeploymentID)

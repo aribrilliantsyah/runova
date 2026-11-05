@@ -27,7 +27,15 @@ import (
 var ErrAppNotFound = errors.New("app not found")
 
 const (
-	defaultHealthTimeout  = 60 * time.Second
+	defaultHealthTimeout = 60 * time.Second
+	jarHealthMin         = 180 * time.Second
+	jarHealthMax         = 15 * time.Minute
+	jarHealthPerCore     = 90 * time.Second
+	// A JVM that keeps logging past the timeout is still starting: the wait
+	// goes on while its log moved within the last startStall (at most twice
+	// the timeout), checked every startLogEvery.
+	startStall            = 30 * time.Second
+	startLogEvery         = 5 * time.Second
 	defaultHealthInterval = 500 * time.Millisecond
 	defaultHealthReadWait = 300 * time.Millisecond
 	dialTimeout           = time.Second
@@ -54,8 +62,10 @@ type Service struct {
 	DBEnv func(ctx context.Context, app store.App, detected []string) ([]string, error)
 	// Dial probes the deployed app; nil means net.DialTimeout.
 	Dial func(network, addr string, timeout time.Duration) (net.Conn, error)
+	// HealthNow is the clock of the health wait; nil means time.Now.
+	HealthNow func() time.Time
 
-	HealthTimeout  time.Duration // 0 means 60 s
+	HealthTimeout  time.Duration // 0 means healthTimeoutFor the app's runtime and CPU
 	HealthInterval time.Duration // 0 means 500 ms
 	// HealthReadWait is how long a health probe waits for the app to close the connection; 0 means 300 ms.
 	HealthReadWait time.Duration
@@ -102,11 +112,28 @@ func (s *Service) chown() func(string, int) error {
 	return OSChown
 }
 
-func (s *Service) healthTimeout() time.Duration {
+func (s *Service) healthNow() time.Time {
+	if s.HealthNow != nil {
+		return s.HealthNow()
+	}
+	return time.Now()
+}
+
+// healthTimeoutFor is how long a deploy, Restart or Start waits for the app's
+// port. A binary opens it in seconds. A JVM's start-up is CPU-bound: a Spring
+// Boot app with JPA measured 57 s on half a core and 70 s next to a second
+// JVM (zero-downtime redeploy), so a JAR waits jarHealthPerCore divided by its
+// cores (180 s at half a core, 360 s at a quarter), at least jarHealthMin and
+// at most jarHealthMax. HealthTimeout overrides it.
+func (s *Service) healthTimeoutFor(app store.App) time.Duration {
 	if s.HealthTimeout > 0 {
 		return s.HealthTimeout
 	}
-	return defaultHealthTimeout
+	if app.Kind != artifact.KindJar {
+		return defaultHealthTimeout
+	}
+	milli := max(app.CPUMilli, 1)
+	return min(max(jarHealthPerCore*1000/time.Duration(milli), jarHealthMin), jarHealthMax)
 }
 
 func (s *Service) healthInterval() time.Duration {

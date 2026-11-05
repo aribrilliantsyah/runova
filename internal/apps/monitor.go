@@ -129,7 +129,7 @@ func (s *Service) handleEvent(ctx context.Context, ev docker.Event) {
 		slog.Error("monitor: load app", "app", appID, "err", err)
 		return
 	}
-	if app.Status != store.AppRunning || app.CurrentDeploymentID == nil {
+	if !app.Status.Up() || app.CurrentDeploymentID == nil {
 		// The die that a stop or a deploy caused arrives while the app is
 		// stopped or deploying. Use the stop note up here, or it would swallow
 		// the first real crash after the app runs again.

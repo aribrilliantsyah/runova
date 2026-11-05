@@ -104,12 +104,13 @@ export function renderDeployments(page) {
     const live = d.status === "running" || d.status === "pending";
     const active = d.id === page.app.current_deployment_id;
     const tone = d.problem?.kind === "deploy_kept_old" || d.problem?.kind === "stopped_user" || d.problem?.kind === "exited_clean" ? "warn" : "err";
-    const card = d.status === "failed" || (active && d.problem && page.app.status !== "running") ? problemCard(d.problem, { failureLog: d.failure_log, tone }) : null;
+    const card = d.status === "failed" || (active && d.problem && page.app.status !== "running" && page.app.status !== "starting") ? problemCard(d.problem, { failureLog: d.failure_log, tone }) : null;
     const back = h("a", { class: "btn sm ghost", href: page.path("deployments") }, icon("arrow-left"), "Riwayat");
     const meta = h("dl", { class: "kv dep-meta" },
       h("dt", {}, "Artefak"), h("dd", { class: "mono" }, d.file_name),
       h("dt", {}, "Runtime"), h("dd", {}, runtime(d)),
-      h("dt", {}, "Port aplikasi"), h("dd", { class: "mono" }, String(d.internal_port)),
+      h("dt", {}, "Port aplikasi"), h("dd", {}, h("span", { class: "mono" }, String(d.internal_port)), h("span", { class: "faint" }, " di dalam container")),
+      d.host_port ? [h("dt", { title: "Port 127.0.0.1 di server tempat Caddy meneruskan domain dan akses IP ke container; tidak dibuka ke luar." }, "Port host internal"), h("dd", { class: "mono faint" }, `127.0.0.1:${d.host_port}`)] : null,
       h("dt", {}, "Dibuat"), h("dd", {}, `${who(d)}, ${fmtDateTime(d.created_at)}`),
       d.finished_at ? [h("dt", {}, "Selesai"), h("dd", {}, fmtDateTime(d.finished_at))] : null,
     );

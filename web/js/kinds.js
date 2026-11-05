@@ -71,6 +71,8 @@ export function statusOf(status) {
   switch (status) {
     case "running":
       return ["ok", "Berjalan"];
+    case "starting":
+      return ["warn", "Memulai…"];
     case "deploying":
       return ["warn", "Sedang deploy"];
     case "failed":

@@ -55,7 +55,7 @@ func (c *statsCache) put(appID int64, st docker.Stats, now time.Time) {
 // app is not running or Docker does not answer in time. The caller has
 // already checked that u may see the app, so a cached answer is safe to share.
 func (s *server) appStats(ctx context.Context, u store.User, app store.App) *docker.Stats {
-	if app.Status != store.AppRunning {
+	if !app.Status.Up() {
 		return nil
 	}
 	now := s.now()
