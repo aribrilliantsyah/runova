@@ -396,7 +396,7 @@ func TestUpdateUserAndQuota(t *testing.T) {
 		t.Fatalf("patch: %d %s", r.status, r.body)
 	}
 	r.into(t, &u)
-	if u.DisplayName != "Budi S" || u.Email != "budi@x.id" || u.Quota != (store.Quota{Apps: 5, MemoryMB: 2048, CPUMilli: 2000, Databases: 4, PGConnections: 30, DiskMB: 4096}) {
+	if u.DisplayName != "Budi S" || u.Email != "budi@x.id" || u.Quota != (store.Quota{Apps: 5, MemoryMB: 2048, CPUMilli: 2000, Databases: 4, PGConnections: 30, DiskMB: 1024}) {
 		t.Fatalf("patched = %+v", u)
 	}
 	if r := c.do("PATCH", path, obj{"quota": obj{"apps": 5, "memory_mb": 1, "cpu_milli": 1, "databases": 1, "pg_connections": 0}}); r.status != 400 {

@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"log/slog"
 	"net/http"
@@ -122,10 +123,11 @@ func (s *server) updateUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var body struct {
-		DisplayName *string      `json:"display_name"`
-		Email       *string      `json:"email"`
-		Role        *store.Role  `json:"role"`
-		Quota       *store.Quota `json:"quota"`
+		DisplayName *string     `json:"display_name"`
+		Email       *string     `json:"email"`
+		Role        *store.Role `json:"role"`
+		// Quota is merged onto the current quota: a field the body leaves out keeps its value.
+		Quota json.RawMessage `json:"quota"`
 	}
 	if !decode(w, r, &body) {
 		return
@@ -154,11 +156,27 @@ func (s *server) updateUser(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "Peran harus admin atau user")
 		return
 	}
+	var quota *store.Quota
 	if body.Quota != nil {
-		if err := body.Quota.Validate(); err != nil {
+		cur, err := s.store.User(r.Context(), id)
+		if errors.Is(err, store.ErrNotFound) {
+			writeError(w, http.StatusNotFound, "Pengguna tidak ditemukan")
+			return
+		}
+		if err != nil {
+			serverError(w, r, err)
+			return
+		}
+		q := cur.Quota
+		if err := json.Unmarshal(body.Quota, &q); err != nil {
+			writeError(w, http.StatusBadRequest, "Kuota tidak valid")
+			return
+		}
+		if err := q.Validate(); err != nil {
 			writeError(w, http.StatusBadRequest, err.Error())
 			return
 		}
+		quota = &q
 	}
 
 	actor := auth.FromContext(r.Context())
@@ -168,7 +186,7 @@ func (s *server) updateUser(w http.ResponseWriter, r *http.Request) {
 	}
 
 	u, err := s.store.UpdateUser(r.Context(), id, store.UserPatch{
-		DisplayName: body.DisplayName, Email: body.Email, Role: body.Role, Quota: body.Quota,
+		DisplayName: body.DisplayName, Email: body.Email, Role: body.Role, Quota: quota,
 	})
 	switch {
 	case errors.Is(err, store.ErrNotFound):
@@ -202,7 +220,7 @@ func (s *server) updateUser(w http.ResponseWriter, r *http.Request) {
 		q := u.Quota
 		s.record(r, actor, store.ActQuotaUpdate, u.Username,
 			"apps="+itoa(q.Apps)+" memory_mb="+itoa(q.MemoryMB)+" cpu_milli="+itoa(q.CPUMilli)+
-				" databases="+itoa(q.Databases)+" pg_connections="+itoa(q.PGConnections))
+				" databases="+itoa(q.Databases)+" pg_connections="+itoa(q.PGConnections)+" disk_mb="+itoa(q.DiskMB))
 	}
 	writeJSON(w, http.StatusOK, u)
 }

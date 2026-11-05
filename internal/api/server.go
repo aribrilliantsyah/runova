@@ -64,6 +64,9 @@ type serverStatus struct {
 		MemAllocMB    int    `json:"mem_alloc_mb"`
 		DiskTotalMB   int    `json:"disk_total_mb"`
 		DiskUsedMB    int    `json:"disk_used_mb"`
+		// AppDiskAllocMB is the disk allocated to apps; AppDiskUsedBytes what their workspaces held at the last scans.
+		AppDiskAllocMB   int   `json:"app_disk_alloc_mb"`
+		AppDiskUsedBytes int64 `json:"app_disk_used_bytes"`
 		// LocalIP is the machine's LAN address; IPAccess where app IP ports are linked.
 		LocalIP  string   `json:"local_ip"`
 		IPAccess IPAccess `json:"ip_access"`
@@ -111,6 +114,8 @@ func (s *server) serverStatus(w http.ResponseWriter, r *http.Request) {
 		out.Apps.Total++
 		out.Host.MemAllocMB += a.MemoryMB
 		out.Host.CPUAllocMilli += a.CPUMilli
+		out.Host.AppDiskAllocMB += a.DiskMB
+		out.Host.AppDiskUsedBytes += a.DiskUsedBytes
 		switch a.Status {
 		case store.AppRunning, store.AppDeploying:
 			out.Apps.Running++
