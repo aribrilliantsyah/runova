@@ -35,7 +35,8 @@ Browser ──HTTPS──► Caddy (:80/:443) ──► runova (127.0.0.1:7070, 
 | `/etc/runova/secret.key` | Kunci enkripsi 32 byte | runova 0600 |
 | `/var/lib/runova/runova.db` | SQLite: pengguna, sesi, aplikasi, versi, domain, env terenkripsi, aktivitas | runova 0600 |
 | `/var/lib/runova/artifacts/<user>/<app>/<versi>/` | File yang diunggah, 10 versi terakhir per aplikasi | runova |
-| `/var/lib/runova/data/<user>/<app>/` | Folder persisten aplikasi, di-mount ke `/data` | UID pengguna |
+| `/var/lib/runova/data/<user>/<app>/` | Folder kerja aplikasi (panel: `<app>/`), di-mount ke `/data` | UID pengguna |
+| `/var/lib/runova/mounts/<user>/<app>/<folder>/` | Sumber folder tersimpan ber-path absolut; folder `<app>` milik runova 0700, `<folder>` milik UID pengguna | runova / UID pengguna |
 | `/var/lib/runova/backup/<db>/<tanggal>.dump` | Backup PostgreSQL harian, 7 hari | runova |
 
 ### Konfigurasi (`runova.env`)
@@ -69,8 +70,10 @@ Semua setelan lain (kuota bawaan, batas unggahan, rentang port, runtime yang dii
 | CPU | 1000 millicore (1 core) |
 | Jumlah database | 3 |
 | Koneksi PostgreSQL | 20 |
+| Disk | 1024 MB |
 
-- Storage tidak dikuota. Halaman Server menampilkan pemakaian disk.
+- **Disk** dibagi ke aplikasi saat deploy seperti memori: tiap aplikasi punya ukuran disk (kelipatan 64 MB, minimal 64; bawaan 256 MB atau sisa kuota bila lebih kecil; preset Kecil/Sedang/Besar = 256/512/1024 MB). Yang dihitung: seluruh isi folder kerja aplikasi (folder data + sumber folder tersimpan), file biasa saja, link tidak diikuti. Artefak, log container, dan database PostgreSQL tidak dihitung. Aplikasi yang dibuat sebelum migrasi `0005` punya ukuran 0 = diukur, tidak dibatasi, sampai ukuran dipilih di tab Lanjutan.
+- **Penegakan disk lunak:** Runova mengukur semua folder kerja tiap 5 menit (`filepath.WalkDir`, batas 1 menit per aplikasi), sebelum deploy ulang/kembalikan/versi baru, dan setelah perubahan lewat tab File. ≥80% → notifikasi peringatan; ≥100% → notifikasi error, status "Disk penuh", deploy baru aplikasi itu ditolak (409) sampai pemakaian turun atau ukuran dinaikkan. Notifikasi hanya saat level naik. Aplikasi yang berjalan tidak dihentikan. Batas keras (penulisan ditolak filesystem) butuh project quota XFS/ext4 dan menjadi pekerjaan lanjutan. Halaman Server menampilkan disk server dan total disk aplikasi (dialokasikan dan terpakai).
 - Bawaan bisa diubah admin; nilai per pengguna diubah lewat tombol Kuota. Menurunkan kuota di bawah pemakaian diperbolehkan; yang sudah berjalan tetap, alokasi baru ditolak sampai pemakaian di bawah kuota.
 
 ### Setelan server (bawaan)
@@ -95,6 +98,7 @@ Deteksi:
 - **JAR:** ZIP valid dengan `META-INF/MANIFEST.MF` berisi `Main-Class` (atau Spring Boot `Start-Class`). Versi Java minimal = versi bytecode tertinggi dari kelas aplikasi (major 52=8, 55=11, 61=17, 65=21, 69=25; versi di antara dibulatkan ke LTS berikutnya). Versi Java di bawah minimal tidak bisa dipilih, dengan alasannya.
 - **ELF:** harus `ELFCLASS64`, `EM_X86_64`, OS Linux. Tanpa `PT_INTERP` = statis; dengan interpreter glibc (`/lib64/ld-linux-x86-64.so.2`) = glibc. Interpreter musl atau lainnya ditolak dengan pesan jelas. PE (`MZ`) dan Mach-O ditolak dengan pesan jelas.
 - **Env:** `.env.example` (sumber utama; komentar `# secret` atau nama berisi `PASSWORD|SECRET|TOKEN|KEY` = rahasia). Cadangan: properti di `application.properties`/`application.yml` di dalam JAR yang merujuk `${NAMA}`, lalu scan string binary untuk pola `[A-Z][A-Z0-9_]{2,}` yang muncul bersama `Getenv`/`env::var`/`getenv`; hasil scan ditandai "kemungkinan".
+- **Folder tulis:** pasangan nama=nilai di `.env.example`, `application.properties`, dan `application.yml` (kunci bertitik). Nama dipecah per kata (`app.uploadDir` → APP UPLOAD DIR). Ditolak bila ada kata URL/URI/ENDPOINT/PREFIX/HOST/DRIVER/BUCKET/NAME/DB/DATABASE/DATASOURCE/PGDATA/LEVEL/PORT/MODE/TYPE/SIZE/MAX/MIN/LIMIT/ENABLED/KEY/SECRET/TOKEN/PASSWORD/USER/…. Nilai: tanpa kutip, `file:` dibuang, `${X:default}` utuh → default, `${user.dir}/x` → `./x`; placeholder lain, `:` (URL/JDBC), `.db` → bukan folder. Nilai harus lolos aturan folder tersimpan (§5). Diterima bila nama memuat STORAGE/UPLOAD(S)/FILE(S)/MEDIA/ATTACHMENT(S)/IMAGE(S)/DATA/BASEDIR/MULTIPART, atau (untuk nilai berisi `/`) salah satu segmen path adalah storage/upload(s)/files/media/attachment(s)/images/data. Kata tunggal tanpa `/` hanya di bawah nama folder dan bukan nilai seperti `local`/`s3`/`true`. Urutan sumber: `.env.example`, lalu file properti; path ganda atau bertumpuk dibuang; nama folder workspace bentrok diberi akhiran `-2`.
 - **Port internal:** `server.port` di JAR; untuk binary dari `.env.example` (`PORT`); bawaan `8080`. Runova selalu mengisi env `PORT` dengan port internal.
 
 ## 5. Menjalankan aplikasi
@@ -103,7 +107,9 @@ Deteksi:
   - JAR: `eclipse-temurin:<versi>-jre`
   - statis: `gcr.io/distroless/static-debian12`
   - glibc: `ubuntu:26.04`
-- Artefak di-mount read-only; `/data` di-mount dari folder persisten; env `RUNOVA_DATA_DIR=/data`.
+- Artefak di-mount read-only; folder kerja aplikasi di-mount ke `/data` (rw) dan menjadi `WorkingDir`; env `RUNOVA_DATA_DIR=/data`. Path relatif (`./storage`) jatuh ke folder kerja.
+- **Folder tersimpan** (per aplikasi, kolom `apps.folders`): daftar `{path, dir}`. `path` relatif (atau di bawah `/data`) = sudah di folder kerja, `dir` = path itu. `path` absolut = bind mount tambahan `mounts/<user>/<app>/<dir>` → `path` dan → `/data/<dir>` (supaya tampil di folder kerja dan di tab File). Ditolak: `..`, karakter selain `[A-Za-z0-9._/-]`, `/`, `/var`, `/opt`, `/srv`, `/home`, `/mnt`, `/media`, `/app`, `/data`, `/tmp` dan isinya, `/proc`, `/sys`, `/dev`, `/etc`, `/usr`, `/bin`, `/sbin`, `/lib*`, `/boot`, `/run`, `/root`, `/var/run`, `/opt/java` beserta isinya, path artefak (`/app/<file>`) atau induknya, path/folder yang saling bertumpuk, maksimal 20. Saat deploy Runova membuat foldernya milik UID pengguna lewat `os.Root` tanpa mengikuti link; komponen yang berupa link/bukan folder menggagalkan deploy di langkah persiapan. Mengubah folder tersimpan = deploy ulang (`redeploy_required`). Rootfs tetap read-only.
+- **Tab File** (pemilik/admin): `GET /api/apps/{id}/files?path=`, `GET …/files/download?path=` (selalu `attachment`, `application/octet-stream`, `nosniff`, CSP sandbox), `POST …/files?path=` (multipart `file`, batas = batas unggahan server, tidak boleh melewati sisa disk aplikasi, ditulis ke file sementara lalu di-rename, milik UID pengguna), `DELETE …/files` `{path}` (file atau folder beserta isinya; folder kerja dan folder tersimpan sendiri tidak bisa dihapus). Path relatif terhadap folder kerja, dibuka lewat `os.Root` (`..`, path absolut, dan link keluar ditolak). Aplikasi orang lain → 404. Upload dan hapus tercatat di Aktivitas (`file.upload`, `file.delete`).
 - Container berjalan sebagai UID pengguna (`100000 + user.id`), `--read-only` rootfs dengan `/tmp` tmpfs, `--cap-drop ALL`, `--security-opt no-new-privileges`, batas `--memory` dan `--cpus` dari alokasi aplikasi, `--restart on-failure`.
 - **Akses IP:** port tetap dari rentang 20000–20999, dialokasikan saat aplikasi dibuat dan tidak berubah. Nyala: Caddy mendengarkan `:<port>` (HTTP, tanpa HTTPS otomatis) dan meneruskan ke aplikasi; mati: listener itu dihapus.
 - Container mendapat `host.docker.internal` → gateway host (untuk PostgreSQL), env `HOME=/tmp`.

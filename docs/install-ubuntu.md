@@ -200,7 +200,7 @@ What to back up:
 | Item | Contents |
 |---|---|
 | `/etc/runova/secret.key` | **Encryption key.** All secrets (secret environment variables, database passwords) are encrypted with this key. **Without this key, secrets cannot be decrypted**, and there is no way to recover them. Store a copy in a separate location away from the server. |
-| `/var/lib/runova` | Runova database (`runova.db`), uploaded artifacts, application data (`data/`), and daily database backups (`backup/`). |
+| `/var/lib/runova` | Runova database (`runova.db`), uploaded artifacts, **application files** (`data/` and `mounts/`: every app's workspace, uploads included), and daily database backups (`backup/`). |
 | PostgreSQL | User databases. |
 
 Example data directory backup (briefly stop Runova for `runova.db` consistency):
@@ -212,6 +212,8 @@ sudo systemctl start runova
 ```
 
 Running applications are not interrupted; Runova reconnects when it starts up.
+
+**Application files are not in the PostgreSQL backups.** What apps write to their workspace (`./storage`, `/app/storage`, …) lives only under `/var/lib/runova/data/<user>/<app>/` and `/var/lib/runova/mounts/<user>/<app>/`; the tar above covers them. Files keep their owner (UID `100000 + user id`), so restore with `tar --same-owner` as root.
 
 **PostgreSQL:** Runova already creates a `pg_dump` per database daily at 02:00 and retains it for 7 days in `/var/lib/runova/backup/<database>/`, but that resides on the same disk as the data. Copy that directory offsite, and/or create a full cluster dump:
 
