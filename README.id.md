@@ -27,7 +27,7 @@
 - **Domain sendiri, HTTPS sudah termasuk.** Beri aplikasi alamat seperti `billing.perusahaan.co.id`, atau biarkan tim memilih nama di bawah domain yang Anda daftarkan sekali. Sertifikat diurus otomatis.
 - **Database untuk setiap pengguna.** PostgreSQL ikut terpasang. Tiap pengguna membuat database di panel, dan data koneksinya terisi sendiri ke aplikasi.
 - **File dan query dari browser.** Lihat, unggah, dan unduh file aplikasi, intip isi tabel, dan jalankan SQL tanpa memasang apa pun.
-- **Semua terpisah rapi.** Tiap aplikasi berjalan di container sendiri dengan batas memori, CPU, dan disk. Pengguna hanya melihat aplikasinya sendiri, dan admin mengatur kuota.
+- **Semua terpisah rapi.** Tiap aplikasi berjalan di container sendiri dengan batas memori dan disk, dan memakai core CPU server bersama. Pengguna hanya melihat aplikasinya sendiri, dan admin mengatur kuota.
 - **Terlihat apa yang terjadi.** Langkah deploy beserta waktunya, log langsung, terminal, kembali ke versi sebelumnya, dan log aktivitas.
 - **Update dengan satu perintah.** `sudo runova update`, dan `sudo runova rollback` bila ingin kembali.
 

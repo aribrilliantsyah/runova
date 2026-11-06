@@ -4,6 +4,16 @@ All notable changes to Runova. Versions follow [semantic versioning](https://sem
 
 Upgrade any server with `sudo runova update` (servers on 0.2.0 or older: run the `curl … get.sh | sudo bash` command once). Database schema changes are migrated automatically after a backup (`runova.db.bak-v<N>-*`); `sudo runova rollback` returns to the previous version and its database.
 
+## [Unreleased]
+
+### Changed
+- **CPU is shared.** Every app may use all of the server's cores; there is no CPU quota per user and no CPU size per app any more. When the CPU is busy, all apps get an equal share (Docker's default weight). Only memory and disk are shared out. The CPU field is gone from the user quota form, the "Kuota kamu" sidebar, the Users table, the deploy wizard, the Resource card in Lanjutan and the app cards. Database migration `0006` drops the CPU columns; nothing else changes.
+- Apps created before this update lose their CPU cap when Runova starts, without a redeploy or restart.
+- **Clearer Server page.** Each tile has one meaning: **CPU server** (load average against the number of cores), **Memori server** (in use of the total), **Disk server** (in use of the total), and, under them, **Memori aplikasi** and **Disk aplikasi** (how much is shared out to apps; for disk also how much they filled). Disk aplikasi warns when apps may still write more than the server has free. "Dibagikan" is the one word for what apps were given, everywhere.
+- Measured sizes next to MB and GB figures read "< 1 MB" instead of a bare byte count, and GB shows one decimal.
+- The CPU chart of an app is relative to all of the server's cores.
+- A JAR waits 3 minutes for its port (it used to depend on its CPU size), still extended up to 6 minutes while its log keeps moving; a restart loop or OOM still fails at once.
+
 ## [0.3.12] - 2026-11-06
 
 ### Fixed

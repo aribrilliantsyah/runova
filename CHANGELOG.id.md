@@ -4,6 +4,16 @@ Semua perubahan penting Runova. Versi mengikuti [semantic versioning](https://se
 
 Perbarui server dengan `sudo runova update` (server 0.2.0 atau lebih lama: jalankan perintah `curl … get.sh | sudo bash` sekali). Perubahan skema database dimigrasikan otomatis setelah cadangan (`runova.db.bak-v<N>-*`); `sudo runova rollback` kembali ke versi sebelumnya beserta database-nya.
 
+## [Unreleased]
+
+### Diubah
+- **CPU dipakai bersama.** Setiap aplikasi boleh memakai seluruh core server; tidak ada lagi kuota CPU per pengguna maupun ukuran CPU per aplikasi. Saat CPU sibuk, semua aplikasi mendapat bagian sama (bobot bawaan Docker). Yang dibagikan hanya memori dan disk. Isian CPU hilang dari form kuota pengguna, sidebar "Kuota kamu", tabel Pengguna, wizard deploy, kartu Resource di Lanjutan, dan kartu aplikasi. Migrasi database `0006` menghapus kolom CPU; data lain tidak berubah.
+- Aplikasi yang dibuat sebelum pembaruan ini dilepas batas CPU-nya saat Runova start, tanpa deploy ulang atau restart.
+- **Halaman Server lebih jelas.** Tiap kartu punya satu makna: **CPU server** (beban rata-rata terhadap jumlah core), **Memori server** (terpakai dari total), **Disk server** (terpakai dari total), dan di bawahnya **Memori aplikasi** dan **Disk aplikasi** (berapa yang dibagikan ke aplikasi; untuk disk juga berapa yang sudah terisi). Disk aplikasi memberi peringatan bila aplikasi masih boleh mengisi lebih dari sisa disk server. "Dibagikan" jadi satu-satunya kata untuk jatah aplikasi, di semua halaman.
+- Ukuran terukur di samping angka MB dan GB tertulis "< 1 MB", bukan jumlah byte, dan GB memakai satu desimal.
+- Grafik CPU aplikasi dihitung terhadap seluruh core server.
+- JAR ditunggu 3 menit sampai port-nya terbuka (dulu bergantung pada ukuran CPU-nya), tetap diperpanjang sampai 6 menit selama log-nya bergerak; restart loop atau OOM tetap langsung gagal.
+
 ## [0.3.12] - 2026-11-06
 
 ### Diperbaiki
