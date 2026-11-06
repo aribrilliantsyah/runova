@@ -21,7 +21,7 @@ function spark(values, max) {
   return svg;
 }
 
-/** Memory and CPU from the app's `stats`, sampled every 5 s while this page is open. */
+/** Memory and CPU from the app's `stats`, sampled every 5 s while this page is open. CPU is against the whole server. */
 export function renderMonitor(page) {
   const node = h("div");
 
@@ -33,7 +33,8 @@ export function renderMonitor(page) {
     }
     const memLimit = stats.memory_limit || app.memory_mb * 1048576;
     const memP = pct(stats.memory_bytes, memLimit);
-    const cpuLimit = app.cpu_milli / 10; // percent of one core
+    const cores = stats.online_cpus || 1;
+    const cpuLimit = cores * 100; // cpu_percent counts one core as 100; CPU is shared, so the ceiling is every core
     const cpuP = pct(stats.cpu_percent, cpuLimit);
     const { mem, cpu } = page.history;
     const panel = (ic, title, value, of, percent, series, max) =>
@@ -43,7 +44,7 @@ export function renderMonitor(page) {
         "div",
         { class: "cols" },
         panel("memory-stick", "Memori", fmtBytes(stats.memory_bytes), `dari ${fmtMB(app.memory_mb)} (${memP}%)`, memP, mem, memLimit),
-        panel("cpu", "CPU", `${fmtNum(stats.cpu_percent / 100)} core`, `dari ${fmtNum(app.cpu_milli / 1000)} core (${cpuP}%)`, cpuP, cpu, cpuLimit),
+        panel("cpu", "CPU", `${fmtNum(Math.round(stats.cpu_percent) / 100)} core`, `dari ${cores} core server, dipakai bersama (${cpuP}%)`, cpuP, cpu, cpuLimit),
       ),
     );
   }

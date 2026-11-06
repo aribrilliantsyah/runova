@@ -3,7 +3,6 @@ import { h } from "/assets/js/dom.js";
 const FIELDS = [
   ["apps", "Jumlah aplikasi", "aplikasi", 1, 100],
   ["memory_mb", "Memori", "MB", 64, 1048576],
-  ["cpu_milli", "CPU", "millicore", 50, 256000],
   ["databases", "Jumlah database", "database", 1, 100],
   ["pg_connections", "Koneksi PostgreSQL", "koneksi", 1, 500],
   ["disk_mb", "Disk", "MB", 64, 10485760],

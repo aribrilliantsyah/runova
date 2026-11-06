@@ -1,5 +1,5 @@
 import * as api from "/assets/js/api.js";
-import { h, icon, fmtBytes, fmtMB, fmtNum, fill } from "/assets/js/dom.js";
+import { h, icon, fmtBytes, fmtMB, fill } from "/assets/js/dom.js";
 import { ctx } from "/assets/js/ctx.js";
 import * as session from "/assets/js/session.js";
 import { uploader } from "/assets/js/components/uploader.js";
@@ -14,11 +14,11 @@ import { kindLogo } from "/assets/js/kinds.js";
 import { appNameError, jvmOptsError, portError, suggestName, workspaceLabel } from "/assets/js/validate.js";
 import { JAVA_VERSIONS, LTS_NOTE, runtimeImage } from "/assets/js/kinds.js";
 
-// Sizes on offer before "Atur sendiri": what most JAR and binary apps need.
+// Sizes on offer before "Atur sendiri": what most JAR and binary apps need. CPU is shared, so a size is memory and disk.
 const PRESETS = [
-  { id: "s", name: "Kecil", mb: 256, milli: 250, disk: 256, note: "Binary kecil, worker" },
-  { id: "m", name: "Sedang", mb: 512, milli: 500, disk: 512, note: "Kebanyakan aplikasi Spring" },
-  { id: "l", name: "Besar", mb: 1024, milli: 1000, disk: 1024, note: "Aplikasi berat, banyak pengguna" },
+  { id: "s", name: "Kecil", mb: 256, disk: 256, note: "Binary kecil, worker" },
+  { id: "m", name: "Sedang", mb: 512, disk: 512, note: "Kebanyakan aplikasi Spring" },
+  { id: "l", name: "Besar", mb: 1024, disk: 1024, note: "Aplikasi berat, banyak pengguna" },
 ];
 
 /**
@@ -137,17 +137,17 @@ export async function renderDeploy(root) {
 
   function sizes() {
     const max = (opts) => opts[opts.length - 1] ?? 0;
-    const fitsPreset = (p) => max(res.memOpts) >= p.mb && max(res.cpuOpts) >= p.milli && max(res.diskOpts) >= Math.min(p.disk, 64);
+    const fitsPreset = (p) => max(res.memOpts) >= p.mb && max(res.diskOpts) >= Math.min(p.disk, 64);
     if (preset !== "c" && !fitsPreset(PRESETS.find((p) => p.id === preset))) preset = PRESETS.filter(fitsPreset).pop()?.id || "c";
     const custom = h("details", { class: "dcustom", open: preset === "c" }, h("summary", {}, "Atur sendiri"), res.node);
     const btns = PRESETS.map((p) => {
       const ok = fitsPreset(p);
       const b = h("button", { class: "opt preset", type: "button", "aria-pressed": String(preset === p.id), "aria-disabled": ok ? null : "true", title: ok ? null : "Melebihi sisa kuota", "data-size": p.id },
-        h("b", {}, p.name), h("small", {}, `${fmtMB(p.mb)} · ${fmtNum(p.milli / 1000)} core · disk ${fmtMB(Math.min(p.disk, max(res.diskOpts)))}`), h("small", { class: "pn" }, ok ? p.note : "Melebihi sisa kuota"));
+        h("b", {}, p.name), h("small", {}, `Memori ${fmtMB(p.mb)} · disk ${fmtMB(Math.min(p.disk, max(res.diskOpts)))}`), h("small", { class: "pn" }, ok ? p.note : "Melebihi sisa kuota"));
       b.addEventListener("click", () => {
         if (!ok) return;
         preset = p.id;
-        res.set(p.mb, p.milli, p.disk);
+        res.set(p.mb, p.disk);
         custom.open = false;
         for (const x of btns) x.setAttribute("aria-pressed", String(x === b));
       });
@@ -160,9 +160,9 @@ export async function renderDeploy(root) {
       refresh();
     });
     const cur = PRESETS.find((p) => p.id === preset);
-    if (cur) res.set(cur.mb, cur.milli, cur.disk);
+    if (cur) res.set(cur.mb, cur.disk);
     const q = usage.quota;
-    return [h("div", { class: "presets", role: "group", "aria-label": "Ukuran" }, btns), h("p", { class: "hint" }, `Kuotamu: sisa ${fmtMB(Math.max(q.memory_mb - usage.memory_mb, 0))} memori, ${fmtNum(Math.max(q.cpu_milli - usage.cpu_milli, 0) / 1000)} core CPU, dan ${fmtMB(Math.max(q.disk_mb - usage.disk_mb, 0))} disk. Disk menampung isi folder kerja aplikasi, termasuk file unggahan. Bisa diubah kapan saja setelah deploy.`), custom];
+    return [h("div", { class: "presets", role: "group", "aria-label": "Ukuran" }, btns), h("p", { class: "hint" }, `Sisa kuotamu: ${fmtMB(Math.max(q.memory_mb - usage.memory_mb, 0))} memori dan ${fmtMB(Math.max(q.disk_mb - usage.disk_mb, 0))} disk. Disk menampung isi folder kerja aplikasi, termasuk file unggahan. CPU tidak perlu dipilih: semua aplikasi memakai seluruh core server bersama. Bisa diubah kapan saja setelah deploy.`), custom];
   }
 
   // Where the app's files are kept: the detected folders, ticked, and any the user adds.
@@ -231,7 +231,7 @@ export async function renderDeploy(root) {
         sec("d-addr", ["Alamat ", opt("opsional")], "Subdomain siap pakai tanpa mengatur DNS. Bisa ditambah nanti.", address.node),
         sec("d-db", ["Database ", opt("opsional")], "PostgreSQL untuk aplikasi ini. Variabel koneksinya diisi otomatis.", pick.node),
         sec("d-env", "Environment", env.missing().length ? "Isi variabel bertanda * sebelum deploy." : "Variabel yang dibaca aplikasi saat berjalan.", env.node),
-        sec("d-size", "Ukuran", "Memori, CPU, dan disk dari kuota akunmu.", ...sizes()),
+        sec("d-size", "Ukuran", "Memori dan disk dari kuota akunmu.", ...sizes()),
         storage(),
         advanced(),
       ] : null,
@@ -260,7 +260,7 @@ export async function renderDeploy(root) {
       const ne = env.nameError();
       if (ne) out.push({ at: "d-env", text: ne });
     }
-    if (!res.fits()) out.push({ at: "d-size", text: "Kuota memori, CPU, atau disk habis" });
+    if (!res.fits()) out.push({ at: "d-size", text: "Kuota memori atau disk habis" });
     const fe = saved?.error();
     if (fe) out.push({ at: "d-store", text: fe });
     if (usage.apps >= usage.quota.apps) out.push({ at: "d-size", text: `Kuota aplikasi habis (${usage.apps} dari ${usage.quota.apps})` });
@@ -287,7 +287,7 @@ export async function renderDeploy(root) {
       rowsum("Port aplikasi", rep ? String(effectivePort()) : "–", "mono"),
       rowsum("Alamat", addr ? (addr.host || `${addr.label}.${(hostingData.domains || []).find((d) => d.id === addr.hosting_domain_id)?.name.replace(/^\*\./, "") || ""}`) : "Belum ada", addr ? "mono" : "muted"),
       rowsum("Database", pick ? pick.label() : "–", pick && pick.choice() !== "none" ? "mono" : ""),
-      rowsum("Ukuran", `${fmtMB(res.memory())} · ${fmtNum(res.cpu() / 1000)} core · disk ${fmtMB(res.disk())}`),
+      rowsum("Ukuran", `Memori ${fmtMB(res.memory())} · disk ${fmtMB(res.disk())}`),
       rowsum("Folder", saved && saved.value().length ? saved.value().map((f) => workspaceLabel(name.value || "aplikasi", f)).join(", ") : "–", saved && saved.value().length ? "mono" : ""),
     );
     const sumEl = document.getElementById("d-store-sum");
@@ -338,7 +338,6 @@ export async function renderDeploy(root) {
         name: name.value,
         internal_port: effectivePort(),
         memory_mb: res.memory(),
-        cpu_milli: res.cpu(),
         disk_mb: res.disk(),
         folders: saved.value(),
         ip_access: ipSw.getAttribute("aria-checked") === "true",

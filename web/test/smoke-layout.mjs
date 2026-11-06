@@ -33,7 +33,7 @@ try {
   const db = await call("POST", "/api/databases", { suffix: "billing" }, cookie);
   check(db.status === 201, `db ${db.status}`);
   const created = await call("POST", "/api/apps", {
-    upload_id: up.id, name: "billing-api", java_version: 21, memory_mb: 512, cpu_milli: 500, ip_access: true, database_id: db.body.id,
+    upload_id: up.id, name: "billing-api", java_version: 21, memory_mb: 512, ip_access: true, database_id: db.body.id,
     env: [{ name: "JWT_SECRET", value: "s3", secret: true }, { name: "DB_PASSWORD", value: "p", secret: true }, { name: "GREETING", value: "<script>alert(1)</script>", secret: false }, { name: "LOG_ECHO", value: "<img src=x onerror=alert(1)>", secret: false }],
   }, cookie);
   check(created.status === 201, `app ${created.status} ${JSON.stringify(created.body)}`);

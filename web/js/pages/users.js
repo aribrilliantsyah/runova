@@ -1,5 +1,5 @@
 import * as api from "/assets/js/api.js";
-import { h, icon, fmtMB, fmtNum, fmtTime, fmtDateTime, fmtBytes, pct, bar, copyText, initials } from "/assets/js/dom.js";
+import { h, icon, fmtMB, fmtSize, fmtTime, fmtDateTime, pct, bar, copyText, initials } from "/assets/js/dom.js";
 import { dialog } from "/assets/js/components/dialog.js";
 import { quotaForm } from "/assets/js/components/quotaform.js";
 import { dataTable, pager, searchBox, segFilter, emptyState, skeletonRows } from "/assets/js/components/list.js";
@@ -10,7 +10,7 @@ import { toast } from "/assets/js/toast.js";
 const GEN_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789";
 const PATH = "/users";
 const DEFAULTS = { q: "", role: "", sort: "username", order: "asc", page: "1", size: "25" };
-const SORTS = ["username", "role", "apps", "memory", "cpu", "databases", "disk", "created", "last_login"];
+const SORTS = ["username", "role", "apps", "memory", "databases", "disk", "created", "last_login"];
 
 function generatePassword(n = 16) {
   const bytes = crypto.getRandomValues(new Uint8Array(n));
@@ -68,9 +68,8 @@ export async function renderUsers(root) {
       ["role:asc", "Admin dulu"],
       ["apps:desc", "Aplikasi terbanyak"],
       ["memory:desc", "Memori terbesar"],
-      ["cpu:desc", "CPU terbesar"],
       ["databases:desc", "Database terbanyak"],
-      ["disk:desc", "Disk terpakai terbanyak"],
+      ["disk:desc", "Disk terisi terbanyak"],
       ["created:desc", "Terbaru dibuat"],
       ["created:asc", "Terlama dibuat"],
       ["last_login:desc", "Login terakhir"],
@@ -90,7 +89,6 @@ export async function renderUsers(root) {
     { key: "role", label: "Peran", sort: "role", cls: "c-role", cell: (u) => (u.role === "admin" ? h("span", { class: "chip info" }, "Admin") : h("span", { class: "chip" }, "Pengguna")) },
     { key: "apps", label: "Aplikasi", sort: "apps", firstOrder: "desc", cell: (u) => qcell(u.usage.apps, u.quota.apps, String, "") },
     { key: "memory", label: "Memori", sort: "memory", firstOrder: "desc", cell: (u) => qcell(u.usage.memory_mb, u.quota.memory_mb, (v) => fmtMB(v), "") },
-    { key: "cpu", label: "CPU", sort: "cpu", firstOrder: "desc", cell: (u) => qcell(u.usage.cpu_milli, u.quota.cpu_milli, (v) => fmtNum(v / 1000), "core") },
     { key: "db", label: "Database", sort: "databases", firstOrder: "desc", cell: (u) => qcell(u.usage.databases, u.quota.databases, String, "") },
     {
       key: "disk", label: "Disk", sort: "disk", firstOrder: "desc",
@@ -98,8 +96,8 @@ export async function renderUsers(root) {
         const used = u.usage.disk_used_bytes || 0;
         const max = (u.quota.disk_mb || 0) * 1048576;
         const p = pct(used, max);
-        return h("td", { class: `qcell ${used > max ? "over" : ""}`.trim(), title: `Terpakai ${fmtBytes(used)}; dialokasikan ${fmtMB(u.usage.disk_mb || 0)} dari kuota ${fmtMB(u.quota.disk_mb || 0)}` },
-          h("div", { class: "qv" }, h("div", { class: "t" }, h("b", {}, fmtBytes(used)), h("span", {}, fmtMB(u.quota.disk_mb || 0))), bar(p)));
+        return h("td", { class: `qcell ${used > max ? "over" : ""}`.trim(), title: `${fmtSize(used)} terisi. ${fmtMB(u.usage.disk_mb || 0)} dibagikan ke aplikasi dari kuota ${fmtMB(u.quota.disk_mb || 0)}.` },
+          h("div", { class: "qv" }, h("div", { class: "t" }, h("b", {}, fmtSize(used)), h("span", {}, fmtMB(u.quota.disk_mb || 0))), bar(p)));
       },
     },
     { key: "created", label: "Dibuat", sort: "created", firstOrder: "desc", cls: "c-date", cell: (u) => h("span", { title: fmtDateTime(u.created_at) }, fmtTime(u.created_at)) },
@@ -234,7 +232,7 @@ export async function renderUsers(root) {
     return dialog({
       title: `Kuota ${u.username}`,
       submit: "Simpan kuota",
-      body: [h("p", {}, "Menurunkan kuota di bawah pemakaian boleh: yang sudah berjalan tetap, alokasi baru ditolak sampai pemakaian turun. Disk dibagi ke aplikasi saat deploy dan menampung folder kerja tiap aplikasi; aplikasi yang penuh tetap berjalan, tetapi tidak bisa di-deploy ulang."), form.node],
+      body: [h("p", {}, "Kuota membatasi memori dan disk yang bisa dibagikan ke aplikasi pengguna ini. CPU tidak dikuota: semua aplikasi memakai seluruh core server bersama. Menurunkan kuota di bawah yang sudah dibagikan boleh: aplikasi yang ada tetap berjalan, tetapi aplikasi baru atau tambahan memori ditolak sampai turun. Disk menampung folder kerja tiap aplikasi; aplikasi yang disknya penuh tetap berjalan, tetapi tidak bisa di-deploy ulang."), form.node],
       onSubmit: async () => {
         await api.patch(`/api/users/${u.id}`, { quota: form.value() });
         toast(`Kuota ${u.username} disimpan`);

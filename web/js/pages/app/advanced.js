@@ -1,5 +1,5 @@
 import * as api from "/assets/js/api.js";
-import { h, icon, clear, fill, fmtMB, fmtNum } from "/assets/js/dom.js";
+import { h, icon, clear, fill, fmtMB } from "/assets/js/dom.js";
 import { act } from "/assets/js/components/act.js";
 import { dialog } from "/assets/js/components/dialog.js";
 import { resourceCards } from "/assets/js/components/resource.js";
@@ -46,12 +46,12 @@ export function renderAdvanced(page) {
 
   function resourceCard() {
     const app = page.app;
-    const res = resourceCards({ usage, current: { memory_mb: app.memory_mb, cpu_milli: app.cpu_milli, disk_mb: app.disk_mb }, memory: app.memory_mb, cpu: app.cpu_milli, disk: app.disk_mb || 256 });
+    const res = resourceCards({ usage, current: { memory_mb: app.memory_mb, disk_mb: app.disk_mb }, memory: app.memory_mb, disk: app.disk_mb || 256 });
     const save = h("button", { class: "btn dark", type: "button", disabled: !res.fits() });
     save.append("Simpan resource");
-    save.addEventListener("click", () => act(save, () => patch({ memory_mb: res.memory(), cpu_milli: res.cpu(), disk_mb: res.disk() }, "Resource disimpan")));
-    const disk = app.disk_mb ? fmtMB(app.disk_mb) : "disk belum dibatasi";
-    return card("Resource", `Sekarang ${fmtMB(app.memory_mb)}, ${fmtNum(app.cpu_milli / 1000)} core, ${disk}. Disk berlaku langsung; memori dan CPU setelah deploy ulang.`, res.node, { foot: [h("span", { class: "spacer" }), save] });
+    save.addEventListener("click", () => act(save, () => patch({ memory_mb: res.memory(), disk_mb: res.disk() }, "Resource disimpan")));
+    const disk = app.disk_mb ? `disk ${fmtMB(app.disk_mb)}` : "disk belum dibatasi";
+    return card("Resource", `Sekarang memori ${fmtMB(app.memory_mb)}, ${disk}. Disk berlaku langsung; memori setelah deploy ulang. CPU tidak perlu diatur: semua aplikasi memakai seluruh core server bersama.`, res.node, { foot: [h("span", { class: "spacer" }), save] });
   }
 
   function foldersCard() {

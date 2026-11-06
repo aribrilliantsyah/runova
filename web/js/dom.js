@@ -96,13 +96,25 @@ export function fmtBytes(n) {
   return `${new Intl.NumberFormat("id", { maximumFractionDigits: i === 0 ? 0 : 1 }).format(n)} ${units[i]}`;
 }
 
-/** fmtMB(1536) → "1,5 GB", fmtMB(512) → "512 MB" */
+const gbf = new Intl.NumberFormat("id", { maximumFractionDigits: 1 });
+
+/** fmtMB(1536) → "1,5 GB", fmtMB(30064) → "29,4 GB", fmtMB(512) → "512 MB": a configured size. */
 export function fmtMB(mb) {
-  return mb >= 1024 ? `${fmtNum(mb / 1024)} GB` : `${fmtNum(mb)} MB`;
+  return mb >= 1024 ? `${gbf.format(mb / 1024)} GB` : `${fmtNum(mb)} MB`;
 }
 
-/** fmtCPU(500) → "0,5 core" */
-export const fmtCPU = (milli) => `${fmtNum(milli / 1000)} core`;
+/**
+ * fmtSize(bytes): a measured size next to MB/GB figures. GB always shows one decimal
+ * ("8,0 GB"), MB is whole, and anything under 1 MB reads "< 1 MB" rather than bytes.
+ */
+export function fmtSize(bytes) {
+  if (!Number.isFinite(bytes) || bytes < 0) return "–";
+  if (bytes === 0) return "0 MB";
+  const mb = bytes / 1048576;
+  if (mb < 1) return "< 1 MB";
+  if (mb < 1024) return `${Math.round(mb)} MB`;
+  return `${new Intl.NumberFormat("id", { minimumFractionDigits: 1, maximumFractionDigits: 1 }).format(mb / 1024)} GB`;
+}
 
 /** fmtTime(ms): relative time, "12 menit lalu", "kemarin", or a date once it is old. */
 export function fmtTime(ms, now = Date.now()) {

@@ -221,7 +221,7 @@ expect 201
 UPLOAD=$(jq -r .id <<<"$BODY")
 [[ $(jq -r .report.kind <<<"$BODY") == static ]] || fail "laporan unggahan: $BODY"
 req "$BUDI_JAR" POST /api/apps "$(jq -nc --arg up "$UPLOAD" --argjson db "$DB_ID" \
-	'{upload_id: $up, name: "hello", internal_port: 8080, memory_mb: 128, cpu_milli: 250, ip_access: true, env: [], database_id: $db}')"
+	'{upload_id: $up, name: "hello", internal_port: 8080, memory_mb: 128, ip_access: true, env: [], database_id: $db}')"
 expect 201
 APP_ID=$(jq -r .app.id <<<"$BODY")
 IP_PORT=$(jq -r .app.ip_port <<<"$BODY")

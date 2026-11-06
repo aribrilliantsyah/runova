@@ -40,13 +40,13 @@ try {
   const cookie = (await fetch(`${srv.url}/api/login`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ username: "admin", password: srv.adminPassword }) })).headers.get("set-cookie").split(";")[0];
   check(lr.status === 200, "login");
   const me = (await api("GET", "/api/me", undefined, cookie)).body;
-  await api("PATCH", `/api/users/${me.id}`, { quota: { apps: 5, memory_mb: 4096, cpu_milli: 4000, databases: 3, pg_connections: 20, disk_mb: 8192 } }, cookie);
+  await api("PATCH", `/api/users/${me.id}`, { quota: { apps: 5, memory_mb: 4096, databases: 3, pg_connections: 20, disk_mb: 8192 } }, cookie);
   const jar = buildSampleJar(tmp);
   const make = async (name, env, memory = 512) => {
     const form = new FormData();
     form.append("file", new Blob([fs.readFileSync(jar)]), `${name}.jar`);
     const up = await (await fetch(`${srv.url}/api/uploads`, { method: "POST", headers: { cookie }, body: form })).json();
-    const r = await api("POST", "/api/apps", { upload_id: up.id, name, java_version: 21, memory_mb: memory, cpu_milli: 500, env: [{ name: "JWT_SECRET", value: "x", secret: true }, { name: "DB_PASSWORD", value: "x", secret: true }, ...env] }, cookie);
+    const r = await api("POST", "/api/apps", { upload_id: up.id, name, java_version: 21, memory_mb: memory, env: [{ name: "JWT_SECRET", value: "x", secret: true }, { name: "DB_PASSWORD", value: "x", secret: true }, ...env] }, cookie);
     check(r.status === 201, `create ${name}: ${r.status} ${JSON.stringify(r.body)}`);
     return r.body.app.id;
   };

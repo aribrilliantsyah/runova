@@ -1,5 +1,5 @@
 import * as api from "/assets/js/api.js";
-import { h, icon, fmtMB, fmtNum, fmtTime, fmtBytes, pct, bar, clear, poll, fill } from "/assets/js/dom.js";
+import { h, icon, fmtMB, fmtNum, fmtSize, fmtTime, pct, bar, clear, poll, fill } from "/assets/js/dom.js";
 import { act } from "/assets/js/components/act.js";
 import { dialog } from "/assets/js/components/dialog.js";
 import { hostingCard } from "/assets/js/components/hostingcard.js";
@@ -9,8 +9,16 @@ import { toast } from "/assets/js/toast.js";
 
 const POLL_MS = 15000;
 
-function stat(ic, label, value, of, percent) {
-  return h("div", { class: "stat" }, h("div", { class: "l" }, icon(ic), label), h("div", { class: "v" }, value, h("small", {}, of)), bar(percent));
+/** stat(...) → one tile; note, when given, is a warning under the bar. */
+function stat(ic, label, value, of, percent, { note, title, id } = {}) {
+  return h(
+    "div",
+    { class: note ? "stat warn" : "stat", title: title || null, "data-stat": id || null },
+    h("div", { class: "l" }, icon(ic), label),
+    h("div", { class: "v" }, value, h("small", {}, of)),
+    percent == null ? null : bar(percent),
+    note ? h("div", { class: "note" }, icon("triangle-alert"), h("span", {}, note)) : null,
+  );
 }
 
 function service(ic, name, ok, detail, errText) {
@@ -36,19 +44,62 @@ export async function renderServer(root) {
   const sub = h("p", {}, "Memuat…");
   root.append(h("section", {}, h("div", { class: "ph" }, h("div", {}, h("h1", {}, "Server"), sub)), view));
 
-  const gb = (mb) => `${fmtNum(mb / 1024)} GB`;
+  const MB = 1048576;
+  const size = (mb) => fmtSize(mb * MB);
+
+  // CPU is shared by every app, so the server shows the host's load, not an allocation.
+  function cpuStat(host) {
+    const load = host.load_avg;
+    if (!load) return stat("cpu", "CPU server", `${host.cpus} core`, "dipakai bersama semua aplikasi", null, { id: "cpu" });
+    const [m1, m5, m15] = load.map((v) => fmtNum(Math.round(v * 100) / 100));
+    return stat("cpu", "CPU server", m1, `beban dari ${host.cpus} core`, pct(load[0], host.cpus), {
+      id: "cpu",
+      title: `Beban rata-rata: ${m1} (1 menit), ${m5} (5 menit), ${m15} (15 menit). Angka ini rata-rata jumlah proses yang memakai atau menunggu CPU; di bawah ${host.cpus} berarti masih ada core yang longgar. Semua aplikasi memakai CPU bersama dengan bobot yang sama.`,
+    });
+  }
+
+  function memStats(host, apps) {
+    const shared = host.mem_alloc_mb;
+    return [
+      stat("memory-stick", "Memori server", size(host.mem_used_mb || 0), `terpakai dari ${size(host.mem_total_mb)}`, pct(host.mem_used_mb || 0, host.mem_total_mb), { id: "mem-server" }),
+      stat("memory-stick", "Memori aplikasi", fmtMB(shared), `dibagikan ke ${apps.total} aplikasi, dari ${size(host.mem_total_mb)}`, pct(shared, host.mem_total_mb), {
+        id: "mem-apps",
+        note: shared > host.mem_total_mb ? `Lebih dari memori server. Bila semua aplikasi memakai jatahnya penuh, server kehabisan memori.` : null,
+      }),
+    ];
+  }
+
+  function diskStats(host, apps) {
+    const shared = host.app_disk_alloc_mb || 0;
+    const filled = host.app_disk_used_bytes || 0;
+    const free = Math.max(host.disk_total_mb - host.disk_used_mb, 0);
+    // What apps may still write, against what the server has left: their filled part is already in disk_used_mb.
+    const room = Math.max(shared - filled / MB, 0);
+    return [
+      stat("hard-drive", "Disk server", size(host.disk_used_mb), `terpakai dari ${size(host.disk_total_mb)}`, pct(host.disk_used_mb, host.disk_total_mb), { id: "disk-server" }),
+      stat("hard-drive", "Disk aplikasi", fmtMB(shared), `dibagikan ke ${apps.total} aplikasi, ${fmtSize(filled)} terisi`, pct(filled, shared * MB), {
+        id: "disk-apps",
+        note: room > free ? `Sisa disk server ${size(free)}, lebih kecil dari ${size(room)} yang masih boleh diisi aplikasi. Disk server bisa penuh sebelum aplikasi mencapai batasnya.` : null,
+      }),
+    ];
+  }
 
   function paintStatus() {
     const { host, apps, docker, caddy, postgres } = st;
     sub.textContent = `${host.hostname} · ${host.os} · ${host.arch}`;
+    const [memServer, memApps] = memStats(host, apps);
+    const [diskServer, diskApps] = diskStats(host, apps);
     return [
+      // Server capacity on the first row; what apps were given, under the matching server figure.
       h(
         "div",
-        { class: "stats" },
-        stat("cpu", "CPU dialokasikan", fmtNum(host.cpu_alloc_milli / 1000), `dari ${host.cpus} core`, pct(host.cpu_alloc_milli, host.cpus * 1000)),
-        stat("memory-stick", "Memori dialokasikan", gb(host.mem_alloc_mb), `dari ${gb(host.mem_total_mb)}`, pct(host.mem_alloc_mb, host.mem_total_mb)),
-        stat("hard-drive", "Disk server", gb(host.disk_used_mb), `dari ${gb(host.disk_total_mb)}; aplikasi ${fmtBytes(host.app_disk_used_bytes || 0)} terpakai dari ${fmtMB(host.app_disk_alloc_mb || 0)} dialokasikan`, pct(host.disk_used_mb, host.disk_total_mb)),
-        stat("package", "Aplikasi", String(apps.total), `${apps.running} berjalan, ${apps.stopped + apps.failed} berhenti`, pct(apps.running, apps.total)),
+        { class: "stats srvstats" },
+        cpuStat(host),
+        memServer,
+        diskServer,
+        stat("package", "Aplikasi", String(apps.total), `${apps.running} berjalan, ${apps.stopped + apps.failed} berhenti`, pct(apps.running, apps.total), { id: "apps" }),
+        memApps,
+        diskApps,
       ),
       h(
         "div",

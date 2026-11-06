@@ -382,6 +382,11 @@ table.act td.who{white-space:nowrap}
 .srv{display:grid;grid-template-columns:minmax(0,1fr);gap:12px;align-content:start}
 .srv>.card,.srv .setgrid>.card,.srv .stack>.card{margin:0}
 .srv .stats{margin-bottom:0}
+/* Server tiles: server capacity on row 1, what apps were given on row 2, each under its server figure. */
+.srv .srvstats{grid-template-columns:repeat(3,minmax(0,1fr))}
+.stat.warn{border-color:color-mix(in srgb,var(--warn) 45%,var(--line))}
+.stat .note{display:flex;gap:6px;align-items:flex-start;margin-top:8px;font-size:11.5px;line-height:1.4;color:var(--warn)}
+.stat .note .lucide{flex:none;width:13px;height:13px;margin-top:1px}
 .setgrid{display:grid;grid-template-columns:minmax(0,1fr);gap:12px;align-items:start}
 @media (min-width:1180px){.setgrid{grid-template-columns:minmax(0,5fr) minmax(0,7fr)}}
 .setgrid .cfgform{max-width:none}
@@ -734,7 +739,7 @@ details.why ul{margin:6px 0 0;padding-left:18px}
 .dmiss .dok .lucide{color:var(--ok);width:14px;height:14px;margin-top:2px}
 .dbtn{height:38px;justify-content:center;font-size:13.5px}
 .dcancel{justify-content:center}
-/* Memory and CPU pickers (components/resource.js) */
+/* Memory and disk pickers (components/resource.js) */
 .res3{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin-bottom:14px}
 .dcustom .res3{margin-bottom:0}
 .rescard{border:1px solid var(--line);border-radius:var(--r);padding:11px 12px}
