@@ -2,7 +2,8 @@
 # Installs Runova for real on a fresh Ubuntu 26.04 with systemd as PID 1 (a
 # privileged container, no VM) through scripts/deploy.sh, then exercises it:
 # check, login, user + database, a deployed binary reached through its IP port,
-# a second deploy (idempotent, no new password) and a restart of the services.
+# a second deploy (idempotent, no new password), a restart of the services and
+# a reboot of the whole server (the app must come back by itself).
 #
 #   test/system/run.sh            # needs docker, go, curl, jq, ssh; no root
 #   KEEP=1 test/system/run.sh     # leave the container for inspection
@@ -265,6 +266,38 @@ as_runova check >/dev/null || fail "runova check gagal setelah restart"
 pass "restart runova caddy postgresql: panel, aplikasi (rows=2), dan check pulih"
 
 # ---------------------------------------------------------------------------
+scenario "6b reboot server"
+# `docker restart` of the systemd container is the closest thing to a reboot
+# here: systemd (PID 1) gets SIGRTMIN+3, stops every unit in order (dockerd
+# SIGTERMs the app container, which hello answers with exit 0, the case
+# on-failure never restarts) and boots again on the same disks (/var/lib/docker
+# is a volume). Not covered: firmware, kernel, the host's own network start.
+[[ $(in_box docker inspect -f '{{.HostConfig.RestartPolicy.Name}}' "$(in_box docker ps -q --filter label=runova.app="$APP_ID")") == on-failure ]] || fail "container hello tidak memakai on-failure"
+in_box docker ps -q --filter label=runova.app="$APP_ID" | grep -q . || fail "container hello tidak berjalan sebelum reboot"
+docker restart -t 120 "$NAME" >/dev/null || fail "docker restart $NAME gagal"
+for _ in $(seq 120); do
+	[[ $(in_box systemctl is-system-running 2>/dev/null || true) =~ ^(running|degraded)$ ]] && break
+	sleep 1
+done
+[[ $(box_ip) == "$IP" ]] || fail "IP container berubah setelah reboot: $(box_ip) != $IP"
+for svc in docker caddy postgresql runova; do
+	[[ $(in_box systemctl is-active "$svc") == active ]] || fail "$svc tidak aktif setelah reboot"
+done
+for _ in $(seq 120); do
+	[[ $(curl -sk -m 3 -o /dev/null -w '%{http_code}' "$PANEL/api/me") =~ ^(200|401)$ ]] && break
+	sleep 1
+done
+req "$ADMIN_JAR" POST /api/login "$(jq -nc --arg p "$ADMIN_PASSWORD" '{username: "admin", password: $p}')"
+expect 200
+[[ $(curl_ok "http://$IP:$IP_PORT/db?add=1" 120) == rows=3 ]] || fail "aplikasi tidak hidup lagi setelah reboot (rows=3 diharapkan)"
+wait_app "$BUDI_JAR" "$APP_ID"
+req "$BUDI_JAR" GET /api/notifications
+expect 200
+[[ $(jq '[.. | objects | select(.title? == "Aplikasi hello dinyalakan lagi setelah server dimulai ulang")] | length' <<<"$BODY") == 1 ]] || fail "notifikasi dinyalakan lagi tidak tepat satu: $BODY"
+as_runova check >/dev/null || fail "runova check gagal setelah reboot"
+pass "reboot server: panel 200, hello dinyalakan lagi oleh Runova (exit 0 saat SIGTERM), rows=3, satu notifikasi"
+
+# ---------------------------------------------------------------------------
 scenario "7 runova update lalu rollback"
 REL="$WORK/release"
 REL_REPO=me/runova
@@ -341,4 +374,4 @@ expect 200
 wait_app "$BUDI_JAR" "$APP_ID"
 pass "rollback kembali ke 0.0.2-systest; panel login, pengguna, database, dan aplikasi utuh"
 
-printf '\nSemua 8 skenario lulus.\n'
+printf '\nSemua 9 skenario lulus.\n'
