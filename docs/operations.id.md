@@ -66,6 +66,20 @@ Skema database ikut diperbarui otomatis saat Runova dibuka. Sebelum migrasi pert
 sudo -u runova env RUNOVA_DATA=/var/lib/runova runova db version
 ```
 
+## Setelah server reboot
+
+Tidak ada yang perlu dilakukan manual. Installer mengaktifkan `docker`, `containerd` (bila ada), `caddy`, `postgresql`, dan `runova` dengan `systemctl enable`, jadi semuanya naik saat boot, dan `runova.service` start setelah Docker.
+
+| Apa | Siapa yang menaikkan lagi |
+|---|---|
+| Panel, Caddy, PostgreSQL | systemd |
+| Aplikasi berstatus **running** atau **starting** | Runova, saat start |
+| Aplikasi yang **dihentikan** pengguna, atau **gagal** (crash loop, tidak pernah siap) | tidak ada: tetap mati sampai ada yang menekan Jalankan |
+
+Docker menghentikan container saat shutdown dengan SIGTERM. Kebanyakan server (Spring Boot, server Go dengan signal handling) keluar dengan kode 0, dan restart policy `on-failure` tidak pernah menyalakan lagi exit 0, jadi Docker sendiri tidak menaikkannya. Saat Runova start, ia mencari setiap aplikasi yang semestinya jalan tapi container-nya berhenti, lalu menyalakannya: status `starting`, lalu `running` setelah port terbuka, dengan penantian yang sama seperti Jalankan (batas waktu JAR, deteksi OOM dan restart). Aplikasi dinyalakan satu per 5 detik, tidak serentak, supaya banyak JVM tidak berebut CPU. Tiap aplikasi yang dinyalakan lagi memunculkan satu notifikasi ("Aplikasi … dinyalakan lagi setelah server dimulai ulang") dan satu entri Aktivitas; aplikasi yang tidak bisa dinyalakan berakhir `failed` dengan notifikasi error. Container tidak pernah dibuat ulang: container yang terhapus tetap menandai aplikasi gagal ("deploy ulang").
+
+Ini terjadi sekali setiap Runova start. Container yang keluar dengan kode 0 saat Runova sedang berjalan tetap dianggap keputusan aplikasinya sendiri dan ditandai berhenti.
+
 ## Uninstall manual
 
 Belum ada perintah uninstall. Langkah manual (menghapus **semua** data Runova, termasuk aplikasi dan database pengguna):
