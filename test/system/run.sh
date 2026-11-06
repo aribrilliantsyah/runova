@@ -347,7 +347,7 @@ rv update --check >/dev/null 2>&1 || rc=$?
 [[ $rc == 0 ]] || fail "update --check setelah update: kode $rc"
 req "$ADMIN_JAR" POST /api/login "$(jq -nc --arg p "$ADMIN_PASSWORD" '{username: "admin", password: $p}')"
 expect 200
-[[ $(curl_ok "http://$IP:$IP_PORT/db") == rows=2 ]] || fail "data aplikasi hilang setelah update"
+[[ $(curl_ok "http://$IP:$IP_PORT/db") == rows=3 ]] || fail "data aplikasi hilang setelah update"
 pass "update ke $REL_VERSION lewat get.sh rilis lokal; login dan data utuh; rollback/VERSION=0.0.2-systest"
 
 rc=0
@@ -370,7 +370,7 @@ req "$ADMIN_JAR" POST /api/login "$(jq -nc --arg p "$ADMIN_PASSWORD" '{username:
 expect 200
 req "$BUDI_JAR" POST /api/login "$(jq -nc --arg p "$BUDI_PASSWORD" '{username: "budi", password: $p}')"
 expect 200
-[[ $(curl_ok "http://$IP:$IP_PORT/db") == rows=2 ]] || fail "data aplikasi hilang setelah rollback"
+[[ $(curl_ok "http://$IP:$IP_PORT/db") == rows=3 ]] || fail "data aplikasi hilang setelah rollback"
 wait_app "$BUDI_JAR" "$APP_ID"
 pass "rollback kembali ke 0.0.2-systest; panel login, pengguna, database, dan aplikasi utuh"
 
