@@ -116,7 +116,12 @@ export function buildShell({ onLogout }) {
 
   // Admin-only notice that a newer release exists; it cannot be dismissed and goes away once the server is updated.
   const upd = h("div", { class: "banner info upd", role: "status", hidden: true });
-  const main = h("div", { class: "main" }, top, upd, content, bnav, mbar);
+  // Every user: the server now serves a newer panel than this tab loaded, so the page may show what the server no longer has.
+  const reloadBtn = h("button", { class: "btn sm pri", type: "button", onclick: () => location.reload() }, icon("refresh-cw"), "Muat ulang");
+  const stalePanel = h("div", { class: "banner warn", role: "status", hidden: !api.panelStale() }, icon("info"), h("span", { class: "msg" }, "Runova di server sudah diperbarui. Muat ulang halaman untuk memakai tampilan terbaru."), h("div", { class: "r" }, reloadBtn));
+  const onStale = () => (stalePanel.hidden = false);
+  addEventListener(api.STALE_PANEL, onStale);
+  const main = h("div", { class: "main" }, top, stalePanel, upd, content, bnav, mbar);
 
   function paintUpdate(st) {
     if (!st?.update_available) {
@@ -299,6 +304,7 @@ export function buildShell({ onLogout }) {
       bellStop();
       clearInterval(updTimer);
       removeEventListener("runova:update", refreshUpdate);
+      removeEventListener(api.STALE_PANEL, onStale);
       removeEventListener("keydown", onKey);
       removeEventListener("runova:theme", onTheme);
     },

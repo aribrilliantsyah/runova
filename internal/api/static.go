@@ -41,9 +41,13 @@ type asset struct {
 }
 
 // panel is the embedded web panel prepared for serving: every file but
-// index.html is published under /assets/<dir>/<name>.<hash>.<ext>.
+// index.html is published under /assets/<dir>/<name>.<hash>.<ext>. hash also
+// names the build: index.html carries it in <meta name="runova-panel">, and
+// every response repeats it in panelHeader, so a tab still running an older
+// panel sees that the server was updated.
 type panel struct {
 	index  []byte
+	hash   string
 	assets map[string]asset // key: URL path below /assets/
 }
 
@@ -94,7 +98,7 @@ func newPanel(fsys fs.FS) *panel {
 		})
 	}
 
-	p := &panel{assets: make(map[string]asset, len(names))}
+	p := &panel{hash: hash, assets: make(map[string]asset, len(names))}
 	for _, n := range names {
 		if n == "index.html" {
 			continue
@@ -113,6 +117,7 @@ func newPanel(fsys fs.FS) *panel {
 	index := assetTagRE.ReplaceAllFunc(raw["index.html"], func(tag []byte) []byte {
 		return []byte(assetPrefix + string(assetTagRE.FindSubmatch(tag)[1]))
 	})
+	index = []byte(strings.Replace(string(index), "</head>", `<meta name="runova-panel" content="`+hash+`">`+"\n</head>", 1))
 	p.index = rewrite("index.html", index)
 	return p
 }
@@ -158,4 +163,15 @@ func (p *panel) serveAsset(w http.ResponseWriter, r *http.Request) {
 func (p *panel) routes(mux *http.ServeMux) {
 	mux.HandleFunc(assetPrefix, p.serveAsset)
 	mux.HandleFunc("/", p.serveIndex)
+}
+
+// panelHeader names the panel build on every response.
+const panelHeader = "X-Runova-Panel"
+
+// stamp adds panelHeader to every response of next.
+func (p *panel) stamp(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set(panelHeader, p.hash)
+		next.ServeHTTP(w, r)
+	})
 }

@@ -10,6 +10,21 @@ export class ApiError extends Error {
 
 export const UNAUTHORIZED = "runova:unauthorized";
 export const RETURN_KEY = "runova.return";
+/** Fired once when the server answers with another panel build than this tab runs. */
+export const STALE_PANEL = "runova:stale-panel";
+
+const myPanel = document.querySelector('meta[name="runova-panel"]')?.content || "";
+let stale = false;
+
+function checkPanel(res) {
+  const theirs = res.headers.get("X-Runova-Panel");
+  if (stale || !myPanel || !theirs || theirs === myPanel) return;
+  stale = true;
+  dispatchEvent(new Event(STALE_PANEL));
+}
+
+/** panelStale() → true once the server answered with another panel build. */
+export const panelStale = () => stale;
 
 // A 401 from these paths is an ordinary answer, not an expired session.
 const AUTH_PATHS = new Set(["/api/login", "/api/me"]);
@@ -46,6 +61,7 @@ async function request(method, path, body, headers = {}) {
   } catch {
     throw new ApiError(0, "Tidak bisa menghubungi server");
   }
+  checkPanel(res);
   const data = await parse(res);
   if (res.ok) return data;
   if (res.status === 401) unauthorized(path);

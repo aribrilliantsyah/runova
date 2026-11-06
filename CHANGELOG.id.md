@@ -4,6 +4,11 @@ Semua perubahan penting Runova. Versi mengikuti [semantic versioning](https://se
 
 Perbarui server dengan `sudo runova update` (server 0.2.0 atau lebih lama: jalankan perintah `curl … get.sh | sudo bash` sekali). Perubahan skema database dimigrasikan otomatis setelah cadangan (`runova.db.bak-v<N>-*`); `sudo runova rollback` kembali ke versi sebelumnya beserta database-nya.
 
+## [0.3.14] - 2026-11-06
+
+### Diperbaiki
+- **Tab browser yang dibuka sebelum update tidak lagi menampilkan panel lama terhadap server baru.** Setelah `sudo runova update`, tab yang masih terbuka tetap menjalankan kode panel versi sebelumnya, sehingga bisa menampilkan hal yang sudah dihapus dari server (misalnya "Kuota CPU habis (NaN core)" setelah CPU dipakai bersama). Kini setiap respons menyebut build panel (`X-Runova-Panel`, juga di `<meta>` halaman); bila tab melihat build lain, muncul "Runova di server sudah diperbarui" dengan tombol **Muat ulang**, untuk semua pengguna.
+
 ## [0.3.13] - 2026-11-06
 
 ### Ditambahkan
@@ -180,6 +185,7 @@ Rilis pertama.
 - Pengguna dengan kuota (aplikasi, memori, CPU, database), batas login, log aktivitas, notifikasi.
 - Migrasi database berversi dengan cadangan otomatis.
 
+[0.3.14]: https://github.com/aribrilliantsyah/runova/compare/v0.3.13...v0.3.14
 [0.3.13]: https://github.com/aribrilliantsyah/runova/compare/v0.3.12...v0.3.13
 [0.3.12]: https://github.com/aribrilliantsyah/runova/compare/v0.3.11...v0.3.12
 [0.3.11]: https://github.com/aribrilliantsyah/runova/compare/v0.3.10...v0.3.11

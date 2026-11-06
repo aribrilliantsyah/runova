@@ -134,6 +134,35 @@ func TestAssetURLChangesWithContent(t *testing.T) {
 	}
 }
 
+// A tab compares the build named in the index it loaded with the header of
+// later responses, so both must name the same build, on API answers too.
+func TestPanelBuildNamedInIndexAndResponses(t *testing.T) {
+	fsys := staticFS(`one`)
+	fsys["index.html"] = &fstest.MapFile{Data: []byte(`<head><title>x</title></head><script type="module" src="{{asset "js/main.js"}}"></script>`)}
+	srv := staticServer(t, fsys)
+	res, index := get(t, srv.URL+"/")
+	m := regexp.MustCompile(`<meta name="runova-panel" content="([0-9a-f]{8})">\n</head>`).FindStringSubmatch(index)
+	if m == nil {
+		t.Fatalf("index lacks the panel build meta before </head>: %s", index)
+	}
+	if got := mainRE.FindStringSubmatch(index)[1]; got != m[1] {
+		t.Errorf("meta build %s, asset hash %s", m[1], got)
+	}
+	asset, _ := get(t, srv.URL+mainRE.FindString(index))
+	api, _ := get(t, srv.URL+"/api/me")
+	for name, r := range map[string]*http.Response{"index": res, "asset": asset, "api": api} {
+		if got := r.Header.Get("X-Runova-Panel"); got != m[1] {
+			t.Errorf("%s: X-Runova-Panel = %q, want %q", name, got, m[1])
+		}
+	}
+
+	other := staticServer(t, staticFS(`two`))
+	o, _ := get(t, other.URL+"/api/me")
+	if o.Header.Get("X-Runova-Panel") == m[1] {
+		t.Error("another panel build answers with the same X-Runova-Panel")
+	}
+}
+
 func TestSPAFallback(t *testing.T) {
 	srv := staticServer(t, staticFS(`x`))
 	_, index := get(t, srv.URL+"/")

@@ -133,7 +133,9 @@ func New(cfg Config) http.Handler {
 		writeError(w, http.StatusNotFound, "Tidak ditemukan")
 	})
 	if cfg.Static != nil {
-		newPanel(cfg.Static).routes(mux)
+		p := newPanel(cfg.Static)
+		p.routes(mux)
+		return p.stamp(sameOrigin(mux))
 	}
 	return sameOrigin(mux)
 }
