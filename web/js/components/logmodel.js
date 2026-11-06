@@ -165,17 +165,5 @@ export function logModel({ max = 20000 } = {}) {
       for (const e of entries) c[e.parsed.level || "none"]++;
       return c;
     },
-    /** ownTimestamps() → whether most lines with text print a timestamp of their own. */
-    ownTimestamps() {
-      let text = 0;
-      let own = 0;
-      for (let i = Math.max(0, entries.length - 400); i < entries.length; i++) {
-        const e = entries[i];
-        if (!e.plain.trim() || e.parsed.frame) continue;
-        text++;
-        if (e.parsed.own) own++;
-      }
-      return text > 0 && own / text >= 0.5;
-    },
   };
 }

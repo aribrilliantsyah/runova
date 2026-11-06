@@ -180,14 +180,21 @@
 @keyframes rnv-up{from{transform:translateY(18px);opacity:.6}}
 @media (prefers-reduced-motion: reduce){.mpanel{animation:none}}
 @media (max-width: 760px){
-  .lv-bar{padding:8px}
-  .lv-find{flex-basis:100%;height:40px}
-  .lv-acts{margin-left:0;width:100%;justify-content:space-between}
+  .lv{--lv-no:4ch}
+  .lv-bar{padding:8px;gap:6px}
+  .lv-find{flex:1 1 0;height:40px}
+  .lv-only{display:none}
+  .lv-lvtxt{display:none}
+  .lv-lvbtn,.lv-acts .btn.sm{height:40px;min-width:40px;justify-content:center}
+  .lv-acts{margin-left:0}
   .lv-lbl{display:none}
-  .lv .ln{grid-template-columns:3.2ch minmax(0,1fr);padding-right:8px}
+  .lv.no-ts .ln,.lv .ln{grid-template-columns:var(--lv-no) minmax(0,1fr);gap:0 8px;padding-right:8px}
   .lv .ln .ts{display:none}
-  .lv-fold{margin-left:calc(3.2ch + 16px)}
-  .lv.tall .lv-body{height:60vh}
+  .lv-restart{padding-left:12px}
+  .lv-note{padding-left:12px}
+  .lv-menu{position:fixed;top:auto;left:8px;right:8px;bottom:calc(8px + env(safe-area-inset-bottom));min-width:0}
+  .lv-mi{min-height:42px}
+  .lv.tall .lv-body,.lv-body{height:62vh}
   select.f.lv-pick{margin-left:0;width:100%;height:42px}
   .dep-grid{grid-template-columns:minmax(0,1fr)}
   .appwhy{margin:10px 16px 0;flex-wrap:wrap}

@@ -166,15 +166,6 @@ test("model counts by level for the filter", () => {
   eq(m.counts().none, 1);
 });
 
-test("model knows when lines carry their own timestamp", () => {
-  const m = logModel({ max: 100 });
-  m.push([line(SPRING), line(""), line("  .   ____")]);
-  assert(m.ownTimestamps(), "most text lines carry an ISO timestamp");
-  const n = logModel({ max: 100 });
-  n.push([line("Listening on 8080"), line("ok")]);
-  assert(!n.ownTimestamps());
-});
-
 test("50 000 lines are grouped quickly", () => {
   const m = logModel({ max: 50000 });
   const lines = [];

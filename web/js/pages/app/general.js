@@ -8,7 +8,8 @@ import { runtimeImage } from "/assets/js/kinds.js";
 import { toast } from "/assets/js/toast.js";
 import { markRedeploy } from "/assets/js/pages/app/redeploy.js";
 import { ipHost } from "/assets/js/components/iphost.js";
-import { levelOf, fromServer } from "/assets/js/components/logview.js";
+import { fromServer } from "/assets/js/components/logview.js";
+import { parseLine, stripAnsi } from "/assets/js/components/logparse.js";
 import { problemCard } from "/assets/js/components/deploytrace.js";
 import { diskMeter } from "/assets/js/pages/app/files.js";
 
@@ -152,16 +153,23 @@ export function renderGeneral(page) {
 
   let logEmpty = "Memuat log…";
   function paintLog(pre) {
-    // The app's own ISO timestamp repeats the clock; the card shows the message only.
-    const text = (t) => t.replace(/^\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}:\d{2}(?:[.,]\d+)?(?:Z|[+-]\d{2}:?\d{2})?\s+/, "");
-    pre.replaceChildren(...(logCache.length ? logCache.map((l) => h("span", { class: `ln ${l.level}`, title: l.text }, h("b", {}, fmtClock(l.time)), "  ", text(l.text))) : [h("span", { class: "empty-log" }, logEmpty)]));
+    // The app's own timestamp repeats the clock and colors stay out of the small card: message only.
+    const LV = { error: "e", warn: "w" };
+    pre.replaceChildren(
+      ...(logCache.length
+        ? logCache.map((l) => {
+            const p = parseLine(l.text);
+            return h("span", { class: `ln ${LV[p.level] || ""}`, title: stripAnsi(l.text) }, h("b", {}, fmtClock(l.time)), "  ", stripAnsi(p.text));
+          })
+        : [h("span", { class: "empty-log" }, logEmpty)]),
+    );
   }
 
   // Without a running container, the card shows the end of the newest log Runova still has.
   async function savedTail(d) {
     try {
       const r = await api.get(`/api/apps/${page.id}/deployments/${d.id}/log?tail=5`);
-      logCache = r.lines.map(fromServer).map((l) => ({ ...l, level: levelOf(l.text) }));
+      logCache = r.lines.map(fromServer);
       logEmpty = d.status === "failed" && !d.container_id ? "Deploy gagal sebelum container menulis log. Penyebabnya ada di atas." : "Container ini tidak menulis log.";
     } catch {
       logEmpty = "Log tidak bisa dimuat.";

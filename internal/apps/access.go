@@ -5,6 +5,7 @@ import (
 	"errors"
 	"io"
 	"strconv"
+	"time"
 
 	"runova/internal/artifact"
 	"runova/internal/docker"
@@ -63,22 +64,31 @@ func (s *Service) Stats(ctx context.Context, user store.User, appID int64) (st d
 	return st, err == nil, err
 }
 
-// Logs opens the app's container log. With follow it stays open until closed.
-func (s *Service) Logs(ctx context.Context, user store.User, appID int64, tail int, follow bool) (io.ReadCloser, error) {
+// Logs opens the app's container log. With follow it stays open until closed
+// (or the container stops). started is when the container last started, so a
+// reader that reopens the log can tell that it started again in between.
+func (s *Service) Logs(ctx context.Context, user store.User, appID int64, tail int, follow bool) (rc io.ReadCloser, started time.Time, err error) {
 	app, _, err := s.load(ctx, user, appID)
 	if err != nil {
-		return nil, err
+		return nil, time.Time{}, err
 	}
 	// Logs stay readable after a crash or stop, so any recorded container will do.
 	id, err := s.activeContainer(ctx, app)
 	if err != nil {
-		return nil, ErrNotRunning
+		return nil, time.Time{}, ErrNotRunning
 	}
-	rc, err := s.Engine.Logs(ctx, id, tail, follow)
+	st, err := s.Engine.InspectContainer(ctx, id)
 	if errors.Is(err, docker.ErrNotFound) {
-		return nil, ErrNotRunning
+		return nil, time.Time{}, ErrNotRunning
 	}
-	return rc, err
+	if err != nil {
+		return nil, time.Time{}, err
+	}
+	rc, err = s.Engine.Logs(ctx, id, tail, follow)
+	if errors.Is(err, docker.ErrNotFound) {
+		return nil, time.Time{}, ErrNotRunning
+	}
+	return rc, st.StartedAt, err
 }
 
 // CheckTerminal verifies the actor may open a terminal in the app, without opening one.

@@ -87,13 +87,23 @@ try {
   await page.waitForSelector("#biglog .ln:has-text('Listening on port 8080')", { timeout: 15000 });
   await page.waitForSelector("#biglog .ln:has-text('hello from <b>env</b>')");
   check((await page.locator("#biglog b").count()) === (await page.locator("#biglog .ln b").count()), "stray <b> in the log");
-  check((await page.locator("#biglog .ln.w").count()) > 0 && (await page.locator("#biglog .ln.e").count()) > 0, "warning and error lines colored");
+  check((await page.locator("#biglog .ln.lvl-warn").count()) > 0 && (await page.locator("#biglog .ln.lvl-error").count()) > 0, "warning and error lines colored");
   await page.fill("input[aria-label='Cari di log']", "slow connection");
-  check((await page.locator("#biglog .ln").count()) === (await page.locator("#biglog .ln:has-text('slow connection')").count()), "filter leaves other lines");
+  await page.waitForSelector("#biglog mark.on");
+  check((await page.locator(".lv-count").innerText()) === "1/1", `match count: ${await page.locator(".lv-count").innerText()}`);
+  await page.check(".lv-only input");
+  check((await page.locator("#biglog .ln").count()) === (await page.locator("#biglog .ln:has-text('slow connection')").count()), "only-matching leaves other lines");
+  await page.uncheck(".lv-only input");
   await page.fill("input[aria-label='Cari di log']", "");
-  await page.click("button:has-text('Jeda')");
-  await page.waitForSelector(".chip:has-text('Dijeda')");
-  await page.click("button:has-text('Lanjut')");
+  await page.click(".lv-lvbtn");
+  await page.uncheck(".lv-menu input[value='info']");
+  await page.uncheck(".lv-menu input[value='none']");
+  await page.keyboard.press("Escape");
+  check((await page.locator("#biglog .ln:not(.lvl-warn):not(.lvl-error)").count()) === 0, "level filter leaves info lines");
+  await page.click(".lv-lvbtn");
+  await page.check(".lv-menu input[value='info']");
+  await page.check(".lv-menu input[value='none']");
+  await page.keyboard.press("Escape");
 
   step("rollback to #1 creates a new deployment");
   await page.goto(`${srv.url}/#/apps/${id}/deployments`);

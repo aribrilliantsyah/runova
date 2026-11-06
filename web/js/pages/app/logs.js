@@ -16,13 +16,10 @@ export function renderLogs(page) {
   let stream = null;
   let streamFor = null;
   let loadedFor = null;
-  let paused = false;
-  const pending = [];
 
   const live = h("span", { class: "chip" });
-  const pauseBtn = h("button", { class: "btn sm ghost", type: "button" });
   const picker = h("select", { class: "f lv-pick", "aria-label": "Log deployment" });
-  const view = logView({ label: "Log aplikasi", tall: true, fileName: `${page.app.name}.log`, toolbarExtra: [live, pauseBtn] });
+  const view = logView({ label: "Log aplikasi", tall: true, fileName: `${page.app.name}.log`, toolbarExtra: [live] });
   view.node.querySelector(".lv-body").id = "biglog";
   const head = h("div", { class: "logtop" });
   const reason = h("div");
@@ -31,13 +28,6 @@ export function renderLogs(page) {
     live.className = `chip ${cls}`;
     fill(live, cls ? h("span", { class: `dot ${cls}` }) : null, text);
   };
-  const paintPause = () => pauseBtn.replaceChildren(icon(paused ? "play" : "square"), paused ? `Lanjut${pending.length ? ` (+${pending.length})` : ""}` : "Jeda");
-  pauseBtn.addEventListener("click", () => {
-    paused = !paused;
-    if (!paused) pending.splice(0).forEach((l) => view.add(l));
-    paintPause();
-    setLive(paused ? "warn" : "ok", paused ? "Dijeda" : "Live");
-  });
 
   function stopStream() {
     stream?.close();
@@ -64,9 +54,8 @@ export function renderLogs(page) {
     const d = target();
     paintPicker(d);
     paintReason(d);
-    const streaming = d && deployment && d.id === deployment.id && app.status === "running";
+    const streaming = d && deployment && d.id === deployment.id && (app.status === "running" || app.status === "starting");
     const deploying = d && (d.status === "running" || d.status === "pending");
-    pauseBtn.hidden = !(streaming || deploying);
     if (streaming || deploying) {
       if (streamFor === d.id) return;
       stopStream();
@@ -74,13 +63,12 @@ export function renderLogs(page) {
       view.clear();
       view.setEmpty(deploying ? "Menunggu container dibuat…" : "Container belum menulis log.");
       streamFor = d.id;
-      paused = false;
-      paintPause();
       stream = logStream({
         id: page.id,
-        tail: 1000,
-        onLine: (l) => (paused ? pending.push(l) : view.add(l)),
-        onState: (s) => (paused ? null : setLive(s === "live" ? "ok" : s === "connecting" ? "" : "err", s === "live" ? "Live" : s === "connecting" ? "Menyambung…" : "Terputus")),
+        tail: 2000,
+        onLine: (l) => view.add(l),
+        onRestart: (t) => view.markRestart(t),
+        onState: (s) => setLive(s === "live" ? "ok" : s === "connecting" ? "" : "err", s === "live" ? "Live" : s === "connecting" ? "Menyambung…" : "Terputus"),
       });
       return;
     }
@@ -147,7 +135,6 @@ export function renderLogs(page) {
   }
 
   setLive("", "Memuat…");
-  paintPause();
   loadList().then(sync);
   const node = h("div", { class: "logtab" }, reason, h("section", { class: "card lvcard" }, h("header", {}, head), view.node));
   return {
