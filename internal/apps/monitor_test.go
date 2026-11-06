@@ -479,7 +479,7 @@ func exitContainer(t *testing.T, e *testEnv, app store.App, code int) string {
 func TestReconcileStartsAppsThatShouldRun(t *testing.T) {
 	ctx := context.Background()
 	e := newTestEnv(t)
-	u := e.addUser("budi", store.RoleUser, store.Quota{Apps: 10, MemoryMB: 4096, CPUMilli: 4000, Databases: 3, PGConnections: 20, DiskMB: 4096})
+	u := e.addUser("budi", store.RoleUser, store.Quota{Apps: 10, MemoryMB: 4096, Databases: 3, PGConnections: 20, DiskMB: 4096})
 
 	running, _ := deployFirst(t, e, u, "running")
 	starting, _ := deployFirst(t, e, u, "starting")
@@ -587,7 +587,7 @@ func TestReconcileStartFailureMarksFailed(t *testing.T) {
 func TestReconcileStaggersStarts(t *testing.T) {
 	ctx := context.Background()
 	e := newTestEnv(t)
-	u := e.addUser("budi", store.RoleUser, store.Quota{Apps: 10, MemoryMB: 4096, CPUMilli: 4000, Databases: 3, PGConnections: 20, DiskMB: 4096})
+	u := e.addUser("budi", store.RoleUser, store.Quota{Apps: 10, MemoryMB: 4096, Databases: 3, PGConnections: 20, DiskMB: 4096})
 	const gap = 60 * time.Millisecond
 	e.svc.ReviveGap = gap
 	for _, name := range []string{"aaa", "bbb", "ccc"} {

@@ -71,7 +71,7 @@ func TestIntegrationRebootStartsAppAgain(t *testing.T) {
 		t.Fatal(err)
 	}
 	user, err := st.CreateUser(ctx, store.NewUser{Username: "itestboot", PasswordHash: "x", Role: store.RoleUser,
-		Quota: store.Quota{Apps: 3, MemoryMB: 1024, CPUMilli: 1000, Databases: 3, PGConnections: 20, DiskMB: 4096}}, 1)
+		Quota: store.Quota{Apps: 3, MemoryMB: 1024, Databases: 3, PGConnections: 20, DiskMB: 4096}}, 1)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -107,7 +107,7 @@ func TestIntegrationRebootStartsAppAgain(t *testing.T) {
 		if err := st.CreateUpload(ctx, store.Upload{ID: id, UserID: user.ID, Dir: udir, ArtifactPath: path, Report: rep, CreatedAt: 1}); err != nil {
 			t.Fatal(err)
 		}
-		app, d, err := svc.Create(ctx, user, apps.CreateInput{UploadID: id, Name: name, MemoryMB: 128, CPUMilli: 100})
+		app, d, err := svc.Create(ctx, user, apps.CreateInput{UploadID: id, Name: name, MemoryMB: 128})
 		if err != nil {
 			t.Fatal(err)
 		}
