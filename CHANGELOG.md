@@ -4,7 +4,7 @@ All notable changes to Runova. Versions follow [semantic versioning](https://sem
 
 Upgrade any server with `sudo runova update` (servers on 0.2.0 or older: run the `curl … get.sh | sudo bash` command once). Database schema changes are migrated automatically after a backup (`runova.db.bak-v<N>-*`); `sudo runova rollback` returns to the previous version and its database.
 
-## [Unreleased]
+## [0.3.12] - 2026-11-06
 
 ### Fixed
 - **A JAR app that is OOM-killed while it starts no longer hides behind "Menunggu aplikasi siap".** Docker's restart policy started the killed container again before the next check, so the deploy waited out its full timeout while the app looped. The health wait now notices a restart (restart count, start time, the "restarting" state, Docker's `die`/`oom` events) and fails at once: the "Menunggu aplikasi siap" step and the problem card read "Memori habis (OOMKilled)" with what to do, or "Aplikasi berhenti dan dinyalakan ulang (exit code N)". The new container is removed and the old version keeps serving, as with any failed deploy.
@@ -165,6 +165,7 @@ First release.
 - Users with quotas (apps, memory, CPU, databases), login limit, activity log, notifications.
 - Versioned database migrations with automatic backups.
 
+[0.3.12]: https://github.com/aribrilliantsyah/runova/compare/v0.3.11...v0.3.12
 [0.3.11]: https://github.com/aribrilliantsyah/runova/compare/v0.3.10...v0.3.11
 [0.3.10]: https://github.com/aribrilliantsyah/runova/compare/v0.3.9...v0.3.10
 [0.3.9]: https://github.com/aribrilliantsyah/runova/compare/v0.3.8...v0.3.9

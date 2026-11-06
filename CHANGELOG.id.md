@@ -4,7 +4,7 @@ Semua perubahan penting Runova. Versi mengikuti [semantic versioning](https://se
 
 Perbarui server dengan `sudo runova update` (server 0.2.0 atau lebih lama: jalankan perintah `curl … get.sh | sudo bash` sekali). Perubahan skema database dimigrasikan otomatis setelah cadangan (`runova.db.bak-v<N>-*`); `sudo runova rollback` kembali ke versi sebelumnya beserta database-nya.
 
-## [Unreleased]
+## [0.3.12] - 2026-11-06
 
 ### Diperbaiki
 - **Aplikasi JAR yang dimatikan karena memori habis saat start tidak lagi tersembunyi di balik "Menunggu aplikasi siap".** Restart policy Docker menyalakan lagi container yang mati sebelum pemeriksaan berikutnya, jadi deploy menunggu sampai batas waktu habis sementara aplikasi berputar start ulang. Kini penantian health mengenali restart (jumlah restart, waktu start, status "restarting", event `die`/`oom` Docker) dan langsung gagal: langkah "Menunggu aplikasi siap" dan kartu masalah menulis "Memori habis (OOMKilled)" beserta sarannya, atau "Aplikasi berhenti dan dinyalakan ulang (exit code N)". Container baru dihapus dan versi lama tetap melayani, seperti deploy gagal lainnya.
@@ -165,6 +165,7 @@ Rilis pertama.
 - Pengguna dengan kuota (aplikasi, memori, CPU, database), batas login, log aktivitas, notifikasi.
 - Migrasi database berversi dengan cadangan otomatis.
 
+[0.3.12]: https://github.com/aribrilliantsyah/runova/compare/v0.3.11...v0.3.12
 [0.3.11]: https://github.com/aribrilliantsyah/runova/compare/v0.3.10...v0.3.11
 [0.3.10]: https://github.com/aribrilliantsyah/runova/compare/v0.3.9...v0.3.10
 [0.3.9]: https://github.com/aribrilliantsyah/runova/compare/v0.3.8...v0.3.9
