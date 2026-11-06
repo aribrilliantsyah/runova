@@ -16,7 +16,7 @@ export { levelOf } from "/assets/js/components/logparse.js";
 
 const MAX_LINES = 20000;
 const PREFS_KEY = "runova.logview";
-const OVERSCAN = 400; // px of rows drawn above and below the view
+const OVERSCAN = 240; // px of rows drawn above and below the view
 const BOTTOM_SLACK = 24; // px from the bottom that still counts as "at the tail"
 const FONT_SIZES = [11, 12, 13, 14];
 const LEVEL_LABEL = { error: "Error", warn: "Warning", info: "Info", debug: "Debug", trace: "Trace", none: "Tanpa level" };
@@ -178,7 +178,7 @@ export function logView({ label = "Log", tall = false, fileName = "runova.log", 
     const blank = !e.plain.trim();
     const lv = p.level;
     const cls = ["ln", lv ? `lvl-${lv}` : "", r.frame ? "fr" : "", blank ? "blank" : "", selected.has(e.n) ? "sel" : "", e.stream === "stderr" ? "err-stream" : ""];
-    const ts = h("span", { class: "ts", title: p.own ? `Docker ${new Date(e.time).toLocaleString("id")} · aplikasi ${p.own}` : new Date(e.time).toLocaleString("id") }, blank ? "" : clockMs(e.time));
+    const ts = h("span", { class: "ts" }, blank ? "" : clockMs(e.time));
     const badge = lv && !r.frame ? h("span", { class: "lv-badge" }, LEVEL_SHORT[lv]) : null;
     const text = h("span", { class: "tx" }, badge, ...marked(p.text, i), p.fields ? h("span", { class: "lv-fields" }, ` ${p.fields}`) : null);
     const el = h("div", { class: cls, "data-i": i, "data-n": e.n }, h("span", { class: "no", "aria-hidden": "true" }, String(e.n)), ts, text);
@@ -190,18 +190,46 @@ export function logView({ label = "Log", tall = false, fileName = "runova.log", 
   }
 
   // --- layout: heights and the window ---
+  // The font is monospaced, so a row's height is known without the DOM: one line, or with wrap
+  // the number of lines its text needs at the current width. A stack-trace head adds the fold
+  // button. Rows drawn are measured later, when the browser is idle, and corrected if a font
+  // fallback (CJK, emoji) made them taller.
+  let charW = 7.2;
+  let cols = 0; // characters per line of the text column (0 = no wrap)
+  let foldH = 0;
+  let markH = 0;
   function estimate(i) {
     const r = rows[i];
-    if (r.kind !== "line") return lineH * 1.6;
-    return r.frames ? lineH * 2 : lineH;
+    if (r.kind !== "line") return markH;
+    let n = 1;
+    if (cols > 0) {
+      const t = r.entry.plain;
+      const len = t.length + (r.entry.parsed.level && !r.frame ? 4 : 0) + (r.entry.parsed.fields ? r.entry.parsed.fields.length + 1 : 0);
+      if (len > cols) {
+        n = 0;
+        for (const part of t.split("\n")) n += Math.max(1, Math.ceil(part.length / cols));
+        if (len > t.length) n = Math.max(n, Math.ceil(len / cols));
+      }
+    }
+    return n * lineH + (r.frames ? foldH : 0);
   }
+
+  // Measured heights that differ from the estimate, keyed by what the row shows; relayout()
+  // forgets them (they depend on width, wrap and font).
+  let known = new Map();
+  let measured = new WeakSet();
+  // Numeric keys: a line by its number (×2, +1 when its stack trace is open), a restart marker
+  // by its time (negative), the dropped note as 0. No strings per row per frame.
+  const keyOf = (r) => (r.kind === "line" ? r.entry.n * 2 + (r.open ? 1 : 0) : r.kind === "restart" ? -r.time : 0);
 
   function rebuild(keepFollow = true) {
     rows = model.rows();
-    heights = new Float64Array(rows.length);
-    for (let i = 0; i < rows.length; i++) heights[i] = estimate(i);
-    sumTops();
+    made = new Map();
     node.classList.toggle("no-ts", !showTs());
+    if (!lineH || !measuredWidth) measureLine();
+    heights = new Float64Array(rows.length);
+    for (let i = 0; i < rows.length; i++) heights[i] = (known.size && known.get(keyOf(rows[i]))) || estimate(i);
+    sumTops();
     paintEmpty();
     paintCounts();
     draw(keepFollow);
@@ -224,6 +252,15 @@ export function logView({ label = "Log", tall = false, fileName = "runova.log", 
     return Math.min(lo, Math.max(rows.length - 1, 0));
   };
 
+  // Row elements of the current rows, reused while scrolling; rebuild() and anything that
+  // changes how rows look (search hit, selection, folding) start over.
+  let made = new Map();
+  const elFor = (i) => {
+    let el = made.get(i);
+    if (!el) made.set(i, (el = rowEl(i)));
+    return el;
+  };
+
   function draw(stick = follow) {
     if (!lineH) measureLine();
     if (stick) body.scrollTop = body.scrollHeight;
@@ -232,34 +269,81 @@ export function logView({ label = "Log", tall = false, fileName = "runova.log", 
     const first = rowAt(Math.max(0, top - OVERSCAN));
     const last = rowAt(top + view + OVERSCAN);
     const els = [];
-    for (let i = first; i <= last && i < rows.length; i++) els.push(rowEl(i));
-    win.replaceChildren(...els);
-    win.style.transform = `translateY(${tops[first] || 0}px)`;
-    // Measure what is drawn; correct heights that the estimate missed.
-    let changed = false;
-    let shiftAbove = 0;
+    for (let i = first; i <= last && i < rows.length; i++) els.push(elFor(i));
+    for (const k of made.keys()) if (k < first || k > last) made.delete(k);
+    // Move only what changed: keep rows that stay in view in place.
+    let cur = win.firstChild;
     for (const el of els) {
-      const i = Number(el.dataset.i);
-      const hgt = el.offsetHeight;
-      if (hgt && Math.abs(hgt - heights[i]) > 0.5) {
-        if (tops[i] < top) shiftAbove += hgt - heights[i];
-        heights[i] = hgt;
-        changed = true;
-      }
+      if (cur === el) cur = cur.nextSibling;
+      else win.insertBefore(el, cur);
     }
-    if (changed) {
-      sumTops();
-      win.style.transform = `translateY(${tops[first] || 0}px)`;
-      if (stick) body.scrollTop = body.scrollHeight;
-      else if (shiftAbove) body.scrollTop = top + shiftAbove; // keep what the user reads in place
+    while (cur) {
+      const nx = cur.nextSibling;
+      cur.remove();
+      cur = nx;
     }
+    win.style.transform = `translateY(${tops[first] || 0}px)`;
+    if (stick) body.scrollTop = body.scrollHeight;
+    if (els.some((el) => !measured.has(el))) scheduleMeasure();
     paintJump();
   }
 
+  // measure corrects estimates of the drawn rows, off the scrolling path. All reads, then writes.
+  let idle = 0;
+  const scheduleMeasure = () => {
+    if (idle) return;
+    const run = () => {
+      idle = 0;
+      measure();
+    };
+    idle = window.requestIdleCallback ? requestIdleCallback(run, { timeout: 300 }) : setTimeout(run, 120);
+  };
+  function measure() {
+    const els = [...win.children].filter((el) => !measured.has(el) && el.dataset.i);
+    if (!els.length) return;
+    const top = body.scrollTop;
+    const hs = els.map((el) => el.offsetHeight);
+    let changed = false;
+    let shiftAbove = 0;
+    els.forEach((el, k) => {
+      measured.add(el);
+      const i = Number(el.dataset.i);
+      const hgt = hs[k];
+      if (!hgt || !rows[i] || Math.abs(hgt - heights[i]) <= 0.5) return;
+      known.set(keyOf(rows[i]), hgt);
+      if (tops[i] < top) shiftAbove += hgt - heights[i];
+      heights[i] = hgt;
+      changed = true;
+    });
+    if (!changed) return;
+    sumTops();
+    const first = Number(win.firstChild?.dataset.i || 0);
+    win.style.transform = `translateY(${tops[first] || 0}px)`;
+    if (follow) body.scrollTop = body.scrollHeight;
+    else if (shiftAbove) body.scrollTop = top + shiftAbove; // keep what the user reads in place
+  }
+
   function measureLine() {
-    const probe = h("div", { class: "ln" }, h("span", { class: "no" }, "1"), h("span", { class: "ts" }, "00:00:00.000"), h("span", { class: "tx" }, "x"));
-    win.replaceChildren(probe);
+    const tx = h("span", { class: "tx" }, "x".repeat(100));
+    const probe = h("div", { class: "ln" }, h("span", { class: "no" }, "1"), h("span", { class: "ts" }, "00:00:00.000"), tx);
+    const fold = h("button", { class: "lv-fold", type: "button" }, "1");
+    const mark = h("div", { class: "lv-restart" }, h("span", {}, "x"));
+    win.replaceChildren(probe, fold, mark);
+    const was = node.classList.contains("wrap");
+    node.classList.remove("wrap"); // one unwrapped line
     lineH = probe.offsetHeight || 19;
+    charW = tx.getBoundingClientRect().width / 100 || 7.2;
+    node.classList.toggle("wrap", was);
+    const cs = getComputedStyle(probe);
+    // The text column: the scroller's width minus the gutters (padding) of a row.
+    const textW = body.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight);
+    cols = prefs.wrap ? Math.max(10, Math.floor(textW / charW)) : 0;
+    const fs = getComputedStyle(fold);
+    foldH = fold.offsetHeight + parseFloat(fs.marginTop) + parseFloat(fs.marginBottom);
+    markH = mark.offsetHeight;
+    win.replaceChildren();
+    made = new Map();
+    known = new Map();
     measuredWidth = body.clientWidth;
   }
 
@@ -325,6 +409,7 @@ export function logView({ label = "Log", tall = false, fileName = "runova.log", 
     const r = m[hit].row;
     const y = tops[r] - body.clientHeight / 2 + heights[r] / 2;
     body.scrollTop = Math.max(0, y);
+    made = new Map(); // the current hit moved
     draw(false);
     paintCounts();
   }
@@ -481,6 +566,7 @@ export function logView({ label = "Log", tall = false, fileName = "runova.log", 
     }
     anchor = n;
     paintCounts();
+    made = new Map();
     draw(false);
   });
 

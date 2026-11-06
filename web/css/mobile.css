@@ -188,7 +188,7 @@
   .lv-lvbtn,.lv-acts .btn.sm{height:40px;min-width:40px;justify-content:center}
   .lv-acts{margin-left:0}
   .lv-lbl{display:none}
-  .lv.no-ts .ln,.lv .ln{grid-template-columns:var(--lv-no) minmax(0,1fr);gap:0 8px;padding-right:8px}
+  .lv.no-ts .ln,.lv .ln{padding:0 8px 0 calc(var(--lv-no) + 12px)}
   .lv .ln .ts{display:none}
   .lv-restart{padding-left:12px}
   .lv-note{padding-left:12px}

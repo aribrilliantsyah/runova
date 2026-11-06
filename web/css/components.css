@@ -523,12 +523,16 @@ dl.kv.ver+.setting{border-top:1px solid var(--line);margin-top:10px;padding-bott
 .lv.tall .lv-body{height:min(64vh,640px)}
 .lv-body:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
 .lv-spacer{width:1px;pointer-events:none}
-.lv-win{position:absolute;top:0;left:0;right:0;min-width:100%;width:max-content;padding:0;will-change:transform}
-.lv.wrap .lv-win{width:auto}
-.lv .ln{position:relative;display:grid;grid-template-columns:var(--lv-no) var(--lv-ts) minmax(0,1fr);gap:0 12px;padding:0 14px 0 4px;white-space:pre}
-.lv.no-ts .ln{grid-template-columns:var(--lv-no) minmax(0,1fr)}
+.lv-win{position:absolute;top:0;left:0;min-width:100%;padding:0}
+.lv.wrap .lv-win{right:0}
+/* Rows are blocks with absolutely placed gutters (number, time) and the text after a left
+   padding: cheaper to lay out than a grid per row; each row is its own layout boundary. */
+.lv .ln{position:relative;display:block;padding:0 14px 0 calc(var(--lv-no) + var(--lv-ts) + 28px);white-space:pre;contain:layout style}
+.lv.no-ts .ln{padding-left:calc(var(--lv-no) + 16px)}
+.lv .ln .no{position:absolute;left:4px;top:0;width:var(--lv-no)}
+.lv .ln .ts{position:absolute;top:0;left:calc(var(--lv-no) + 16px);width:var(--lv-ts)}
 .lv.no-ts .ln .ts{display:none}
-.lv.wrap .ln .tx{white-space:pre-wrap;overflow-wrap:anywhere}
+.lv.wrap .ln .tx{white-space:pre-wrap;word-break:break-all}
 .lv .ln:hover{background:var(--hover)}
 .lv .ln .no{color:var(--faint);text-align:right;user-select:none;cursor:pointer;opacity:.65;font-variant-numeric:tabular-nums}
 .lv .ln .no:hover{opacity:1;color:var(--text)}
@@ -555,7 +559,7 @@ dl.kv.ver+.setting{border-top:1px solid var(--line);margin-top:10px;padding-bott
 .lv .ln.flash{outline:2px solid var(--err);outline-offset:-2px}
 .lv mark{background:var(--warn-bg);color:inherit;border-radius:2px;box-shadow:0 0 0 1px color-mix(in srgb,var(--warn) 45%,transparent)}
 .lv mark.on{background:var(--accent);color:var(--on-accent);box-shadow:none}
-.lv-fold{all:unset;box-sizing:border-box;grid-column:-2/-1;display:inline-flex;align-items:center;gap:5px;justify-self:start;margin:1px 0 3px;padding:1px 8px 1px 5px;border-radius:5px;font:500 11px/1.5 var(--sans);color:var(--muted);cursor:pointer;white-space:nowrap}
+.lv-fold{all:unset;box-sizing:border-box;display:flex;width:max-content;align-items:center;gap:5px;margin:1px 0 3px -5px;padding:1px 8px 1px 5px;border-radius:5px;font:500 11px/1.5 var(--sans);color:var(--muted);cursor:pointer;white-space:nowrap}
 .lv-fold:hover{background:var(--line);color:var(--text)}
 .lv-fold:focus-visible{outline:2px solid var(--accent)}
 .lv-fold .lucide{width:12px;height:12px}
