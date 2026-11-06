@@ -4,7 +4,7 @@ Semua perubahan penting Runova. Versi mengikuti [semantic versioning](https://se
 
 Perbarui server dengan `sudo runova update` (server 0.2.0 atau lebih lama: jalankan perintah `curl … get.sh | sudo bash` sekali). Perubahan skema database dimigrasikan otomatis setelah cadangan (`runova.db.bak-v<N>-*`); `sudo runova rollback` kembali ke versi sebelumnya beserta database-nya.
 
-## [Unreleased]
+## [0.3.13] - 2026-11-06
 
 ### Ditambahkan
 - **Aplikasi hidup lagi setelah server reboot.** Saat Runova start, ia menyalakan lagi setiap aplikasi yang semestinya jalan (status running atau starting) yang container-nya dibiarkan berhenti oleh Docker. Kebanyakan server (Spring Boot, Go dengan signal handling) keluar 0 pada SIGTERM shutdown Docker, yang tidak pernah dinyalakan lagi oleh restart policy `on-failure`, jadi sebelumnya mereka tetap mati sampai ada yang menekan Jalankan. Aplikasi melewati penantian yang sama seperti Jalankan (status starting, lalu running saat port terbuka, batas waktu JAR, deteksi OOM dan restart), satu per 5 detik supaya banyak JVM tidak berebut CPU. Aplikasi yang dihentikan pengguna atau ditandai gagal tidak disentuh. Tiap aplikasi yang dinyalakan lagi memunculkan satu notifikasi ("Aplikasi … dinyalakan lagi setelah server dimulai ulang") dan satu entri Aktivitas, sekali setiap Runova start.
@@ -180,6 +180,7 @@ Rilis pertama.
 - Pengguna dengan kuota (aplikasi, memori, CPU, database), batas login, log aktivitas, notifikasi.
 - Migrasi database berversi dengan cadangan otomatis.
 
+[0.3.13]: https://github.com/aribrilliantsyah/runova/compare/v0.3.12...v0.3.13
 [0.3.12]: https://github.com/aribrilliantsyah/runova/compare/v0.3.11...v0.3.12
 [0.3.11]: https://github.com/aribrilliantsyah/runova/compare/v0.3.10...v0.3.11
 [0.3.10]: https://github.com/aribrilliantsyah/runova/compare/v0.3.9...v0.3.10

@@ -4,7 +4,7 @@ All notable changes to Runova. Versions follow [semantic versioning](https://sem
 
 Upgrade any server with `sudo runova update` (servers on 0.2.0 or older: run the `curl … get.sh | sudo bash` command once). Database schema changes are migrated automatically after a backup (`runova.db.bak-v<N>-*`); `sudo runova rollback` returns to the previous version and its database.
 
-## [Unreleased]
+## [0.3.13] - 2026-11-06
 
 ### Added
 - **Applications come back after a server reboot.** When Runova starts it starts again every app that ought to run (status running or starting) whose container Docker left stopped. Most servers (Spring Boot, Go with signal handling) exit 0 on Docker's shutdown SIGTERM, which the `on-failure` restart policy never restarts, so before this they stayed down until someone pressed Jalankan. Apps go through the same wait as Jalankan (status starting, then running when the port opens, JAR time limits, OOM and restart detection), one every 5 seconds so many JVMs do not fight for the CPU. Apps stopped by a user or marked failed are left alone. Each revived app raises one notification ("Aplikasi … dinyalakan lagi setelah server dimulai ulang") and one Activity entry, once per start of Runova.
@@ -180,6 +180,7 @@ First release.
 - Users with quotas (apps, memory, CPU, databases), login limit, activity log, notifications.
 - Versioned database migrations with automatic backups.
 
+[0.3.13]: https://github.com/aribrilliantsyah/runova/compare/v0.3.12...v0.3.13
 [0.3.12]: https://github.com/aribrilliantsyah/runova/compare/v0.3.11...v0.3.12
 [0.3.11]: https://github.com/aribrilliantsyah/runova/compare/v0.3.10...v0.3.11
 [0.3.10]: https://github.com/aribrilliantsyah/runova/compare/v0.3.9...v0.3.10
