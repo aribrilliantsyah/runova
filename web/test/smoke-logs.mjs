@@ -149,8 +149,24 @@ try {
         await login(p, srv.url, "admin", srv.adminPassword);
         const tag = `${w}-${scheme}`;
         await p.goto(`${srv.url}/#/apps/${looping}/logs`);
-        await p.waitForSelector("#biglog .lv-restart", { timeout: 20000 });
-        await p.waitForTimeout(400);
+        // Stopped by the crash monitor by now: the saved log still marks every run.
+        await p.waitForSelector("#biglog .ln", { timeout: 20000 });
+        await p.waitForTimeout(600);
+        // Walk up from the tail until a restart marker is in view, then put it near the top.
+        await p.evaluate(async () => {
+          const b = document.querySelector("#biglog");
+          for (let y = b.scrollHeight; y > 0; y -= b.clientHeight / 2) {
+            b.scrollTop = y;
+            await new Promise((r) => setTimeout(r, 60));
+            const m = [...b.querySelectorAll(".lv-restart")].pop();
+            if (m) {
+              b.scrollTop += m.getBoundingClientRect().top - b.getBoundingClientRect().top - b.clientHeight * 0.3;
+              return;
+            }
+          }
+        });
+        await p.waitForSelector("#biglog .lv-restart", { timeout: 10000 });
+        await p.waitForTimeout(300);
         await p.screenshot({ path: path.join(shots, `log-live-restart-${tag}.png`) });
         await p.goto(`${srv.url}/#/apps/${busy}/logs`);
         await p.waitForSelector("#biglog .ln");

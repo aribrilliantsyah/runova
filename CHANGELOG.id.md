@@ -4,6 +4,17 @@ Semua perubahan penting Runova. Versi mengikuti [semantic versioning](https://se
 
 Perbarui server dengan `sudo runova update` (server 0.2.0 atau lebih lama: jalankan perintah `curl … get.sh | sudo bash` sekali). Perubahan skema database dimigrasikan otomatis setelah cadangan (`runova.db.bak-v<N>-*`); `sudo runova rollback` kembali ke versi sebelumnya beserta database-nya.
 
+## [Unreleased]
+
+### Diperbaiki
+- **Aplikasi JAR yang dimatikan karena memori habis saat start tidak lagi tersembunyi di balik "Menunggu aplikasi siap".** Restart policy Docker menyalakan lagi container yang mati sebelum pemeriksaan berikutnya, jadi deploy menunggu sampai batas waktu habis sementara aplikasi berputar start ulang. Kini penantian health mengenali restart (jumlah restart, waktu start, status "restarting", event `die`/`oom` Docker) dan langsung gagal: langkah "Menunggu aplikasi siap" dan kartu masalah menulis "Memori habis (OOMKilled)" beserta sarannya, atau "Aplikasi berhenti dan dinyalakan ulang (exit code N)". Container baru dihapus dan versi lama tetap melayani, seperti deploy gagal lainnya.
+- Restart dan Jalankan menghentikan aplikasi yang terus dinyalakan ulang seperti itu dan menandainya gagal dengan diagnosis yang sama; sebelumnya ia berputar terus di latar.
+- Saran memori untuk Java menyebut yang menolong: tambah memori (Spring Boot dengan JPA butuh lebih dari 192 MB untuk start), atau `-XX:TieredStopAtLevel=1` bila memori harus kecil. `java.lang.OutOfMemoryError` di log dilaporkan apa adanya.
+
+### Diubah
+- **Log viewer baru** di tab Log dan halaman deployment. Tetap halus dengan puluhan ribu baris (hanya baris yang terlihat yang digambar, baris baru masuk sekali per frame, 20.000 baris terakhir disimpan). Mengikuti ujung log selama kamu di sana; scroll ke atas dan tampilan diam dengan tombol "N baris baru" untuk kembali. Satu kolom waktu yang rata dan bisa disembunyikan (timestamp milik aplikasi pindah ke tooltip, jadi tidak ada baris dengan dua waktu). Badge level dan filter level, pencarian dengan sorotan, Enter/Shift+Enter dan "Hanya cocok", stack trace terlipat, warna ANSI, banner tetap seperti aslinya, pilih baris untuk disalin, unduh, bersihkan, dan ukuran huruf. Penanda **"Container dimulai ulang"** muncul setiap kali container start lagi. Tombol Jeda dihapus: scroll ke atas sudah menjeda.
+- WebSocket log mengirim `{"type":"start","started_at":…}` lebih dulu; panel menyambung lagi setelah container restart dan melanjutkan tanpa mengulang baris.
+
 ## [0.3.11] - 2026-11-05
 
 ### Diubah

@@ -117,10 +117,16 @@ export function parseLine(raw) {
   if (m) {
     out.own = m[0].trim();
     rest = plain.slice(m[0].length);
-    // Keep the colors of the rest: drop the same number of visible characters from raw.
-    out.text = raw === plain ? rest : dropVisible(raw, m[0].length);
+    // The level word right after the timestamp becomes the viewer's badge: cut it with the
+    // timestamp. Keep the colors of the rest: drop the same number of visible characters from raw.
     const lw = LEVEL_WORD_RE.exec(rest);
-    if (lw) out.level = norm(lw[1]);
+    let cut = m[0].length;
+    if (lw) {
+      out.level = norm(lw[1]);
+      cut += lw[0].length + (/^:?\s*/.exec(rest.slice(lw[0].length))?.[0].length || 0);
+    }
+    out.text = raw === plain ? plain.slice(cut) : dropVisible(raw, cut);
+    rest = plain.slice(m[0].length);
   }
   if (!out.level) {
     const kv = LEVEL_KV_RE.exec(rest);

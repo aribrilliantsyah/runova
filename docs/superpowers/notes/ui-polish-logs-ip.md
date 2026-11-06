@@ -26,6 +26,10 @@ Set the app's environment variable `RUNOVA_FAKE_FAIL`:
 | `exit` | Spring start-up failure with stack trace, exit 1 |
 | `oom` | exit 137, OOMKilled |
 | `crash` | healthy, then six die events → crash loop |
+| `restartloop` | OOM-killed during start, restarted by the policy every 4 s (oom/die events, new StartedAt), port never opens → deploy fails at once with "Memori habis (OOMKilled)" |
+| `restartlive` | the same loop after a healthy deploy → crash monitor stops it after six |
+
+`LOG_FLOOD=n` makes a container write n log lines quickly (log viewer performance).
 
 Zero-downtime failure while the old version serves: set deploy mode `zero`, add `RUNOVA_FAKE_FAIL=health`, deploy again. Hosting domains `nat.*` answer "Record menunjuk ke 117.54.12.173 …" until the public IP is `117.54.12.173`.
 

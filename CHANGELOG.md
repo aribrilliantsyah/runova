@@ -4,6 +4,17 @@ All notable changes to Runova. Versions follow [semantic versioning](https://sem
 
 Upgrade any server with `sudo runova update` (servers on 0.2.0 or older: run the `curl … get.sh | sudo bash` command once). Database schema changes are migrated automatically after a backup (`runova.db.bak-v<N>-*`); `sudo runova rollback` returns to the previous version and its database.
 
+## [Unreleased]
+
+### Fixed
+- **A JAR app that is OOM-killed while it starts no longer hides behind "Menunggu aplikasi siap".** Docker's restart policy started the killed container again before the next check, so the deploy waited out its full timeout while the app looped. The health wait now notices a restart (restart count, start time, the "restarting" state, Docker's `die`/`oom` events) and fails at once: the "Menunggu aplikasi siap" step and the problem card read "Memori habis (OOMKilled)" with what to do, or "Aplikasi berhenti dan dinyalakan ulang (exit code N)". The new container is removed and the old version keeps serving, as with any failed deploy.
+- Restart and Jalankan stop an app that keeps being restarted this way and mark it failed with the same diagnosis; before, it looped in the background.
+- The memory hint for Java names what helps: more memory (Spring Boot with JPA needs more than 192 MB to start), or `-XX:TieredStopAtLevel=1` when memory must stay small. A `java.lang.OutOfMemoryError` in the log is reported as such.
+
+### Changed
+- **New log viewer** in the Log tab and on a deployment's page. It stays smooth with tens of thousands of lines (only visible rows are drawn, new lines land once per frame, the last 20,000 lines are kept). It follows the end while you are there; scroll up and it stays put with an "N baris baru" button to return. One aligned time column that can be hidden (the app's own timestamp moves to the tooltip, so no line shows two). Level badges and a level filter, search with highlights, Enter/Shift+Enter and "Hanya cocok", folded stack traces, ANSI colors, banners kept as written, line selection to copy, download, clear and font size. A **"Container dimulai ulang"** marker shows each time the container started again. The Jeda button is gone: scrolling up pauses.
+- The log WebSocket first sends `{"type":"start","started_at":…}`; the panel reconnects after the container restarts and continues without repeating lines.
+
 ## [0.3.11] - 2026-11-05
 
 ### Changed

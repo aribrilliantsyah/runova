@@ -13,7 +13,9 @@ test("Spring line: own timestamp split off, level INFO, start of a run", () => {
   const p = parseLine(SPRING);
   eq(p.own, "2026-11-05T23:12:01.123Z");
   eq(p.level, "info");
-  assert(p.text.startsWith("INFO 7 --- [starboom]"), p.text);
+  assert(p.text.startsWith("7 --- [starboom]"), `the level word moves into the badge: ${p.text}`);
+  eq(parseLine("2026-11-05 23:12:01,532 WARN  [main] o.h.Foo - slow").text, "[main] o.h.Foo - slow");
+  assert(parseLine("WARN  slow connection acquire 812ms").text.startsWith("WARN"), "without a timestamp the line stays as written");
   assert(p.start, "the Spring 'Starting … using Java' line marks a new run");
 });
 
@@ -54,15 +56,17 @@ test("stack trace continuation lines", () => {
 });
 
 test("ANSI: stripped for parsing, colors kept as segments", () => {
-  const raw = "\x1b[32m2026-11-05T23:12:01Z\x1b[0m \x1b[1;31mERROR\x1b[0m boom";
-  eq(stripAnsi(raw), "2026-11-05T23:12:01Z ERROR boom");
+  const raw = "\x1b[32m2026-11-05T23:12:01Z\x1b[0m \x1b[1;31mERROR\x1b[0m \x1b[36mdb\x1b[0m boom";
+  eq(stripAnsi(raw), "2026-11-05T23:12:01Z ERROR db boom");
   const p = parseLine(raw);
   eq(p.level, "error");
   eq(p.own, "2026-11-05T23:12:01Z");
-  eq(stripAnsi(p.text), "ERROR boom");
+  eq(stripAnsi(p.text), "db boom");
   const seg = ansiSegments(p.text);
-  const err = seg.find((s) => s.text === "ERROR");
-  assert(err && err.fg === 1 && err.bold, JSON.stringify(seg));
+  const db = seg.find((s) => s.text === "db");
+  assert(db && db.fg === 6, JSON.stringify(seg));
+  const bold = ansiSegments("\x1b[1;31mERROR\x1b[0m x")[0];
+  assert(bold.fg === 1 && bold.bold, JSON.stringify(bold));
   eq(ansiSegments("\x1b[93mhi\x1b[39m!").map((s) => [s.text, s.fg]), [["hi", 11], ["!", null]]);
   eq(ansiSegments("\x1b[38;5;4mblue\x1b[0m")[0].fg, 4);
   eq(ansiSegments("\x1b[2K\x1b[1Gdone").map((s) => s.text).join(""), "done");

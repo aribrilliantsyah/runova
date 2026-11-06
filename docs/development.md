@@ -49,6 +49,7 @@ node web/test/unit.mjs            # test pages web/test/*.test.html
 node web/test/smoke-deploy.mjs    # login, wizard, deploy
 node web/test/smoke-dbenv.mjs     # database variables filled automatically, override, SSH tunnel hint
 node web/test/smoke-app.mjs       # app detail tabs, logs, terminal
+node web/test/smoke-logs.mjs      # log viewer: 20k lines (long tasks), follow, restart marker, OOM deploy; SHOTS=dir
 node web/test/smoke-admin.mjs     # users, databases, activity, server
 node web/test/smoke-layout.mjs    # 5 viewport widths, light and dark, accessibility
 node web/test/smoke-lifecycle.mjs # terminal, dialogs, and sockets do not outlive page/session

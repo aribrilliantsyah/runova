@@ -182,7 +182,8 @@
 @media (max-width: 760px){
   .lv{--lv-no:4ch}
   .lv-bar{padding:8px;gap:6px}
-  .lv-find{flex:1 1 0;height:40px}
+  .lv-find{flex:1 1 100%;height:40px}
+  .lv-pop:has(.lv-lvbtn){margin-right:auto}
   .lv-only{display:none}
   .lv-lvtxt{display:none}
   .lv-lvbtn,.lv-acts .btn.sm{height:40px;min-width:40px;justify-content:center}
@@ -192,7 +193,7 @@
   .lv .ln .ts{display:none}
   .lv-restart{padding-left:12px}
   .lv-note{padding-left:12px}
-  .lv-menu{position:fixed;top:auto;left:8px;right:8px;bottom:calc(8px + env(safe-area-inset-bottom));min-width:0}
+  .lv-menu{position:fixed;z-index:60;top:auto;left:8px;right:8px;bottom:calc(72px + env(safe-area-inset-bottom));min-width:0;max-height:calc(100dvh - 140px);overflow:auto;box-shadow:0 12px 40px rgba(0,0,0,.28)}
   .lv-mi{min-height:42px}
   .lv.tall .lv-body,.lv-body{height:62vh}
   select.f.lv-pick{margin-left:0;width:100%;height:42px}
