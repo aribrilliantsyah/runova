@@ -458,6 +458,18 @@ func (f *Fake) Stats(_ context.Context, id string) (docker.Stats, error) {
 	return f.StatsResult, nil
 }
 
+// ClearCPULimit records "cpu-unlimit <name>".
+func (f *Fake) ClearCPULimit(_ context.Context, id string) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	c := f.find(id)
+	if c == nil {
+		return notFound(id)
+	}
+	f.record("cpu-unlimit %s", c.Name)
+	return nil
+}
+
 type pipeSession struct {
 	io.ReadWriteCloser
 	resizes chan [2]uint

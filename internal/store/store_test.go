@@ -26,7 +26,7 @@ func mustUser(t *testing.T, s *store.Store, username string, role store.Role) st
 	t.Helper()
 	u, err := s.CreateUser(context.Background(), store.NewUser{
 		Username: username, DisplayName: strings.ToUpper(username), Email: username + "@x.id",
-		PasswordHash: "hash-" + username, Role: role, Quota: store.Quota{Apps: 3, MemoryMB: 1024, CPUMilli: 1000, Databases: 3, PGConnections: 20},
+		PasswordHash: "hash-" + username, Role: role, Quota: store.Quota{Apps: 3, MemoryMB: 1024, Databases: 3, PGConnections: 20},
 	}, 1000)
 	if err != nil {
 		t.Fatal(err)
@@ -107,7 +107,7 @@ func TestUpdateQuotaAndProfile(t *testing.T) {
 	ctx := context.Background()
 	u := mustUser(t, s, "budi", store.RoleUser)
 
-	q := store.Quota{Apps: 5, MemoryMB: 2048, CPUMilli: 2000, Databases: 4, PGConnections: 30}
+	q := store.Quota{Apps: 5, MemoryMB: 2048, Databases: 4, PGConnections: 30}
 	got, err := s.UpdateUser(ctx, u.ID, store.UserPatch{Quota: &q})
 	if err != nil {
 		t.Fatal(err)
@@ -183,7 +183,7 @@ func TestSettingsDefaults(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got.DefaultQuota != (store.Quota{Apps: 3, MemoryMB: 1024, CPUMilli: 1000, Databases: 3, PGConnections: 20, DiskMB: 1024}) {
+	if got.DefaultQuota != (store.Quota{Apps: 3, MemoryMB: 1024, Databases: 3, PGConnections: 20, DiskMB: 1024}) {
 		t.Errorf("DefaultQuota = %+v", got.DefaultQuota)
 	}
 	if got.UploadLimitMB != 500 || got.PortMin != 20000 || got.PortMax != 20999 || got.PublicIP != "" {
@@ -272,7 +272,7 @@ func TestSettingsValidate(t *testing.T) {
 			rt[id] = true
 		}
 		return store.Settings{
-			DefaultQuota:  store.Quota{Apps: 3, MemoryMB: 1024, CPUMilli: 1000, Databases: 3, PGConnections: 20},
+			DefaultQuota:  store.Quota{Apps: 3, MemoryMB: 1024, Databases: 3, PGConnections: 20},
 			UploadLimitMB: 500, MaxPendingUploads: 5, PortMin: 20000, PortMax: 20999, Runtimes: rt,
 		}
 	}
@@ -308,23 +308,22 @@ func TestSettingsValidate(t *testing.T) {
 }
 
 func TestQuotaValidate(t *testing.T) {
-	ok := store.Quota{Apps: 0, MemoryMB: 0, CPUMilli: 0, Databases: 0, PGConnections: 1}
+	ok := store.Quota{Apps: 0, MemoryMB: 0, Databases: 0, PGConnections: 1}
 	if err := ok.Validate(); err != nil {
 		t.Fatalf("lower bounds: %v", err)
 	}
-	hi := store.Quota{Apps: 100, MemoryMB: 1048576, CPUMilli: 256000, Databases: 100, PGConnections: 500}
+	hi := store.Quota{Apps: 100, MemoryMB: 1048576, Databases: 100, PGConnections: 500}
 	if err := hi.Validate(); err != nil {
 		t.Fatalf("upper bounds: %v", err)
 	}
 	for name, mut := range map[string]func(*store.Quota){
-		"pg 0":         func(q *store.Quota) { q.PGConnections = 0 },
-		"pg 501":       func(q *store.Quota) { q.PGConnections = 501 },
-		"apps -1":      func(q *store.Quota) { q.Apps = -1 },
-		"apps 101":     func(q *store.Quota) { q.Apps = 101 },
-		"mem over":     func(q *store.Quota) { q.MemoryMB = 1048577 },
-		"cpu over":     func(q *store.Quota) { q.CPUMilli = 256001 },
-		"db over":      func(q *store.Quota) { q.Databases = 101 },
-		"cpu negative": func(q *store.Quota) { q.CPUMilli = -1 },
+		"pg 0":          func(q *store.Quota) { q.PGConnections = 0 },
+		"pg 501":        func(q *store.Quota) { q.PGConnections = 501 },
+		"apps -1":       func(q *store.Quota) { q.Apps = -1 },
+		"apps 101":      func(q *store.Quota) { q.Apps = 101 },
+		"mem over":      func(q *store.Quota) { q.MemoryMB = 1048577 },
+		"db over":       func(q *store.Quota) { q.Databases = 101 },
+		"disk negative": func(q *store.Quota) { q.DiskMB = -1 },
 	} {
 		q := hi
 		mut(&q)

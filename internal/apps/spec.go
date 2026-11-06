@@ -113,7 +113,6 @@ func (s *Service) ContainerSpec(app store.App, user store.User, d store.Deployme
 		}, s.folderBinds(user, app)...),
 		Tmpfs:       map[string]string{"/tmp": tmpOptions},
 		MemoryBytes: int64(app.MemoryMB) << 20,
-		NanoCPUs:    int64(app.CPUMilli) * 1_000_000,
 		ReadOnly:    true,
 		ExtraHosts:  []string{"host.docker.internal:host-gateway"},
 	}

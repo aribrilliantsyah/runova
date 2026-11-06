@@ -164,6 +164,8 @@ func serve(cfg config.Config, stderr io.Writer) int {
 	defer closePG()
 	svc.DBEnv = dbSvc.AppEnv
 
+	// CPU is shared by every app; containers from before that keep a cap until lifted.
+	go svc.LiftCPULimits(ctx)
 	go func() {
 		if err := svc.Monitor(ctx); err != nil && ctx.Err() == nil {
 			log.Error("docker monitor stopped", "err", err)

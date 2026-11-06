@@ -52,7 +52,7 @@ func TestCreateContainerHardening(t *testing.T) {
 		Image: "img", Cmd: []string{"/app/x"}, Env: []string{"PORT=8080"}, User: "100001:100001",
 		Labels: map[string]string{"runova.app": "1"}, Network: "runova-u1", InternalPort: 8080, HostPort: 30001,
 		Binds: []string{"/a:/app/x:ro"}, Tmpfs: map[string]string{"/tmp": "size=64m"},
-		MemoryBytes: 256 << 20, NanoCPUs: 500_000_000, ReadOnly: true, ExtraHosts: []string{"host.docker.internal:host-gateway"},
+		MemoryBytes: 256 << 20, ReadOnly: true, ExtraHosts: []string{"host.docker.internal:host-gateway"},
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -77,8 +77,15 @@ func TestCreateContainerHardening(t *testing.T) {
 	if host["Init"] != true {
 		t.Errorf("Init = %v, want true (PID 1 must reap and forward SIGTERM)", host["Init"])
 	}
-	if host["Memory"] != float64(256<<20) || host["MemorySwap"] != host["Memory"] || host["NanoCpus"] != float64(500_000_000) {
-		t.Errorf("resources: mem=%v swap=%v cpu=%v", host["Memory"], host["MemorySwap"], host["NanoCpus"])
+	if host["Memory"] != float64(256<<20) || host["MemorySwap"] != host["Memory"] {
+		t.Errorf("resources: mem=%v swap=%v", host["Memory"], host["MemorySwap"])
+	}
+	// CPU is shared: no per-container cap, and no explicit weight so every app
+	// container gets the engine's default (equal) weight.
+	for _, k := range []string{"NanoCpus", "CpuQuota", "CpuPeriod", "CpuShares"} {
+		if v, ok := host[k]; ok {
+			t.Errorf("HostConfig.%s = %v, want unset", k, v)
+		}
 	}
 	if got := jsonOf(host["RestartPolicy"]); got != `{"MaximumRetryCount":0,"Name":"on-failure"}` {
 		t.Errorf("RestartPolicy = %s", got)
@@ -553,25 +560,47 @@ func TestLogsDemuxCapsLineLength(t *testing.T) {
 	}
 }
 
-// Every container must run as its owner's UID with memory and CPU limits and a
+// Every container must run as its owner's UID with a memory limit and a
 // read-only root; a spec missing any of them is refused before anything is sent.
+// CPU is shared, so a spec needs no CPU limit.
 func TestCreateContainerRefusesInsecureSpec(t *testing.T) {
 	c := serve(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		t.Errorf("request sent for an insecure spec: %s", r.URL.Path)
 	}))
-	ok := ContainerSpec{Image: "img", User: "100001:100001", MemoryBytes: 64 << 20, NanoCPUs: 100_000_000, ReadOnly: true}
+	ok := ContainerSpec{Image: "img", User: "100001:100001", MemoryBytes: 64 << 20, ReadOnly: true}
 	bad := map[string]ContainerSpec{}
 	for _, user := range []string{"", "root", "0", "0:0", "100001:0", "100001:root", "100001:", ":100001", "-1"} {
 		s := ok
 		s.User = user
 		bad["user "+user] = s
 	}
-	noMem, noCPU, writable := ok, ok, ok
-	noMem.MemoryBytes, noCPU.NanoCPUs, writable.ReadOnly = 0, 0, false
-	bad["no memory"], bad["no cpu"], bad["writable root"] = noMem, noCPU, writable
+	noMem, writable := ok, ok
+	noMem.MemoryBytes, writable.ReadOnly = 0, false
+	bad["no memory"], bad["writable root"] = noMem, writable
 	for name, spec := range bad {
 		if _, err := c.CreateContainer(context.Background(), "x", spec); !errors.Is(err, ErrInsecureSpec) {
 			t.Errorf("%s: err = %v, want ErrInsecureSpec", name, err)
 		}
+	}
+}
+
+// A container created with a CPU cap by an older Runova is lifted in place:
+// the Engine treats NanoCpus 0 as "unchanged", so the update sets CpuQuota -1.
+func TestClearCPULimit(t *testing.T) {
+	var method, path string
+	var body map[string]any
+	c := serve(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		method, path = r.Method, r.URL.Path
+		json.NewDecoder(r.Body).Decode(&body)
+		io.WriteString(w, `{"Warnings":null}`)
+	}))
+	if err := c.ClearCPULimit(context.Background(), "abc"); err != nil {
+		t.Fatal(err)
+	}
+	if method != http.MethodPost || path != "/v1.44/containers/abc/update" {
+		t.Fatalf("%s %s", method, path)
+	}
+	if got := jsonOf(body); got != `{"CpuQuota":-1}` {
+		t.Fatalf("body = %s", got)
 	}
 }

@@ -55,15 +55,17 @@ type serverStatus struct {
 		Databases int `json:"databases"`
 	} `json:"postgres"`
 	Host struct {
-		Hostname      string `json:"hostname"`
-		OS            string `json:"os"`
-		Arch          string `json:"arch"`
-		CPUs          int    `json:"cpus"`
-		MemTotalMB    int    `json:"mem_total_mb"`
-		CPUAllocMilli int    `json:"cpu_alloc_milli"`
-		MemAllocMB    int    `json:"mem_alloc_mb"`
-		DiskTotalMB   int    `json:"disk_total_mb"`
-		DiskUsedMB    int    `json:"disk_used_mb"`
+		Hostname string `json:"hostname"`
+		OS       string `json:"os"`
+		Arch     string `json:"arch"`
+		CPUs     int    `json:"cpus"`
+		// LoadAvg is /proc/loadavg's 1, 5 and 15 minute run-queue averages; null when unreadable.
+		// CPU is shared by every app, so this is the CPU figure, not an allocation.
+		LoadAvg     []float64 `json:"load_avg"`
+		MemTotalMB  int       `json:"mem_total_mb"`
+		MemAllocMB  int       `json:"mem_alloc_mb"`
+		DiskTotalMB int       `json:"disk_total_mb"`
+		DiskUsedMB  int       `json:"disk_used_mb"`
 		// AppDiskAllocMB is the disk allocated to apps; AppDiskUsedBytes what their workspaces held at the last scans.
 		AppDiskAllocMB   int   `json:"app_disk_alloc_mb"`
 		AppDiskUsedBytes int64 `json:"app_disk_used_bytes"`
@@ -113,7 +115,6 @@ func (s *server) serverStatus(w http.ResponseWriter, r *http.Request) {
 	for _, a := range list {
 		out.Apps.Total++
 		out.Host.MemAllocMB += a.MemoryMB
-		out.Host.CPUAllocMilli += a.CPUMilli
 		out.Host.AppDiskAllocMB += a.DiskMB
 		out.Host.AppDiskUsedBytes += a.DiskUsedBytes
 		switch a.Status {
@@ -135,6 +136,7 @@ func (s *server) serverStatus(w http.ResponseWriter, r *http.Request) {
 	out.Host.Arch = runtime.GOOS + "/" + runtime.GOARCH
 	out.Host.CPUs = runtime.NumCPU()
 	out.Host.MemTotalMB = memTotalMB()
+	out.Host.LoadAvg = loadAvg()
 	var fs syscall.Statfs_t
 	if err := syscall.Statfs(s.dataDir, &fs); err == nil {
 		total := int64(fs.Blocks) * int64(fs.Bsize) >> 20
@@ -179,6 +181,25 @@ func memTotalMB() int {
 		}
 	}
 	return 0
+}
+
+// loadAvg reads the 1, 5 and 15 minute load averages from /proc/loadavg; nil when unavailable.
+func loadAvg() []float64 {
+	b, err := os.ReadFile("/proc/loadavg")
+	if err != nil {
+		return nil
+	}
+	fields := strings.Fields(string(b))
+	if len(fields) < 3 {
+		return nil
+	}
+	out := make([]float64, 3)
+	for i := range out {
+		if out[i], err = strconv.ParseFloat(fields[i], 64); err != nil {
+			return nil
+		}
+	}
+	return out
 }
 
 // info is the part of the server settings every signed-in user needs: the

@@ -106,7 +106,7 @@ func (c *client) createAppWith(name string, binary []byte, extra obj) (appID int
 	}
 	var u uploadResult
 	up.into(c.e.t, &u)
-	req := obj{"upload_id": u.ID, "name": name, "memory_mb": 256, "cpu_milli": 250}
+	req := obj{"upload_id": u.ID, "name": name, "memory_mb": 256}
 	for k, v := range extra {
 		req[k] = v
 	}
@@ -123,7 +123,7 @@ func (c *client) createJarApp(name string) int64 {
 	up := c.upload(name+".jar", jarWithMajor(c.e.t, 61))
 	var u uploadResult
 	up.into(c.e.t, &u)
-	r := c.do("POST", "/api/apps", obj{"upload_id": u.ID, "name": name, "java_version": 17, "memory_mb": 256, "cpu_milli": 250})
+	r := c.do("POST", "/api/apps", obj{"upload_id": u.ID, "name": name, "java_version": 17, "memory_mb": 256})
 	if r.status != 201 {
 		c.e.t.Fatalf("create jar app: %d %s", r.status, r.body)
 	}
@@ -193,7 +193,6 @@ func TestCreateAppFlow(t *testing.T) {
 		Apps  []store.App `json:"apps"`
 		Usage struct {
 			Apps, MemoryMB int
-			CPUMilli       int
 			Quota          store.Quota
 		} `json:"usage"`
 	}

@@ -48,15 +48,15 @@ func (e *testEnv) healthyAfter(d time.Duration) *healthClock {
 	return hc
 }
 
-// A Spring Boot app on half a core takes about a minute to open its port, and
-// longer while the old version still runs (zero-downtime redeploy): measured
-// 57 s alone and 70 s next to the old JVM. A fixed 60 s wait failed the
+// A Spring Boot app takes about a minute to open its port, and longer while
+// the old version still runs (zero-downtime redeploy): measured 57 s alone and
+// 70 s next to the old JVM on half a core. A fixed 60 s wait failed the
 // redeploy of an app that was fine.
 func TestJarRedeployWaitsForSlowJVM(t *testing.T) {
 	ctx := context.Background()
 	e := newTestEnv(t)
 	u := e.addUser("budi", store.RoleUser, roomyQuota)
-	app, d1 := e.create(u, "starboom", jarReport("starboom.jar", 21), apps.CreateInput{JavaVersion: 21, MemoryMB: 512, CPUMilli: 500})
+	app, d1 := e.create(u, "starboom", jarReport("starboom.jar", 21), apps.CreateInput{JavaVersion: 21, MemoryMB: 512})
 	e.healthyAfter(57 * time.Second)
 	if err := e.svc.Deploy(ctx, u, app.ID, d1.ID); err != nil {
 		t.Fatalf("first deploy: %v", err)
@@ -64,7 +64,7 @@ func TestJarRedeployWaitsForSlowJVM(t *testing.T) {
 
 	e.healthyAfter(70 * time.Second)
 	if err := e.svc.DeployLatest(ctx, u, app.ID); err != nil {
-		t.Fatalf("redeploy of a JVM that needs 70 s on 0.5 core: %v", err)
+		t.Fatalf("redeploy of a JVM that needs 70 s: %v", err)
 	}
 	cur, _ := e.store.App(ctx, app.ID)
 	if cur.Status != store.AppRunning {
@@ -72,16 +72,23 @@ func TestJarRedeployWaitsForSlowJVM(t *testing.T) {
 	}
 }
 
-// The wait grows when the app gets less CPU: a JVM on a quarter core needs
-// twice as long as on half a core.
-func TestJarHealthWaitScalesWithCPU(t *testing.T) {
+// CPU is shared by every app, so the wait no longer depends on an app's
+// share of it: a JAR waits three minutes (plus the extension while its log
+// moves). A JVM that stays silent past three minutes fails.
+func TestJarHealthWaitIsThreeMinutes(t *testing.T) {
 	ctx := context.Background()
 	e := newTestEnv(t)
 	u := e.addUser("budi", store.RoleUser, roomyQuota)
-	app, d := e.create(u, "starboom", jarReport("starboom.jar", 21), apps.CreateInput{JavaVersion: 21, MemoryMB: 512, CPUMilli: 250})
-	e.healthyAfter(300 * time.Second)
+	app, d := e.create(u, "starboom", jarReport("starboom.jar", 21), apps.CreateInput{JavaVersion: 21, MemoryMB: 512})
+	e.healthyAfter(170 * time.Second)
 	if err := e.svc.Deploy(ctx, u, app.ID, d.ID); err != nil {
-		t.Fatalf("deploy on 0.25 core that opens its port after 300 s: %v", err)
+		t.Fatalf("deploy of a JVM that opens its port after 170 s: %v", err)
+	}
+
+	e.healthyAfter(200 * time.Second)
+	err := e.svc.DeployLatest(ctx, u, app.ID)
+	if err == nil || !strings.Contains(err.Error(), "dalam 3m0s") {
+		t.Fatalf("DeployLatest = %v, want a failure after 3 minutes", err)
 	}
 }
 
@@ -168,6 +175,9 @@ func TestHealthFailureQuotesJVMProgress(t *testing.T) {
 	if !strings.Contains(p.Hint, "JVM sudah berjalan") || !strings.Contains(p.Hint, "belum selesai start") ||
 		!strings.Contains(p.Hint, "Root WebApplicationContext: initialization completed") {
 		t.Fatalf("hint = %q; want the JVM's running time, that it has not finished starting, and its last log line", p.Hint)
+	}
+	if strings.Contains(p.Hint, "core") || strings.Contains(p.Hint, "naikkan CPU") {
+		t.Fatalf("hint = %q; CPU is shared, there is no per-app CPU to raise", p.Hint)
 	}
 }
 

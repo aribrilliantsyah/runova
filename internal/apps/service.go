@@ -29,9 +29,7 @@ var ErrAppNotFound = errors.New("app not found")
 
 const (
 	defaultHealthTimeout = 60 * time.Second
-	jarHealthMin         = 180 * time.Second
-	jarHealthMax         = 15 * time.Minute
-	jarHealthPerCore     = 90 * time.Second
+	jarHealthTimeout     = 180 * time.Second
 	// A JVM that keeps logging past the timeout is still starting: the wait
 	// goes on while its log moved within the last startStall (at most twice
 	// the timeout), checked every startLogEvery.
@@ -66,7 +64,7 @@ type Service struct {
 	// HealthNow is the clock of the health wait; nil means time.Now.
 	HealthNow func() time.Time
 
-	HealthTimeout  time.Duration // 0 means healthTimeoutFor the app's runtime and CPU
+	HealthTimeout  time.Duration // 0 means healthTimeoutFor the app's runtime
 	HealthInterval time.Duration // 0 means 500 ms
 	// HealthReadWait is how long a health probe waits for the app to close the connection; 0 means 300 ms.
 	HealthReadWait time.Duration
@@ -123,9 +121,10 @@ func (s *Service) healthNow() time.Time {
 // healthTimeoutFor is how long a deploy, Restart or Start waits for the app's
 // port. A binary opens it in seconds. A JVM's start-up is CPU-bound: a Spring
 // Boot app with JPA measured 57 s on half a core and 70 s next to a second
-// JVM (zero-downtime redeploy), so a JAR waits jarHealthPerCore divided by its
-// cores (180 s at half a core, 360 s at a quarter), at least jarHealthMin and
-// at most jarHealthMax. HealthTimeout overrides it.
+// JVM (zero-downtime redeploy). CPU is shared by every app, so a JAR's speed
+// depends on what else runs, not on a share it owns: it waits jarHealthTimeout,
+// and waitHealthy extends that (up to twice) while the JVM's log keeps moving.
+// HealthTimeout overrides it.
 func (s *Service) healthTimeoutFor(app store.App) time.Duration {
 	if s.HealthTimeout > 0 {
 		return s.HealthTimeout
@@ -133,8 +132,7 @@ func (s *Service) healthTimeoutFor(app store.App) time.Duration {
 	if app.Kind != artifact.KindJar {
 		return defaultHealthTimeout
 	}
-	milli := max(app.CPUMilli, 1)
-	return min(max(jarHealthPerCore*1000/time.Duration(milli), jarHealthMin), jarHealthMax)
+	return jarHealthTimeout
 }
 
 func (s *Service) healthInterval() time.Duration {
@@ -191,7 +189,7 @@ func (s *Service) Get(ctx context.Context, actor store.User, appID int64) (store
 // UsageOf returns what the user's apps have allocated.
 func (s *Service) UsageOf(ctx context.Context, userID int64) (Usage, error) {
 	u, err := s.Store.UserUsage(ctx, userID)
-	return Usage{Apps: u.Apps, MemoryMB: u.MemoryMB, CPUMilli: u.CPUMilli, DiskMB: u.DiskMB, DiskUsedBytes: u.DiskUsedBytes}, err
+	return Usage{Apps: u.Apps, MemoryMB: u.MemoryMB, DiskMB: u.DiskMB, DiskUsedBytes: u.DiskUsedBytes}, err
 }
 
 func (s *Service) notify(ctx context.Context, app store.App, level store.NotificationLevel, title, body string) {
@@ -221,7 +219,6 @@ type CreateInput struct {
 	JVMOpts      string           `json:"jvm_opts"`
 	InternalPort int              `json:"internal_port"`
 	MemoryMB     int              `json:"memory_mb"`
-	CPUMilli     int              `json:"cpu_milli"`
 	IPAccess     bool             `json:"ip_access"`
 	Env          []store.EnvEntry `json:"env"`
 	// DatabaseID binds the app to one of the user's PostgreSQL databases; nil means none.
@@ -342,7 +339,7 @@ func (s *Service) Create(ctx context.Context, user store.User, in CreateInput) (
 
 	app := store.App{
 		UserID: user.ID, Name: in.Name, Kind: rep.Kind, JVMOpts: in.JVMOpts,
-		InternalPort: in.InternalPort, IPAccess: in.IPAccess, MemoryMB: in.MemoryMB, CPUMilli: in.CPUMilli,
+		InternalPort: in.InternalPort, IPAccess: in.IPAccess, MemoryMB: in.MemoryMB,
 		Status: store.AppStopped, DeployMode: store.DeployModeZero, CreatedAt: s.now().UnixMilli(), DatabaseID: in.DatabaseID,
 	}
 	if app.InternalPort == 0 {
@@ -390,7 +387,7 @@ func (s *Service) Create(ctx context.Context, user store.User, in CreateInput) (
 			return store.App{}, store.Deployment{}, err
 		}
 	}
-	if err := validateRange(app.MemoryMB, app.CPUMilli); err != nil {
+	if err := validateMemory(app.MemoryMB); err != nil {
 		return store.App{}, store.Deployment{}, err
 	}
 	sealed, err := s.sealEnv(in.Env)
@@ -416,9 +413,6 @@ func (s *Service) Create(ctx context.Context, user store.User, in CreateInput) (
 		return store.App{}, store.Deployment{}, overQuota("Kuota aplikasi habis (%d dari %d)", used.Apps, user.Quota.Apps)
 	}
 	if err := checkMemory(user.Quota, used, app.MemoryMB); err != nil {
-		return store.App{}, store.Deployment{}, err
-	}
-	if err := checkCPU(user.Quota, used, app.CPUMilli); err != nil {
 		return store.App{}, store.Deployment{}, err
 	}
 	if app.DiskMB = in.DiskMB; app.DiskMB == 0 {
@@ -529,7 +523,6 @@ type SettingsInput struct {
 	JVMOpts      *string `json:"jvm_opts"`
 	InternalPort *int    `json:"internal_port"`
 	MemoryMB     *int    `json:"memory_mb"`
-	CPUMilli     *int    `json:"cpu_milli"`
 	IPAccess     *bool   `json:"ip_access"`
 	DeployMode   *string `json:"deploy_mode"`
 	// DatabaseID binds the app to one of the owner's databases; 0 detaches it. A change needs a redeploy.
@@ -545,8 +538,8 @@ var deployModes = []string{store.DeployModeStopStart, store.DeployModeZero}
 
 // UpdateSettings validates and stores the change. redeploy reports that a
 // running app only picks the change up with a new deployment. Raising memory
-// or CPU needs the extra amount to fit in the remaining quota; lowering is
-// always allowed, even when the owner is over quota.
+// needs the extra amount to fit in the remaining quota; lowering is always
+// allowed, even when the owner is over quota.
 func (s *Service) UpdateSettings(ctx context.Context, user store.User, appID int64, in SettingsInput) (app store.App, redeploy bool, err error) {
 	app, owner, err := s.load(ctx, user, appID)
 	if err != nil {
@@ -608,15 +601,9 @@ func (s *Service) UpdateSettings(ctx context.Context, user store.User, appID int
 		bindDB = true
 		redeploy = redeploy || !sameID(app.DatabaseID, dbID)
 	}
-	mem, cpu := app.MemoryMB, app.CPUMilli
 	if in.MemoryMB != nil {
-		mem = *in.MemoryMB
-	}
-	if in.CPUMilli != nil {
-		cpu = *in.CPUMilli
-	}
-	if in.MemoryMB != nil || in.CPUMilli != nil {
-		if err := validateRange(mem, cpu); err != nil {
+		mem := *in.MemoryMB
+		if err := validateMemory(mem); err != nil {
 			return store.App{}, false, err
 		}
 		used, err := s.UsageOf(ctx, owner.ID)
@@ -628,13 +615,8 @@ func (s *Service) UpdateSettings(ctx context.Context, user store.User, appID int
 				return store.App{}, false, err
 			}
 		}
-		if cpu > app.CPUMilli {
-			if err := checkCPU(owner.Quota, used, cpu-app.CPUMilli); err != nil {
-				return store.App{}, false, err
-			}
-		}
-		patch.MemoryMB, patch.CPUMilli = &mem, &cpu
-		redeploy = redeploy || mem != app.MemoryMB || cpu != app.CPUMilli
+		patch.MemoryMB = &mem
+		redeploy = redeploy || mem != app.MemoryMB
 	}
 	if in.Folders != nil {
 		list, err := s.checkFolders(ctx, app, *in.Folders)

@@ -331,7 +331,7 @@ func healthHint(app store.App, want int, se *stepError, lines []docker.LogLine) 
 		if se != nil {
 			ran = se.waited
 		}
-		hint := fmt.Sprintf("JVM sudah berjalan %s tetapi belum selesai start (log belum menulis \"Started …\"). Aplikasi Java dengan %s core butuh waktu; naikkan CPU di tab Lanjutan lalu deploy ulang.", plainDuration(ran), fmtCores(app.CPUMilli))
+		hint := fmt.Sprintf("JVM sudah berjalan %s tetapi belum selesai start (log belum menulis \"Started …\"). CPU server dipakai bersama semua aplikasi, jadi start bisa lebih lama saat server sibuk; coba deploy ulang saat beban server turun, atau kurangi pekerjaan saat start.", plainDuration(ran))
 		if last := lastLogLine(lines); last != "" {
 			hint += " Baris log terakhir: " + last
 		}
@@ -339,11 +339,6 @@ func healthHint(app store.App, want int, se *stepError, lines []docker.LogLine) 
 	default:
 		return fmt.Sprintf("Runova mengisi PORT dengan %d. Pastikan aplikasi membaca PORT atau samakan Port aplikasi di tab Lanjutan.", want)
 	}
-}
-
-// fmtCores writes milli-cores as the panel does: 0,5 or 1.
-func fmtCores(milli int) string {
-	return strings.Replace(strconv.FormatFloat(float64(milli)/1000, 'f', -1, 64), ".", ",", 1)
 }
 
 // exitProblem explains a container that exited on its own. restarted means

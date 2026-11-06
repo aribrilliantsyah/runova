@@ -15,7 +15,7 @@ func userListFixture(t *testing.T) *store.Store {
 	ctx := context.Background()
 	mk := func(name, display string, role store.Role, created int64) store.User {
 		u, err := s.CreateUser(ctx, store.NewUser{Username: name, DisplayName: display, Email: name + "@contoh.id", PasswordHash: "h", Role: role,
-			Quota: store.Quota{Apps: 5, MemoryMB: 4096, CPUMilli: 4000, Databases: 5, PGConnections: 20}}, created)
+			Quota: store.Quota{Apps: 5, MemoryMB: 4096, Databases: 5, PGConnections: 20}}, created)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -26,14 +26,14 @@ func userListFixture(t *testing.T) *store.Store {
 	citra := mk("citra", "Citra Lestari", store.RoleUser, 200)
 	mk("dewi", "", store.RoleAdmin, 400)
 	port := 20000
-	app := func(u store.User, name string, mem, cpu int) {
+	app := func(u store.User, name string, mem int) {
 		port++
-		newApp(t, s, u, name, port, mem, cpu)
+		newApp(t, s, u, name, port, mem)
 	}
-	app(budi, "billing", 512, 500)
-	app(budi, "worker", 256, 250)
-	app(citra, "blog", 1024, 100)
-	app(andi, "portal", 128, 1000)
+	app(budi, "billing", 512)
+	app(budi, "worker", 256)
+	app(citra, "blog", 1024)
+	app(andi, "portal", 128)
 	if _, err := s.CreateDatabase(ctx, store.Database{UserID: citra.ID, Name: "citra_a", CreatedAt: 1}); err != nil {
 		t.Fatal(err)
 	}
@@ -81,7 +81,6 @@ func TestUserListSortsEveryColumn(t *testing.T) {
 		{"role", "desc", []string{"budi", "citra", "andi", "dewi"}},
 		{"apps", "desc", []string{"budi", "andi", "citra", "dewi"}},
 		{"memory", "desc", []string{"citra", "budi", "andi", "dewi"}},
-		{"cpu", "desc", []string{"andi", "budi", "citra", "dewi"}},
 		{"databases", "desc", []string{"citra", "andi", "budi", "dewi"}},
 		{"created", "asc", []string{"andi", "citra", "budi", "dewi"}},
 		{"last_login", "desc", []string{"budi", "andi", "citra", "dewi"}}, // never logged in sorts last
@@ -110,7 +109,7 @@ func TestUserListFiltersPagesAndCounts(t *testing.T) {
 		t.Fatalf("unfiltered = total %d roles %+v limit %d", p.Total, p.Roles, p.Limit)
 	}
 	budi := p.Items[1]
-	if budi.Usage.Apps != 2 || budi.Usage.MemoryMB != 768 || budi.Usage.CPUMilli != 750 || budi.Usage.Databases != 0 || budi.LastLoginAt != 7000 {
+	if budi.Usage.Apps != 2 || budi.Usage.MemoryMB != 768 || budi.Usage.Databases != 0 || budi.LastLoginAt != 7000 {
 		t.Fatalf("budi row = %+v", budi)
 	}
 	if c := p.Items[2]; c.Usage.Databases != 2 || c.LastLoginAt != 0 {

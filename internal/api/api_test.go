@@ -71,7 +71,7 @@ func (e *env) addUser(username, password string, role store.Role) store.User {
 	}
 	u, err := e.store.CreateUser(context.Background(), store.NewUser{
 		Username: username, PasswordHash: h, Role: role,
-		Quota: store.Quota{Apps: 3, MemoryMB: 1024, CPUMilli: 1000, Databases: 3, PGConnections: 20, DiskMB: 4096},
+		Quota: store.Quota{Apps: 3, MemoryMB: 1024, Databases: 3, PGConnections: 20, DiskMB: 4096},
 	}, e.clock.Now().UnixMilli())
 	if err != nil {
 		e.t.Fatal(err)
@@ -391,15 +391,15 @@ func TestUpdateUserAndQuota(t *testing.T) {
 	c.do("POST", "/api/users", newUserBody("budi")).into(t, &u)
 	path := "/api/users/" + strconv.FormatInt(u.ID, 10)
 
-	r := c.do("PATCH", path, obj{"display_name": "Budi S", "quota": obj{"apps": 5, "memory_mb": 2048, "cpu_milli": 2000, "databases": 4, "pg_connections": 30}})
+	r := c.do("PATCH", path, obj{"display_name": "Budi S", "quota": obj{"apps": 5, "memory_mb": 2048, "databases": 4, "pg_connections": 30}})
 	if r.status != 200 {
 		t.Fatalf("patch: %d %s", r.status, r.body)
 	}
 	r.into(t, &u)
-	if u.DisplayName != "Budi S" || u.Email != "budi@x.id" || u.Quota != (store.Quota{Apps: 5, MemoryMB: 2048, CPUMilli: 2000, Databases: 4, PGConnections: 30, DiskMB: 1024}) {
+	if u.DisplayName != "Budi S" || u.Email != "budi@x.id" || u.Quota != (store.Quota{Apps: 5, MemoryMB: 2048, Databases: 4, PGConnections: 30, DiskMB: 1024}) {
 		t.Fatalf("patched = %+v", u)
 	}
-	if r := c.do("PATCH", path, obj{"quota": obj{"apps": 5, "memory_mb": 1, "cpu_milli": 1, "databases": 1, "pg_connections": 0}}); r.status != 400 {
+	if r := c.do("PATCH", path, obj{"quota": obj{"apps": 5, "memory_mb": 1, "databases": 1, "pg_connections": 0}}); r.status != 400 {
 		t.Fatalf("invalid quota: %d %s", r.status, r.body)
 	}
 	if r := c.do("PATCH", path, obj{"role": "dewa"}); r.status != 400 {

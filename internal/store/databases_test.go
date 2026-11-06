@@ -22,7 +22,7 @@ func TestDatabaseUniqueAndRestrict(t *testing.T) {
 		t.Fatalf("duplicate name: err = %v", err)
 	}
 
-	app := newApp(t, s, u, "billing-api", 20000, 256, 250)
+	app := newApp(t, s, u, "billing-api", 20000, 256)
 	if err := s.SetAppDatabase(ctx, app.ID, &d.ID); err != nil {
 		t.Fatal(err)
 	}
@@ -57,7 +57,7 @@ func TestDeleteUserRemovesDatabasesAndBoundApps(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	app := newApp(t, s, u, "billing-api", 20000, 256, 250)
+	app := newApp(t, s, u, "billing-api", 20000, 256)
 	if err := s.SetAppDatabase(ctx, app.ID, &d.ID); err != nil {
 		t.Fatal(err)
 	}

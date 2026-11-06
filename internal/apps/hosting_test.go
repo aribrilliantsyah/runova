@@ -174,7 +174,7 @@ func TestSubdomainQuotaFollowsAppsQuota(t *testing.T) {
 	ctx := context.Background()
 	e := newHostingEnv(t)
 	h := e.register("porto.ex.id")
-	u := e.addUser("budi", store.RoleUser, store.Quota{Apps: 2, MemoryMB: 1024, CPUMilli: 1000, Databases: 1, PGConnections: 5, DiskMB: 4096})
+	u := e.addUser("budi", store.RoleUser, store.Quota{Apps: 2, MemoryMB: 1024, Databases: 1, PGConnections: 5, DiskMB: 4096})
 	one, _ := e.createStatic(u, "one")
 	two, _ := e.createStatic(u, "two")
 

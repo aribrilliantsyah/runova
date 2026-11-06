@@ -138,7 +138,7 @@ func (e *testEnv) addUser(username string, role store.Role, quota store.Quota) s
 	return u
 }
 
-var roomyQuota = store.Quota{Apps: 3, MemoryMB: 1024, CPUMilli: 1000, Databases: 3, PGConnections: 20, DiskMB: 4096}
+var roomyQuota = store.Quota{Apps: 3, MemoryMB: 1024, Databases: 3, PGConnections: 20, DiskMB: 4096}
 
 // upload stores a fake upload for user with the given report and returns its ID.
 func (e *testEnv) upload(user store.User, rep artifact.Report) string {
@@ -181,9 +181,6 @@ func (e *testEnv) create(user store.User, name string, rep artifact.Report, in a
 	in.Name = name
 	if in.MemoryMB == 0 {
 		in.MemoryMB = 256
-	}
-	if in.CPUMilli == 0 {
-		in.CPUMilli = 250
 	}
 	app, d, err := e.svc.Create(context.Background(), user, in)
 	if err != nil {

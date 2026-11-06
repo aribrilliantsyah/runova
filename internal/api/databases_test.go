@@ -215,7 +215,7 @@ func TestAppWithForeignDatabase(t *testing.T) {
 	up := b.upload("xyz", staticELF())
 	var u uploadResult
 	up.into(t, &u)
-	r := b.do("POST", "/api/apps", obj{"upload_id": u.ID, "name": "xyz", "memory_mb": 256, "cpu_milli": 250, "database_id": id})
+	r := b.do("POST", "/api/apps", obj{"upload_id": u.ID, "name": "xyz", "memory_mb": 256, "database_id": id})
 	if r.status != 400 || r.errMsg(t) != "Database tidak ditemukan" {
 		t.Fatalf("create = %d %s", r.status, r.body)
 	}
@@ -287,7 +287,7 @@ func TestDetectedDBEnvFilledAutomatically(t *testing.T) {
 	}
 
 	// The user overrides DB_USER and fills REDIS_URL; DB_URL and DB_PASSWORD come from the database.
-	r := c.do("POST", "/api/apps", obj{"upload_id": got.ID, "name": "billing-api", "memory_mb": 256, "cpu_milli": 250, "database_id": dbID,
+	r := c.do("POST", "/api/apps", obj{"upload_id": got.ID, "name": "billing-api", "memory_mb": 256, "database_id": dbID,
 		"env": []obj{{"name": "DB_USER", "value": "custom"}, {"name": "REDIS_URL", "value": "redis://r:6379"}, {"name": "DB_PASSWORD", "value": "", "secret": true}}})
 	if r.status != 201 {
 		t.Fatalf("create = %d %s", r.status, r.body)
@@ -504,7 +504,7 @@ func TestUserHooks(t *testing.T) {
 		t.Error("role password not stored")
 	}
 
-	quota := store.Quota{Apps: 3, MemoryMB: 1024, CPUMilli: 1000, Databases: 3, PGConnections: 9, DiskMB: 4096}
+	quota := store.Quota{Apps: 3, MemoryMB: 1024, Databases: 3, PGConnections: 9, DiskMB: 4096}
 	if r := admin.do("PATCH", "/api/users/"+strconv.FormatInt(u.ID, 10), obj{"quota": quota}); r.status != 200 {
 		t.Fatalf("patch quota = %d %s", r.status, r.body)
 	}

@@ -30,7 +30,7 @@ func folderReport(file string, fs ...folders.Folder) artifact.Report {
 func TestContainerSpecMountsSavedFolders(t *testing.T) {
 	e := newTestEnv(t)
 	owner := store.User{ID: 2, Username: "budi"}
-	app := store.App{ID: 7, Name: "starboom", Kind: artifact.KindStatic, MemoryMB: 128, CPUMilli: 100,
+	app := store.App{ID: 7, Name: "starboom", Kind: artifact.KindStatic, MemoryMB: 128,
 		Folders: []folders.Folder{{Path: "storage", Dir: "storage"}, {Path: "/app/media", Dir: "media"}}}
 	d := store.Deployment{ID: 9, FileName: "svc", ArtifactPath: "/a/svc", InternalPort: 80}
 	spec := e.svc.ContainerSpec(app, owner, d, nil, nil)
@@ -73,7 +73,7 @@ func TestCreateFolderAndDiskValidation(t *testing.T) {
 	q.DiskMB = 512
 	u := e.addUser("budi", store.RoleUser, q)
 	try := func(in apps.CreateInput) error {
-		in.UploadID, in.Name, in.MemoryMB, in.CPUMilli = e.upload(u, staticReport("svc")), "one", 128, 100
+		in.UploadID, in.Name, in.MemoryMB = e.upload(u, staticReport("svc")), "one", 128
 		_, _, err := e.svc.Create(ctx, u, in)
 		return err
 	}
@@ -92,7 +92,7 @@ func TestCreateFolderAndDiskValidation(t *testing.T) {
 	if err := try(apps.CreateInput{DiskMB: 512}); err != nil {
 		t.Fatalf("exact fit: %v", err)
 	}
-	in := apps.CreateInput{UploadID: e.upload(u, staticReport("svc")), Name: "two", MemoryMB: 128, CPUMilli: 100}
+	in := apps.CreateInput{UploadID: e.upload(u, staticReport("svc")), Name: "two", MemoryMB: 128}
 	if _, _, err := e.svc.Create(ctx, u, in); !errors.Is(err, apps.ErrQuota) || !strings.Contains(err.Error(), "Kuota disk habis") {
 		t.Errorf("default disk with nothing left: %v", err)
 	}

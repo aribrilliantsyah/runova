@@ -217,7 +217,7 @@ func TestMonitorReconnects(t *testing.T) {
 func TestReconcileOnStart(t *testing.T) {
 	ctx := context.Background()
 	e := newTestEnv(t)
-	u := e.addUser("budi", store.RoleUser, store.Quota{Apps: 10, MemoryMB: 4096, CPUMilli: 4000, Databases: 3, PGConnections: 20, DiskMB: 4096})
+	u := e.addUser("budi", store.RoleUser, store.Quota{Apps: 10, MemoryMB: 4096, Databases: 3, PGConnections: 20, DiskMB: 4096})
 
 	live, _ := deployFirst(t, e, u, "live")
 	exited, _ := deployFirst(t, e, u, "exited")

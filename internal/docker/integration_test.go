@@ -122,7 +122,7 @@ func TestIntegrationEngine(t *testing.T) {
 		Image: static, Cmd: []string{"/app/hello"}, Env: []string{"PORT=8080"}, User: uid,
 		Labels: labels, Network: netw, InternalPort: 8080, HostPort: hostPort,
 		Binds: []string{bin + ":/app/hello:ro"}, Tmpfs: map[string]string{"/tmp": "rw,size=64m"},
-		MemoryBytes: 64 << 20, NanoCPUs: 250_000_000, ReadOnly: true,
+		MemoryBytes: 64 << 20, ReadOnly: true,
 		ExtraHosts: []string{"host.docker.internal:host-gateway"},
 	})
 	if err != nil {
@@ -197,7 +197,7 @@ func TestIntegrationEngine(t *testing.T) {
 
 	shell, err := c.CreateContainer(ctx, "runova-dkitest-glibc", ContainerSpec{
 		Image: glibc, Cmd: []string{"sleep", "300"}, User: uid, Labels: labels, Network: netw,
-		Tmpfs: map[string]string{"/tmp": "rw,size=64m"}, MemoryBytes: 64 << 20, NanoCPUs: 250_000_000, ReadOnly: true,
+		Tmpfs: map[string]string{"/tmp": "rw,size=64m"}, MemoryBytes: 64 << 20, ReadOnly: true,
 	})
 	if err != nil {
 		t.Fatal(err)
