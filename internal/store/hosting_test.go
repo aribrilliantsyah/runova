@@ -53,10 +53,10 @@ func TestAddHostedDomainQuotaCountsAcrossAppsAndDisabledBase(t *testing.T) {
 	s := newStore(t)
 	u := mustUser(t, s, "budi", store.RoleUser)
 	other := mustUser(t, s, "andi", store.RoleUser)
-	one := newApp(t, s, u, "one", 20000, 128, 100)
-	two := newApp(t, s, u, "two", 20001, 128, 100)
-	three := newApp(t, s, u, "three", 20002, 128, 100)
-	andi := newApp(t, s, other, "andi-app", 20003, 128, 100)
+	one := newApp(t, s, u, "one", 20000, 128)
+	two := newApp(t, s, u, "two", 20001, 128)
+	three := newApp(t, s, u, "three", 20002, 128)
+	andi := newApp(t, s, other, "andi-app", 20003, 128)
 	h := addHosting(t, s, "porto.ex.id")
 
 	if _, err := s.AddHostedDomain(ctx, one.ID, h.ID, "a-one", "a-one.porto.ex.id", 2, 1); err != nil {
@@ -93,7 +93,7 @@ func TestAddHostedDomainRejectsDisabledOrMissingBase(t *testing.T) {
 	ctx := context.Background()
 	s := newStore(t)
 	u := mustUser(t, s, "budi", store.RoleUser)
-	app := newApp(t, s, u, "one", 20000, 128, 100)
+	app := newApp(t, s, u, "one", 20000, 128)
 	h := addHosting(t, s, "porto.ex.id")
 	off := false
 	s.UpdateHostingDomain(ctx, h.ID, &off, nil)
@@ -110,8 +110,8 @@ func TestHostedHostConflictsWithFreeDomain(t *testing.T) {
 	s := newStore(t)
 	admin := mustUser(t, s, "admin", store.RoleAdmin)
 	u := mustUser(t, s, "budi", store.RoleUser)
-	adminApp := newApp(t, s, admin, "site", 20000, 128, 100)
-	app := newApp(t, s, u, "one", 20001, 128, 100)
+	adminApp := newApp(t, s, admin, "site", 20000, 128)
+	app := newApp(t, s, u, "one", 20001, 128)
 	h := addHosting(t, s, "porto.ex.id")
 	if _, err := s.AddDomain(ctx, adminApp.ID, "abc.porto.ex.id", 1); err != nil {
 		t.Fatal(err)
@@ -125,7 +125,7 @@ func TestAddHostedDomainLimitPerAppIsShared(t *testing.T) {
 	ctx := context.Background()
 	s := newStore(t)
 	u := mustUser(t, s, "admin", store.RoleAdmin)
-	app := newApp(t, s, u, "one", 20000, 128, 100)
+	app := newApp(t, s, u, "one", 20000, 128)
 	h := addHosting(t, s, "porto.ex.id")
 	for i := range store.MaxDomainsPerApp - 1 {
 		if _, err := s.AddDomain(ctx, app.ID, fmt.Sprintf("d%d.co", i), 1); err != nil {
@@ -144,7 +144,7 @@ func TestRemoveHostingDomainRestrict(t *testing.T) {
 	ctx := context.Background()
 	s := newStore(t)
 	u := mustUser(t, s, "budi", store.RoleUser)
-	app := newApp(t, s, u, "one", 20000, 128, 100)
+	app := newApp(t, s, u, "one", 20000, 128)
 	h := addHosting(t, s, "porto.ex.id")
 	d, err := s.AddHostedDomain(ctx, app.ID, h.ID, "abc", "abc.porto.ex.id", 5, 1)
 	if err != nil {
@@ -170,7 +170,7 @@ func TestHostingUsageWindow(t *testing.T) {
 	ctx := context.Background()
 	s := newStore(t)
 	u := mustUser(t, s, "budi", store.RoleUser)
-	app := newApp(t, s, u, "one", 20000, 128, 100)
+	app := newApp(t, s, u, "one", 20000, 128)
 	h := addHosting(t, s, "porto.ex.id")
 	for i, at := range []int64{100, 500, 900} {
 		l := fmt.Sprintf("lab%d", i)

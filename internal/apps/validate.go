@@ -37,17 +37,15 @@ func overQuota(format string, a ...any) error {
 
 func conflict(msg string) error { return &userError{store.ErrConflict, msg} }
 
-// Usage is what a user's apps have allocated, and the disk their workspaces used at the last scans.
+// Usage is what a user's apps were given, and the disk their workspaces used at the last scans.
 type Usage struct {
-	Apps, MemoryMB, CPUMilli, DiskMB int
-	DiskUsedBytes                    int64
+	Apps, MemoryMB, DiskMB int
+	DiskUsedBytes          int64
 }
 
 const (
 	minMemoryMB   = 128
 	memoryStepMB  = 64
-	minCPUMilli   = 100
-	cpuStepMilli  = 50
 	maxEnvEntries = 200
 	maxEnvValue   = 32 << 10
 	maxJVMOpts    = 1 << 10
@@ -68,13 +66,10 @@ func ValidateAppName(name string) error {
 	return nil
 }
 
-// validateRange checks the allocation is within the allowed steps, ignoring quota.
-func validateRange(memMB, cpuMilli int) error {
+// validateMemory checks the memory is within the allowed steps, ignoring quota.
+func validateMemory(memMB int) error {
 	if memMB < minMemoryMB || memMB%memoryStepMB != 0 {
 		return invalid("Memori minimal %d MB dan kelipatan %d MB", minMemoryMB, memoryStepMB)
-	}
-	if cpuMilli < minCPUMilli || cpuMilli%cpuStepMilli != 0 {
-		return invalid("CPU minimal %d millicore dan kelipatan %d", minCPUMilli, cpuStepMilli)
 	}
 	return nil
 }
@@ -86,28 +81,13 @@ func checkMemory(q store.Quota, used Usage, memMB int) error {
 	return nil
 }
 
-func checkCPU(q store.Quota, used Usage, cpuMilli int) error {
-	if left := max(q.CPUMilli-used.CPUMilli, 0); cpuMilli > left {
-		return overQuota("CPU melebihi sisa kuota (sisa %s core)", formatCores(left))
-	}
-	return nil
-}
-
-// ValidateResources checks a new allocation against the quota that is left
+// ValidateResources checks a new app's memory against the quota that is left
 // after used. A bad value is ErrValidation; too much is ErrQuota.
-func ValidateResources(q store.Quota, used Usage, memMB, cpuMilli int) error {
-	if err := validateRange(memMB, cpuMilli); err != nil {
+func ValidateResources(q store.Quota, used Usage, memMB int) error {
+	if err := validateMemory(memMB); err != nil {
 		return err
 	}
-	if err := checkMemory(q, used, memMB); err != nil {
-		return err
-	}
-	return checkCPU(q, used, cpuMilli)
-}
-
-// formatCores renders millicores as cores with a decimal comma: 250 → "0,25".
-func formatCores(milli int) string {
-	return strings.Replace(strconv.FormatFloat(float64(milli)/1000, 'f', -1, 64), ".", ",", 1)
+	return checkMemory(q, used, memMB)
 }
 
 // ValidateJVMOpts accepts space-separated tokens that each start with "-".

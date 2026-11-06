@@ -1,5 +1,5 @@
 import * as api from "/assets/js/api.js";
-import { h, icon, fill, fmtBytes, fmtTime, fmtDateTime, fmtNum, pct, bar, fmtMB, copyText, debounce } from "/assets/js/dom.js";
+import { h, icon, fill, fmtBytes, fmtSize, fmtTime, fmtDateTime, fmtNum, pct, bar, fmtMB, copyText, debounce } from "/assets/js/dom.js";
 import { dialog, confirm } from "/assets/js/components/dialog.js";
 import { emptyState } from "/assets/js/components/list.js";
 import { uploadError } from "/assets/js/validate.js";
@@ -16,7 +16,7 @@ export function diskMeter(app) {
   const used = app.disk_used_bytes || 0;
   const size = (app.disk_mb || 0) * 1048576;
   const p = size ? pct(used, size) : 0;
-  const text = size ? `${fmtBytes(used)} / ${fmtMB(app.disk_mb)}` : `${fmtBytes(used)}, belum dibatasi`;
+  const text = size ? `${fmtSize(used)} / ${fmtMB(app.disk_mb)}` : `${fmtSize(used)}, belum dibatasi`;
   const tone = app.disk_level === "full" ? "full" : app.disk_level === "warn" ? "warn" : "";
   return { text, percent: p, tone };
 }

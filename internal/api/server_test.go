@@ -30,13 +30,14 @@ type serverBody struct {
 		Databases      int
 	} `json:"postgres"`
 	Host struct {
-		Hostname      string `json:"hostname"`
-		CPUs          int    `json:"cpus"`
-		MemTotalMB    int    `json:"mem_total_mb"`
-		MemAllocMB    int    `json:"mem_alloc_mb"`
-		CPUAllocMilli int    `json:"cpu_alloc_milli"`
-		DiskTotalMB   int    `json:"disk_total_mb"`
-		DiskUsedMB    int    `json:"disk_used_mb"`
+		Hostname    string     `json:"hostname"`
+		CPUs        int        `json:"cpus"`
+		LoadAvg     *[]float64 `json:"load_avg"`
+		MemTotalMB  int        `json:"mem_total_mb"`
+		MemUsedMB   int        `json:"mem_used_mb"`
+		MemAllocMB  int        `json:"mem_alloc_mb"`
+		DiskTotalMB int        `json:"disk_total_mb"`
+		DiskUsedMB  int        `json:"disk_used_mb"`
 	} `json:"host"`
 	Apps struct{ Total, Running, Stopped int } `json:"apps"`
 }
@@ -76,6 +77,16 @@ func TestServerStatus(t *testing.T) {
 	}
 	if b.Host.CPUs < 1 || b.Host.MemTotalMB < 1 || b.Host.DiskTotalMB < 1 || b.Host.DiskUsedMB > b.Host.DiskTotalMB {
 		t.Errorf("host = %+v", b.Host)
+	}
+	if b.Host.MemUsedMB < 1 || b.Host.MemUsedMB > b.Host.MemTotalMB {
+		t.Errorf("mem_used_mb = %d of %d", b.Host.MemUsedMB, b.Host.MemTotalMB)
+	}
+	// CPU is shared: the host reports its load (1, 5, 15 minutes), not what apps were given.
+	if b.Host.LoadAvg == nil || len(*b.Host.LoadAvg) != 3 || (*b.Host.LoadAvg)[0] < 0 {
+		t.Errorf("load_avg = %v, want three non-negative numbers", b.Host.LoadAvg)
+	}
+	if strings.Contains(string(r.body), "cpu_alloc") {
+		t.Errorf("body still reports a CPU allocation: %s", r.body)
 	}
 }
 
@@ -117,7 +128,7 @@ func TestInfoForEveryUser(t *testing.T) {
 	e, admin := healthEnv(t, api.Health{})
 	e.addUser("budi", "budi-password-1", store.RoleUser)
 	if r := admin.do("PUT", "/api/settings", obj{
-		"default_quota":   obj{"apps": 3, "memory_mb": 1024, "cpu_milli": 1000, "databases": 3, "pg_connections": 20},
+		"default_quota":   obj{"apps": 3, "memory_mb": 1024, "databases": 3, "pg_connections": 20},
 		"upload_limit_mb": 200, "max_pending_uploads": 5, "port_min": 20000, "port_max": 20999, "public_ip": "203.0.113.15",
 		"runtimes": obj{"java8": false, "java17": true, "static": true},
 	}); r.status != 200 {

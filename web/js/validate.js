@@ -104,18 +104,11 @@ export function suggestName(fileName) {
   return n.length >= 3 ? n : "";
 }
 
-/** memoryChoices(leftMB) / cpuChoices(leftMilli): the values on offer within what is left of the quota. */
+/** memoryChoices(leftMB): the memory sizes on offer within what is left of the quota. */
 export function memoryChoices(left) {
   const set = new Set([128, 256, 512, 768, 1024, 1536, 2048, 3072, 4096, 6144, 8192].filter((v) => v <= left));
   const top = left - (left % 64);
   if (top >= 128) set.add(top);
-  return [...set].sort((a, b) => a - b);
-}
-
-export function cpuChoices(left) {
-  const set = new Set([100, 250, 500, 750, 1000, 1500, 2000, 3000, 4000, 6000, 8000].filter((v) => v <= left));
-  const top = left - (left % 50);
-  if (top >= 100) set.add(top);
   return [...set].sort((a, b) => a - b);
 }
 

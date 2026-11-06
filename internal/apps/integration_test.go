@@ -107,7 +107,7 @@ func TestIntegrationDeployRollbackDelete(t *testing.T) {
 		t.Fatal(err)
 	}
 	user, err := st.CreateUser(ctx, store.NewUser{Username: "itest", PasswordHash: "x", Role: store.RoleUser,
-		Quota: store.Quota{Apps: 3, MemoryMB: 1024, CPUMilli: 1000, Databases: 3, PGConnections: 20, DiskMB: 4096}}, 1)
+		Quota: store.Quota{Apps: 3, MemoryMB: 1024, Databases: 3, PGConnections: 20, DiskMB: 4096}}, 1)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -150,7 +150,7 @@ func TestIntegrationDeployRollbackDelete(t *testing.T) {
 		return id
 	}
 
-	app, d1, err := svc.Create(ctx, user, apps.CreateInput{UploadID: upload(), Name: "hello", MemoryMB: 128, CPUMilli: 100,
+	app, d1, err := svc.Create(ctx, user, apps.CreateInput{UploadID: upload(), Name: "hello", MemoryMB: 128,
 		Env: []store.EnvEntry{{Name: "GREETING", Value: "v1"}}})
 	if err != nil {
 		t.Fatal(err)
@@ -237,7 +237,7 @@ func TestIntegrationWrongInternalPortFails(t *testing.T) {
 		t.Fatal(err)
 	}
 	user, err := st.CreateUser(ctx, store.NewUser{Username: "itestport", PasswordHash: "x", Role: store.RoleUser,
-		Quota: store.Quota{Apps: 3, MemoryMB: 1024, CPUMilli: 1000, Databases: 3, PGConnections: 20, DiskMB: 4096}}, 1)
+		Quota: store.Quota{Apps: 3, MemoryMB: 1024, Databases: 3, PGConnections: 20, DiskMB: 4096}}, 1)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -287,7 +287,7 @@ func TestIntegrationWrongInternalPortFails(t *testing.T) {
 	}
 	raw = wrong
 
-	app, d, err := svc.Create(ctx, user, apps.CreateInput{UploadID: upload(), Name: "wrongport", MemoryMB: 128, CPUMilli: 100})
+	app, d, err := svc.Create(ctx, user, apps.CreateInput{UploadID: upload(), Name: "wrongport", MemoryMB: 128})
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -1,6 +1,6 @@
 // The signed-in frame: sidebar, top bar, bottom navigation (phones), "Lainnya" sheet.
 import * as api from "/assets/js/api.js";
-import { h, icon, bar, setBar, pct, fmtMB, fmtNum, fill, copyText, $ } from "/assets/js/dom.js";
+import { h, icon, bar, setBar, pct, fmtMB, fill, copyText, $ } from "/assets/js/dom.js";
 import { logo } from "/assets/js/logo.js";
 import * as session from "/assets/js/session.js";
 import { bell } from "/assets/js/bell.js";
@@ -24,15 +24,15 @@ export function buildShell({ onLogout }) {
     h("a", { href: `#${href}`, "data-nav": key }, icon(ic), label, count ? h("span", { class: "n", "data-count": key }) : null);
 
   const memBar = bar(0);
-  const cpuBar = bar(0);
+  const diskBar = bar(0);
   const memPct = h("span", {}, "0%");
-  const cpuPct = h("span", {}, "0%");
+  const diskPct = h("span", {}, "0%");
   const quotaWho = h("span", { class: "muted" }, u.username);
   const usage = h(
     "div",
     { class: "usage" },
     h("div", { class: "row1" }, h("b", {}, "Kuota kamu"), quotaWho),
-    h("div", { class: "mini" }, icon("memory-stick"), memBar, memPct, icon("cpu"), cpuBar, cpuPct),
+    h("div", { class: "mini" }, icon("memory-stick"), memBar, memPct, icon("hard-drive"), diskBar, diskPct),
   );
 
   const acctBtn = h(
@@ -147,9 +147,9 @@ export function buildShell({ onLogout }) {
   // "Lainnya" bottom sheet
   const sheetUsage = h("span", { class: "muted" });
   const sheetMem = bar(0);
-  const sheetCpu = bar(0);
+  const sheetDisk = bar(0);
   const sheetMemPct = h("span", {}, "0%");
-  const sheetCpuPct = h("span", {}, "0%");
+  const sheetDiskPct = h("span", {}, "0%");
   const themeSw = h("span", { class: "sw", role: "switch", "aria-checked": String(session.isDark()), "aria-label": "Mode gelap" });
   const mitem = (ic, label, fn, cls = "") =>
     h("button", { class: cls, type: "button", onclick: () => { closeSheet(); fn(); } }, icon(ic), label, cls === "danger" ? null : icon("chevron-right"));
@@ -168,7 +168,7 @@ export function buildShell({ onLogout }) {
     { class: "mpanel", role: "dialog", "aria-label": "Menu lainnya" },
     h("div", { class: "grab" }),
     h("div", { class: "acct-static acct" }, session.avatar(u), h("div", {}, h("b", {}, session.displayName()), h("span", { class: "sub" }, `${u.email || u.username} · ${admin ? "admin" : "pengguna"}`))),
-    h("div", { class: "usage" }, h("div", { class: "row1" }, h("b", {}, "Kuota kamu"), sheetUsage), h("div", { class: "mini" }, icon("memory-stick"), sheetMem, sheetMemPct, icon("cpu"), sheetCpu, sheetCpuPct)),
+    h("div", { class: "usage" }, h("div", { class: "row1" }, h("b", {}, "Kuota kamu"), sheetUsage), h("div", { class: "mini" }, icon("memory-stick"), sheetMem, sheetMemPct, icon("hard-drive"), sheetDisk, sheetDiskPct)),
     mlist,
   );
   const sheet = h("div", { class: "msheet", hidden: true }, h("div", { class: "scrim", onclick: () => closeSheet() }), mpanel);
@@ -237,17 +237,18 @@ export function buildShell({ onLogout }) {
     const jobs = [
       api.get("/api/apps").then((r) => {
         appList = r.apps;
-        const memP = pct(r.usage.memory_mb, r.usage.quota.memory_mb);
-        const cpuP = pct(r.usage.cpu_milli, r.usage.quota.cpu_milli);
+        const use = r.usage;
+        const memP = pct(use.memory_mb, use.quota.memory_mb);
+        const diskP = pct(use.disk_mb || 0, use.quota.disk_mb || 0);
         setBar(memBar, memP);
-        setBar(cpuBar, cpuP);
+        setBar(diskBar, diskP);
         setBar(sheetMem, memP);
-        setBar(sheetCpu, cpuP);
+        setBar(sheetDisk, diskP);
         memPct.textContent = sheetMemPct.textContent = `${memP}%`;
-        cpuPct.textContent = sheetCpuPct.textContent = `${cpuP}%`;
-        sheetUsage.textContent = `${r.apps.length} dari ${r.usage.quota.apps} aplikasi`;
-        memBar.title = `${fmtMB(r.usage.memory_mb)} dari ${fmtMB(r.usage.quota.memory_mb)}`;
-        cpuBar.title = `${fmtNum(r.usage.cpu_milli / 1000)} dari ${fmtNum(r.usage.quota.cpu_milli / 1000)} core`;
+        diskPct.textContent = sheetDiskPct.textContent = `${diskP}%`;
+        sheetUsage.textContent = `${r.apps.length} dari ${use.quota.apps} aplikasi`;
+        memBar.title = sheetMem.title = `Memori ${fmtMB(use.memory_mb)} dibagikan dari ${fmtMB(use.quota.memory_mb)}`;
+        diskBar.title = sheetDisk.title = `Disk ${fmtMB(use.disk_mb || 0)} dibagikan dari ${fmtMB(use.quota.disk_mb || 0)}`;
         setCount("apps", String(r.apps.length));
       }),
       api.get("/api/databases").then((r) => setCount("db", `${r.used}/${r.limit}`)),

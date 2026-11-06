@@ -14,8 +14,8 @@ func TestAddDomainUniqueAcrossApps(t *testing.T) {
 	s := newStore(t)
 	a := mustUser(t, s, "andi", store.RoleUser)
 	b := mustUser(t, s, "budi", store.RoleUser)
-	appA := newApp(t, s, a, "one", 20000, 128, 100)
-	appB := newApp(t, s, b, "two", 20001, 128, 100)
+	appA := newApp(t, s, a, "one", 20000, 128)
+	appB := newApp(t, s, b, "two", 20001, 128)
 
 	d, err := s.AddDomain(ctx, appA.ID, "x.co", 5000)
 	if err != nil {
@@ -36,8 +36,8 @@ func TestAddDomainLimitPerApp(t *testing.T) {
 	ctx := context.Background()
 	s := newStore(t)
 	u := mustUser(t, s, "andi", store.RoleUser)
-	app := newApp(t, s, u, "one", 20000, 128, 100)
-	other := newApp(t, s, u, "two", 20001, 128, 100)
+	app := newApp(t, s, u, "one", 20000, 128)
+	other := newApp(t, s, u, "two", 20001, 128)
 	for i := range store.MaxDomainsPerApp {
 		if _, err := s.AddDomain(ctx, app.ID, fmt.Sprintf("d%d.co", i), 1); err != nil {
 			t.Fatalf("domain %d: %v", i, err)
@@ -55,8 +55,8 @@ func TestRemoveDomainChecksOwnerApp(t *testing.T) {
 	ctx := context.Background()
 	s := newStore(t)
 	u := mustUser(t, s, "andi", store.RoleUser)
-	appA := newApp(t, s, u, "one", 20000, 128, 100)
-	appB := newApp(t, s, u, "two", 20001, 128, 100)
+	appA := newApp(t, s, u, "one", 20000, 128)
+	appB := newApp(t, s, u, "two", 20001, 128)
 	d, _ := s.AddDomain(ctx, appA.ID, "x.co", 1)
 
 	if err := s.RemoveDomain(ctx, appB.ID, d.ID); !errors.Is(err, store.ErrNotFound) {
@@ -77,8 +77,8 @@ func TestDomainsListedAndCascaded(t *testing.T) {
 	ctx := context.Background()
 	s := newStore(t)
 	u := mustUser(t, s, "andi", store.RoleUser)
-	appA := newApp(t, s, u, "one", 20000, 128, 100)
-	appB := newApp(t, s, u, "two", 20001, 128, 100)
+	appA := newApp(t, s, u, "one", 20000, 128)
+	appB := newApp(t, s, u, "two", 20001, 128)
 	s.AddDomain(ctx, appA.ID, "b.co", 1)
 	s.AddDomain(ctx, appA.ID, "a.co", 2)
 	s.AddDomain(ctx, appB.ID, "c.co", 3)
@@ -103,7 +103,7 @@ func TestSetDomainStatus(t *testing.T) {
 	ctx := context.Background()
 	s := newStore(t)
 	u := mustUser(t, s, "andi", store.RoleUser)
-	app := newApp(t, s, u, "one", 20000, 128, 100)
+	app := newApp(t, s, u, "one", 20000, 128)
 	d, _ := s.AddDomain(ctx, app.ID, "x.co", 1)
 
 	if err := s.SetDomainStatus(ctx, d.ID, store.DomainError, "no cert", 9000); err != nil {
@@ -122,7 +122,7 @@ func TestDomainHostTaken(t *testing.T) {
 	ctx := context.Background()
 	s := newStore(t)
 	u := mustUser(t, s, "andi", store.RoleUser)
-	app := newApp(t, s, u, "one", 20000, 128, 100)
+	app := newApp(t, s, u, "one", 20000, 128)
 	s.AddDomain(ctx, app.ID, "x.co", 1)
 	if taken, err := s.DomainHostTaken(ctx, "x.co"); err != nil || !taken {
 		t.Fatalf("x.co: %v, %v", taken, err)

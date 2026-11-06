@@ -162,6 +162,11 @@
   .cfgform .two,.cfgform.two{grid-template-columns:1fr}
   .g3{grid-template-columns:1fr}
   .srv{gap:10px}
+  /* Two columns: each server figure beside what apps were given of it. */
+  .srv .srvstats{grid-template-columns:1fr 1fr}
+  .srvstats [data-stat=cpu]{order:1}.srvstats [data-stat=apps]{order:2}
+  .srvstats [data-stat=mem-server]{order:3}.srvstats [data-stat=mem-apps]{order:4}
+  .srvstats [data-stat=disk-server]{order:5}.srvstats [data-stat=disk-apps]{order:6}
   .card>footer .btn{flex:1;justify-content:center;height:42px}
   .hostform .rowflex{grid-template-columns:1fr}
   .hostform .rowflex .btn{justify-content:center;height:42px}

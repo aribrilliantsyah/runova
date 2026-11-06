@@ -97,7 +97,7 @@ func TestIntegrationSlowJVMDeployRedeployRestart(t *testing.T) {
 		t.Fatal(err)
 	}
 	user, err := st.CreateUser(ctx, store.NewUser{Username: "itestslow", PasswordHash: "x", Role: store.RoleUser,
-		Quota: store.Quota{Apps: 3, MemoryMB: 2048, CPUMilli: 2000, Databases: 3, PGConnections: 20, DiskMB: 1024}}, 1)
+		Quota: store.Quota{Apps: 3, MemoryMB: 2048, Databases: 3, PGConnections: 20, DiskMB: 1024}}, 1)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -128,7 +128,7 @@ func TestIntegrationSlowJVMDeployRedeployRestart(t *testing.T) {
 	if err := st.CreateUpload(ctx, store.Upload{ID: id, UserID: user.ID, Dir: udir, ArtifactPath: path, Report: rep, CreatedAt: 1}); err != nil {
 		t.Fatal(err)
 	}
-	app, d1, err := svc.Create(ctx, user, apps.CreateInput{UploadID: id, Name: "starboom", JavaVersion: 21, MemoryMB: 512, CPUMilli: 500})
+	app, d1, err := svc.Create(ctx, user, apps.CreateInput{UploadID: id, Name: "starboom", JavaVersion: 21, MemoryMB: 512})
 	if err != nil {
 		t.Fatal(err)
 	}

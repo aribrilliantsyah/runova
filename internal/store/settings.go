@@ -50,7 +50,7 @@ func defaultSettings() Settings {
 		rt[id] = true
 	}
 	return Settings{
-		DefaultQuota:      Quota{Apps: 3, MemoryMB: 1024, CPUMilli: 1000, Databases: 3, PGConnections: 20, DiskMB: 1024},
+		DefaultQuota:      Quota{Apps: 3, MemoryMB: 1024, Databases: 3, PGConnections: 20, DiskMB: 1024},
 		UploadLimitMB:     500,
 		MaxPendingUploads: 5,
 		PortMin:           20000,

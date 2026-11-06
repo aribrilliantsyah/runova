@@ -63,7 +63,7 @@ func devSeed(ctx context.Context, st *store.Store, now int64) error {
 		}
 		u, err := st.CreateUser(ctx, store.NewUser{
 			Username: name, DisplayName: display, Email: email, PasswordHash: hash, Role: role,
-			Quota: store.Quota{Apps: 2 + i%5, MemoryMB: 1024 * (1 + i%4), CPUMilli: 1000 * (1 + i%3), Databases: 1 + i%4, PGConnections: 20, DiskMB: 1024 * (1 + i%3)},
+			Quota: store.Quota{Apps: 2 + i%5, MemoryMB: 1024 * (1 + i%4), Databases: 1 + i%4, PGConnections: 20, DiskMB: 1024 * (1 + i%3)},
 		}, now-int64(90-i)*day)
 		if err != nil {
 			return fmt.Errorf("seed user %s: %w", name, err)
@@ -79,7 +79,7 @@ func devSeed(ctx context.Context, st *store.Store, now int64) error {
 			name := []string{"billing", "portal", "worker", "blog"}[k]
 			if _, err := st.CreateApp(ctx, store.App{
 				UserID: u.ID, Name: name, Kind: artifact.KindStatic, InternalPort: 8080, IPPort: port,
-				MemoryMB: 128 * (1 + (i+k*3)%6), CPUMilli: 250 * (1 + (i+k)%4), Status: store.AppStopped, DeployMode: store.DeployModeStopStart, CreatedAt: now - 30*day,
+				MemoryMB: 128 * (1 + (i+k*3)%6), Status: store.AppStopped, DeployMode: store.DeployModeStopStart, CreatedAt: now - 30*day,
 			}); err != nil {
 				return fmt.Errorf("seed app: %w", err)
 			}
@@ -129,7 +129,7 @@ func devSeed(ctx context.Context, st *store.Store, now int64) error {
 		if u.Role == store.RoleAdmin && rng.IntN(4) == 0 {
 			t := users[rng.IntN(len(users))]
 			a.Action, a.Target = store.ActQuotaUpdate, t.Username
-			a.Detail = fmt.Sprintf("apps=%d memory_mb=%d cpu_milli=1000 databases=3 pg_connections=20", 2+rng.IntN(4), 1024*(1+rng.IntN(3)))
+			a.Detail = fmt.Sprintf("apps=%d memory_mb=%d databases=3 pg_connections=20 disk_mb=1024", 2+rng.IntN(4), 1024*(1+rng.IntN(3)))
 		}
 		if err := st.Log(ctx, a); err != nil {
 			return fmt.Errorf("seed activity: %w", err)

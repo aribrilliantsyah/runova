@@ -44,7 +44,7 @@ func (s *Service) refreshCaddy(ctx context.Context, app store.App) {
 func (s *Service) revertApp(ctx context.Context, old store.App) {
 	_, err := s.Store.UpdateApp(context.WithoutCancel(ctx), old.ID, store.AppPatch{
 		JavaVersion: old.JavaVersion, JVMOpts: &old.JVMOpts, InternalPort: &old.InternalPort,
-		MemoryMB: &old.MemoryMB, CPUMilli: &old.CPUMilli, IPAccess: &old.IPAccess, DeployMode: &old.DeployMode,
+		MemoryMB: &old.MemoryMB, IPAccess: &old.IPAccess, DeployMode: &old.DeployMode,
 	})
 	if err != nil {
 		slog.Error("revert app settings", "app", old.Name, "err", err)

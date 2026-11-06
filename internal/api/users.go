@@ -219,7 +219,7 @@ func (s *server) updateUser(w http.ResponseWriter, r *http.Request) {
 	if body.Quota != nil {
 		q := u.Quota
 		s.record(r, actor, store.ActQuotaUpdate, u.Username,
-			"apps="+itoa(q.Apps)+" memory_mb="+itoa(q.MemoryMB)+" cpu_milli="+itoa(q.CPUMilli)+
+			"apps="+itoa(q.Apps)+" memory_mb="+itoa(q.MemoryMB)+
 				" databases="+itoa(q.Databases)+" pg_connections="+itoa(q.PGConnections)+" disk_mb="+itoa(q.DiskMB))
 	}
 	writeJSON(w, http.StatusOK, u)

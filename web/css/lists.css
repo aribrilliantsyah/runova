@@ -212,11 +212,11 @@ table.dt td,table.dt th{padding-left:12px;padding-right:12px}
 
 /* Users table: dates give way first, then the table becomes cards (narrow card, not only phones). */
 @container lcard (max-width: 1180px){
-  .users-t th:nth-child(8),.users-t td:nth-child(8){display:none}
+  .users-t th:nth-child(7),.users-t td:nth-child(7){display:none}
   .users-t .ucell small{max-width:200px}
 }
 @container lcard (max-width: 1020px){
-  .users-t th:nth-child(9),.users-t td:nth-child(9){display:none}
+  .users-t th:nth-child(8),.users-t td:nth-child(8){display:none}
 }
 @container lcard (max-width: 860px){
   table.dt.users-t thead{display:none}
@@ -227,7 +227,7 @@ table.dt td,table.dt th{padding-left:12px;padding-right:12px}
   table.dt.users-t td[data-label=""]::before,table.dt.users-t td:first-child::before{display:none}
   table.dt.users-t td:first-child{grid-column:1 / -1;justify-content:flex-start;text-align:left;padding-bottom:6px}
   table.dt.users-t td.c-role{grid-column:1 / -1}
-  table.dt.users-t td:nth-child(8),table.dt.users-t td:nth-child(9){display:flex}
+  table.dt.users-t td:nth-child(7),table.dt.users-t td:nth-child(8){display:flex}
   table.dt.users-t td.c-acts{grid-column:1 / -1;justify-content:flex-end;padding-top:6px}
   table.dt.users-t .qv{width:min(170px,60%)}
   table.dt.users-t .ucell small{max-width:none}

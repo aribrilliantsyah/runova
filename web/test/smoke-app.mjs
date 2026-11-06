@@ -30,7 +30,7 @@ try {
   form.append("file", new Blob([fs.readFileSync(jar)]), "billing-api-2.4.1.jar");
   const up = await (await fetch(`${srv.url}/api/uploads`, { method: "POST", headers: { cookie }, body: form })).json();
   const created = await api("POST", "/api/apps", {
-    upload_id: up.id, name: "billing-api", java_version: 21, memory_mb: 512, cpu_milli: 500, ip_access: true,
+    upload_id: up.id, name: "billing-api", java_version: 21, memory_mb: 512, ip_access: true,
     env: [{ name: "JWT_SECRET", value: "super-secret-1", secret: true }, { name: "DB_PASSWORD", value: "pw", secret: true }, { name: "GREETING", value: "<script>alert(1)</script>", secret: false }, { name: "LOG_ECHO", value: "hello from <b>env</b>", secret: false }],
   }, cookie);
   check(created.status === 201, `create ${created.status} ${JSON.stringify(created.body)}`);
@@ -161,7 +161,7 @@ try {
   const f2 = new FormData();
   f2.append("file", new Blob([fs.readFileSync(bin)]), "hello");
   const up2 = await (await fetch(`${srv.url}/api/uploads`, { method: "POST", headers: { cookie }, body: f2 })).json();
-  const c2 = await api("POST", "/api/apps", { upload_id: up2.id, name: "hello-static", memory_mb: 128, cpu_milli: 100, ip_access: false, env: [] }, cookie);
+  const c2 = await api("POST", "/api/apps", { upload_id: up2.id, name: "hello-static", memory_mb: 128, ip_access: false, env: [] }, cookie);
   check(c2.status === 201, `create static ${c2.status}`);
   check(up2.report.language === "go", `upload language ${up2.report.language}`);
   await page.goto(`${srv.url}/#/apps/${c2.body.app.id}`);

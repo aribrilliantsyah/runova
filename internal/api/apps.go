@@ -115,7 +115,6 @@ func (s *server) deployHeldInBackground(u store.User, appID, deploymentID int64,
 type usageBody struct {
 	Apps          int         `json:"apps"`
 	MemoryMB      int         `json:"memory_mb"`
-	CPUMilli      int         `json:"cpu_milli"`
 	DiskMB        int         `json:"disk_mb"`
 	DiskUsedBytes int64       `json:"disk_used_bytes"`
 	Quota         store.Quota `json:"quota"`
@@ -150,7 +149,7 @@ func (s *server) listApps(w http.ResponseWriter, r *http.Request) {
 		Apps    []store.App          `json:"apps"`
 		Usage   usageBody            `json:"usage"`
 		Summary map[int64]appSummary `json:"summary"`
-	}{list, usageBody{used.Apps, used.MemoryMB, used.CPUMilli, used.DiskMB, used.DiskUsedBytes, u.Quota}, summary})
+	}{list, usageBody{used.Apps, used.MemoryMB, used.DiskMB, used.DiskUsedBytes, u.Quota}, summary})
 }
 
 func (s *server) createApp(w http.ResponseWriter, r *http.Request) {

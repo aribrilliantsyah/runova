@@ -79,7 +79,7 @@ func TestIntegrationSavedFoldersSurviveRedeployAndRestart(t *testing.T) {
 		t.Fatal(err)
 	}
 	user, err := st.CreateUser(ctx, store.NewUser{Username: "itestfs", PasswordHash: "x", Role: store.RoleUser,
-		Quota: store.Quota{Apps: 3, MemoryMB: 1024, CPUMilli: 1000, Databases: 3, PGConnections: 20, DiskMB: 4096}}, 1)
+		Quota: store.Quota{Apps: 3, MemoryMB: 1024, Databases: 3, PGConnections: 20, DiskMB: 4096}}, 1)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -122,7 +122,7 @@ func TestIntegrationSavedFoldersSurviveRedeployAndRestart(t *testing.T) {
 		return id
 	}
 
-	app, d, err := svc.Create(ctx, user, apps.CreateInput{UploadID: upload(), Name: "starboom", MemoryMB: 128, CPUMilli: 100})
+	app, d, err := svc.Create(ctx, user, apps.CreateInput{UploadID: upload(), Name: "starboom", MemoryMB: 128})
 	if err != nil {
 		t.Fatal(err)
 	}

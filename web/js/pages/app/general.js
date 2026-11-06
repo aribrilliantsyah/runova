@@ -99,10 +99,10 @@ export function renderGeneral(page) {
     const ip = ipHost(page.info);
     const domains = page.domains || [];
     const mem = stats ? pct(stats.memory_bytes, stats.memory_limit || app.memory_mb * 1048576) : 0;
-    const cpuLimit = app.cpu_milli / 10;
-    const cpu = stats ? pct(stats.cpu_percent, cpuLimit) : 0;
+    const cores = stats?.online_cpus || 1;
+    const cpu = stats ? pct(stats.cpu_percent, cores * 100) : 0;
     const memLabel = stats ? `${fmtNum(stats.memory_bytes / 1048576)} / ${fmtMB(app.memory_mb)}` : `– / ${fmtMB(app.memory_mb)}`;
-    const cpuLabel = stats ? `${fmtNum(stats.cpu_percent / 100)} / ${fmtNum(app.cpu_milli / 1000)} core` : `– / ${fmtNum(app.cpu_milli / 1000)} core`;
+    const cpuLabel = stats ? `${fmtNum(Math.round(stats.cpu_percent) / 100)} dari ${cores} core server` : "– core, dipakai bersama";
     const disk = diskMeter(app);
     const diskRow = h("div", { class: disk.tone === "full" ? "disk-full" : "" }, h("div", { class: "t" }, h("b", {}, icon("hard-drive"), "Disk"), h("span", {}, disk.text)), bar(disk.percent, { hiAt: 80 }));
 

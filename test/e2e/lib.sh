@@ -120,7 +120,7 @@ build_spring() {
 create_app() {
 	local jar=$1 up=$2 name=$3 extra=$4
 	req "$jar" POST /api/apps "$(jq -nc --arg up "$up" --arg n "$name" --argjson extra "$extra" \
-		'{upload_id: $up, name: $n, internal_port: 8080, memory_mb: 128, cpu_milli: 250, ip_access: true, env: []} + $extra')"
+		'{upload_id: $up, name: $n, internal_port: 8080, memory_mb: 128, ip_access: true, env: []} + $extra')"
 	expect 201
 	APP_ID=$(jq -r .app.id <<<"$BODY")
 	IP_PORT=$(jq -r .app.ip_port <<<"$BODY")

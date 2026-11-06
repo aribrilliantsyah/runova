@@ -253,8 +253,8 @@ ALTER TABLE apps ADD COLUMN database_id INTEGER NULL REFERENCES databases ON DEL
 			if err := runMigrate(t, db, embeddedMigrations(), path); err != nil {
 				t.Fatal(err)
 			}
-			if v := version(t, db); v != 5 {
-				t.Fatalf("user_version = %d, want 5 (adopted as 1, then 0002 through 0005 applied)", v)
+			if _, latest, _ := SchemaVersion(path); version(t, db) != latest {
+				t.Fatalf("user_version = %d, want %d (adopted as 1, then 0002 onwards applied)", version(t, db), latest)
 			}
 			if n := count(t, db, `SELECT count(*) FROM users WHERE username = 'budi'`); n != 1 {
 				t.Fatal("user lost")
@@ -462,8 +462,8 @@ func TestMigration0002KeepsVersion1Data(t *testing.T) {
 	if err := runMigrate(t, db, embeddedMigrations(), path); err != nil {
 		t.Fatal(err)
 	}
-	if v := version(t, db); v != 5 {
-		t.Fatalf("user_version = %d, want 5", v)
+	if v := version(t, db); v < 5 {
+		t.Fatalf("user_version = %d, want at least 5", v)
 	}
 	if n := count(t, db, `SELECT count(*) FROM domains WHERE app_id = 1 AND hosting_domain_id IS NULL AND label = '' AND host IN ('billing.budi.com', 'www.budi.com')`); n != 2 {
 		t.Fatalf("free domains kept = %d, want 2", n)
@@ -482,5 +482,74 @@ func TestMigration0002KeepsVersion1Data(t *testing.T) {
 	}
 	if _, err := db.Exec(`DELETE FROM hosting_domains WHERE id = 1`); err == nil {
 		t.Fatal("deleting a hosting domain that subdomains use must fail (ON DELETE RESTRICT)")
+	}
+}
+
+// columns lists the column names of table.
+func columns(t *testing.T, db *sql.DB, table string) []string {
+	t.Helper()
+	rows, err := db.Query(`SELECT name FROM pragma_table_info(?)`, table)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer rows.Close()
+	var out []string
+	for rows.Next() {
+		var n string
+		if err := rows.Scan(&n); err != nil {
+			t.Fatal(err)
+		}
+		out = append(out, n)
+	}
+	return out
+}
+
+func TestMigration0006DropsCPUColumnsAndKeepsData(t *testing.T) {
+	db, path := rawDB(t)
+	upTo5 := fstest.MapFS{}
+	for i, name := range []string{"0001_init.sql", "0002_hosting_domains.sql", "0003_activity_search.sql", "0004_deploy_trace.sql", "0005_app_storage.sql"} {
+		body, err := fs.ReadFile(embeddedMigrations(), name)
+		if err != nil {
+			t.Fatalf("migration %d: %v", i+1, err)
+		}
+		upTo5[name] = &fstest.MapFile{Data: body}
+	}
+	if err := runMigrate(t, db, upTo5, path); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec(`
+		INSERT INTO users(id, username, password_hash, role, quota_apps, quota_memory_mb, quota_cpu_milli, quota_databases, quota_pg_connections, quota_disk_mb, created_at)
+			VALUES(1, 'budi', 'x', 'user', 3, 1536, 2000, 2, 20, 4096, 7);
+		INSERT INTO apps(id, user_id, name, kind, internal_port, ip_port, memory_mb, cpu_milli, status, created_at, folders, disk_mb, disk_used_bytes)
+			VALUES(1, 1, 'billing', 'jar', 8080, 20000, 512, 500, 'running', 9, '[{"path":"/data","dir":"data"}]', 256, 1234);
+		INSERT INTO domains(app_id, host, status, created_at) VALUES(1, 'billing.budi.com', 'active', 5);
+	`); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := runMigrate(t, db, embeddedMigrations(), path); err != nil {
+		t.Fatal(err)
+	}
+	if v := version(t, db); v != 6 {
+		t.Fatalf("user_version = %d, want 6", v)
+	}
+	for table, gone := range map[string]string{"users": "quota_cpu_milli", "apps": "cpu_milli"} {
+		for _, c := range columns(t, db, table) {
+			if c == gone {
+				t.Fatalf("%s still has column %s", table, gone)
+			}
+		}
+	}
+	if n := count(t, db, `SELECT count(*) FROM users WHERE id = 1 AND username = 'budi' AND quota_apps = 3 AND quota_memory_mb = 1536 AND quota_databases = 2 AND quota_pg_connections = 20 AND quota_disk_mb = 4096 AND created_at = 7`); n != 1 {
+		t.Fatal("user row changed by the migration")
+	}
+	if n := count(t, db, `SELECT count(*) FROM apps WHERE id = 1 AND user_id = 1 AND name = 'billing' AND kind = 'jar' AND memory_mb = 512 AND status = 'running' AND disk_mb = 256 AND disk_used_bytes = 1234 AND folders = '[{"path":"/data","dir":"data"}]'`); n != 1 {
+		t.Fatal("app row changed by the migration")
+	}
+	if n := count(t, db, `SELECT count(*) FROM domains WHERE app_id = 1`); n != 1 {
+		t.Fatalf("domains of the app = %d, want 1", n)
+	}
+	if got := backups(t, path); len(got) != 1 || !strings.Contains(got[0], ".bak-v5-") {
+		t.Fatalf("backups = %v, want one copy of schema 5", got)
 	}
 }

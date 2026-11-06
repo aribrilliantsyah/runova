@@ -27,7 +27,7 @@ try {
   const form = new FormData();
   form.append("file", new Blob([fs.readFileSync(buildSampleJar(tmp))]), "billing-api-2.4.1.jar");
   const up = await (await fetch(`${srv.url}/api/uploads`, { method: "POST", headers: { cookie }, body: form })).json();
-  const c = await (await fetch(`${srv.url}/api/apps`, { method: "POST", headers: { cookie, "Content-Type": "application/json" }, body: JSON.stringify({ upload_id: up.id, name: "billing-api", java_version: 21, memory_mb: 512, cpu_milli: 500, env: [{ name: "JWT_SECRET", value: "x", secret: true }, { name: "DB_PASSWORD", value: "x", secret: true }] }) })).json();
+  const c = await (await fetch(`${srv.url}/api/apps`, { method: "POST", headers: { cookie, "Content-Type": "application/json" }, body: JSON.stringify({ upload_id: up.id, name: "billing-api", java_version: 21, memory_mb: 512, env: [{ name: "JWT_SECRET", value: "x", secret: true }, { name: "DB_PASSWORD", value: "x", secret: true }] }) })).json();
   const id = c.app.id;
 
   await login(page, srv.url, "admin", srv.adminPassword);

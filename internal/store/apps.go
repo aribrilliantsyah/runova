@@ -58,7 +58,6 @@ type App struct {
 	IPPort              int           `json:"ip_port"`
 	IPAccess            bool          `json:"ip_access"`
 	MemoryMB            int           `json:"memory_mb"`
-	CPUMilli            int           `json:"cpu_milli"`
 	Status              AppStatus     `json:"status"`
 	CurrentDeploymentID *int64        `json:"current_deployment_id"`
 	DeployMode          string        `json:"deploy_mode"`
@@ -119,13 +118,13 @@ type Deployment struct {
 	FinishedAt   int64        `json:"finished_at"`
 }
 
-const appCols = `id, user_id, name, kind, java_version, jvm_opts, internal_port, ip_port, ip_access, memory_mb, cpu_milli, status, current_deployment_id, deploy_mode, created_at, database_id, folders, disk_mb, disk_used_bytes, disk_scanned_at, disk_level`
+const appCols = `id, user_id, name, kind, java_version, jvm_opts, internal_port, ip_port, ip_access, memory_mb, status, current_deployment_id, deploy_mode, created_at, database_id, folders, disk_mb, disk_used_bytes, disk_scanned_at, disk_level`
 
 func scanApp(r scanner) (App, error) {
 	var a App
 	var rawFolders string
 	err := r.Scan(&a.ID, &a.UserID, &a.Name, &a.Kind, &a.JavaVersion, &a.JVMOpts, &a.InternalPort, &a.IPPort, &a.IPAccess,
-		&a.MemoryMB, &a.CPUMilli, &a.Status, &a.CurrentDeploymentID, &a.DeployMode, &a.CreatedAt, &a.DatabaseID,
+		&a.MemoryMB, &a.Status, &a.CurrentDeploymentID, &a.DeployMode, &a.CreatedAt, &a.DatabaseID,
 		&rawFolders, &a.DiskMB, &a.DiskUsedBytes, &a.DiskScannedAt, &a.DiskLevel)
 	if err != nil {
 		return a, err
@@ -148,9 +147,9 @@ func encodeFolders(list []folders.Folder) string {
 // CreateApp inserts a; ErrConflict when the name is taken for that user or the IP port is in use.
 func (s *Store) CreateApp(ctx context.Context, a App) (App, error) {
 	res, err := s.db.ExecContext(ctx,
-		`INSERT INTO apps(user_id, name, kind, java_version, jvm_opts, internal_port, ip_port, ip_access, memory_mb, cpu_milli, status, deploy_mode, created_at, database_id, folders, disk_mb)
-		 VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
-		a.UserID, a.Name, a.Kind, a.JavaVersion, a.JVMOpts, a.InternalPort, a.IPPort, a.IPAccess, a.MemoryMB, a.CPUMilli, a.Status, a.DeployMode, a.CreatedAt, a.DatabaseID, encodeFolders(a.Folders), a.DiskMB)
+		`INSERT INTO apps(user_id, name, kind, java_version, jvm_opts, internal_port, ip_port, ip_access, memory_mb, status, deploy_mode, created_at, database_id, folders, disk_mb)
+		 VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+		a.UserID, a.Name, a.Kind, a.JavaVersion, a.JVMOpts, a.InternalPort, a.IPPort, a.IPAccess, a.MemoryMB, a.Status, a.DeployMode, a.CreatedAt, a.DatabaseID, encodeFolders(a.Folders), a.DiskMB)
 	if isUnique(err) {
 		return App{}, ErrConflict
 	}
@@ -206,7 +205,6 @@ type AppPatch struct {
 	JVMOpts      *string
 	InternalPort *int
 	MemoryMB     *int
-	CPUMilli     *int
 	IPAccess     *bool
 	DeployMode   *string
 	DiskMB       *int
@@ -232,9 +230,6 @@ func (s *Store) UpdateApp(ctx context.Context, id int64, p AppPatch) (App, error
 		if p.MemoryMB != nil {
 			a.MemoryMB = *p.MemoryMB
 		}
-		if p.CPUMilli != nil {
-			a.CPUMilli = *p.CPUMilli
-		}
 		if p.IPAccess != nil {
 			a.IPAccess = *p.IPAccess
 		}
@@ -251,8 +246,8 @@ func (s *Store) UpdateApp(ctx context.Context, id int64, p AppPatch) (App, error
 			}
 		}
 		if _, err := tx.ExecContext(ctx,
-			`UPDATE apps SET java_version=?, jvm_opts=?, internal_port=?, memory_mb=?, cpu_milli=?, ip_access=?, deploy_mode=?, disk_mb=?, folders=? WHERE id=?`,
-			a.JavaVersion, a.JVMOpts, a.InternalPort, a.MemoryMB, a.CPUMilli, a.IPAccess, a.DeployMode, a.DiskMB, encodeFolders(a.Folders), id); err != nil {
+			`UPDATE apps SET java_version=?, jvm_opts=?, internal_port=?, memory_mb=?, ip_access=?, deploy_mode=?, disk_mb=?, folders=? WHERE id=?`,
+			a.JavaVersion, a.JVMOpts, a.InternalPort, a.MemoryMB, a.IPAccess, a.DeployMode, a.DiskMB, encodeFolders(a.Folders), id); err != nil {
 			return fmt.Errorf("update app: %w", err)
 		}
 		out = a
@@ -596,16 +591,16 @@ func (s *Store) UsedIPPorts(ctx context.Context) (map[int]bool, error) {
 
 // AppUsage is what a user's apps have allocated, and the disk they used at the last scans.
 type AppUsage struct {
-	Apps, MemoryMB, CPUMilli, DiskMB int
-	DiskUsedBytes                    int64
+	Apps, MemoryMB, DiskMB int
+	DiskUsedBytes          int64
 }
 
-// UserUsage sums the user's apps and their allocated memory, CPU and disk.
+// UserUsage sums the user's apps and their allocated memory and disk.
 func (s *Store) UserUsage(ctx context.Context, userID int64) (AppUsage, error) {
 	var u AppUsage
 	err := s.db.QueryRowContext(ctx,
-		`SELECT count(*), coalesce(sum(memory_mb), 0), coalesce(sum(cpu_milli), 0), coalesce(sum(disk_mb), 0), coalesce(sum(disk_used_bytes), 0) FROM apps WHERE user_id = ?`, userID).
-		Scan(&u.Apps, &u.MemoryMB, &u.CPUMilli, &u.DiskMB, &u.DiskUsedBytes)
+		`SELECT count(*), coalesce(sum(memory_mb), 0), coalesce(sum(disk_mb), 0), coalesce(sum(disk_used_bytes), 0) FROM apps WHERE user_id = ?`, userID).
+		Scan(&u.Apps, &u.MemoryMB, &u.DiskMB, &u.DiskUsedBytes)
 	if err != nil {
 		err = fmt.Errorf("user usage: %w", err)
 	}

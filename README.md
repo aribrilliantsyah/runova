@@ -27,7 +27,7 @@
 - **Your own domain, HTTPS included.** Give an app an address like `billing.yourcompany.com`, or let your team pick names under a domain you registered once. Certificates are automatic.
 - **A database for every user.** PostgreSQL is installed for you. Each user creates databases in the panel, and the connection details are filled into the app automatically.
 - **Files and queries in the browser.** Browse, upload and download an app's files, look at tables, and run SQL without installing anything.
-- **Everyone stays in their lane.** Each app runs in its own container with memory, CPU and disk limits. Users only see their own apps, and the admin sets quotas.
+- **Everyone stays in their lane.** Each app runs in its own container with memory and disk limits, sharing the server's CPU cores. Users only see their own apps, and the admin sets quotas.
 - **See what happened.** Deploy steps with timings, live logs, a terminal, rollback to an earlier version, and an activity log.
 - **One command to update.** `sudo runova update`, and `sudo runova rollback` if you change your mind.
 

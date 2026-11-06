@@ -56,7 +56,7 @@ func (e *env) user(t *testing.T, name string, role store.Role) store.User {
 	t.Helper()
 	u, err := e.st.CreateUser(context.Background(), store.NewUser{
 		Username: name, PasswordHash: "h", Role: role,
-		Quota: store.Quota{Apps: 3, MemoryMB: 1024, CPUMilli: 1000, Databases: 3, PGConnections: 20, DiskMB: 4096},
+		Quota: store.Quota{Apps: 3, MemoryMB: 1024, Databases: 3, PGConnections: 20, DiskMB: 4096},
 	}, 1000)
 	if err != nil {
 		t.Fatal(err)
@@ -80,7 +80,7 @@ func (e *env) app(t *testing.T, u store.User, name string, port int, dbID *int64
 	t.Helper()
 	a, err := e.st.CreateApp(context.Background(), store.App{
 		UserID: u.ID, Name: name, Kind: artifact.KindStatic, InternalPort: 8080, IPPort: port,
-		MemoryMB: 256, CPUMilli: 250, Status: store.AppStopped, DeployMode: "stopstart", CreatedAt: 1, DatabaseID: dbID,
+		MemoryMB: 256, Status: store.AppStopped, DeployMode: "stopstart", CreatedAt: 1, DatabaseID: dbID,
 	})
 	if err != nil {
 		t.Fatal(err)

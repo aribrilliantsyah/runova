@@ -10,11 +10,11 @@ import (
 	"runova/internal/store"
 )
 
-func newApp(t *testing.T, s *store.Store, user store.User, name string, ipPort, mem, cpu int) store.App {
+func newApp(t *testing.T, s *store.Store, user store.User, name string, ipPort, mem int) store.App {
 	t.Helper()
 	a, err := s.CreateApp(context.Background(), store.App{
 		UserID: user.ID, Name: name, Kind: artifact.KindStatic, InternalPort: 8080,
-		IPPort: ipPort, MemoryMB: mem, CPUMilli: cpu, Status: store.AppStopped, DeployMode: "stopstart", CreatedAt: 1000,
+		IPPort: ipPort, MemoryMB: mem, Status: store.AppStopped, DeployMode: "stopstart", CreatedAt: 1000,
 	})
 	if err != nil {
 		t.Fatalf("CreateApp(%s): %v", name, err)
@@ -38,12 +38,12 @@ func TestAppNameUniquePerUser(t *testing.T) {
 	s := newStore(t)
 	a := mustUser(t, s, "andi", store.RoleUser)
 	b := mustUser(t, s, "budi", store.RoleUser)
-	newApp(t, s, a, "billing", 20000, 128, 100)
+	newApp(t, s, a, "billing", 20000, 128)
 	_, err := s.CreateApp(context.Background(), store.App{UserID: a.ID, Name: "billing", Kind: artifact.KindJar, IPPort: 20001, Status: store.AppStopped, DeployMode: "stopstart"})
 	if !errors.Is(err, store.ErrConflict) {
 		t.Fatalf("same user, same name: %v, want ErrConflict", err)
 	}
-	newApp(t, s, b, "billing", 20001, 128, 100)
+	newApp(t, s, b, "billing", 20001, 128)
 	_, err = s.CreateApp(context.Background(), store.App{UserID: b.ID, Name: "other", Kind: artifact.KindJar, IPPort: 20000, Status: store.AppStopped, DeployMode: "stopstart"})
 	if !errors.Is(err, store.ErrConflict) {
 		t.Fatalf("duplicate ip port: %v, want ErrConflict", err)
@@ -53,8 +53,8 @@ func TestAppNameUniquePerUser(t *testing.T) {
 func TestDeploymentNumbering(t *testing.T) {
 	s := newStore(t)
 	u := mustUser(t, s, "andi", store.RoleUser)
-	a1 := newApp(t, s, u, "one", 20000, 128, 100)
-	a2 := newApp(t, s, u, "two", 20001, 128, 100)
+	a1 := newApp(t, s, u, "one", 20000, 128)
+	a2 := newApp(t, s, u, "two", 20001, 128)
 	var got []int
 	for range 3 {
 		got = append(got, newDeployment(t, s, a1).Number)
@@ -78,7 +78,7 @@ func TestPruneKeepsActive(t *testing.T) {
 	ctx := context.Background()
 	s := newStore(t)
 	u := mustUser(t, s, "andi", store.RoleUser)
-	app := newApp(t, s, u, "one", 20000, 128, 100)
+	app := newApp(t, s, u, "one", 20000, 128)
 	var ds []store.Deployment
 	for range 12 {
 		ds = append(ds, newDeployment(t, s, app))
@@ -108,7 +108,7 @@ func TestActivateDeploymentSupersedes(t *testing.T) {
 	ctx := context.Background()
 	s := newStore(t)
 	u := mustUser(t, s, "andi", store.RoleUser)
-	app := newApp(t, s, u, "one", 20000, 128, 100)
+	app := newApp(t, s, u, "one", 20000, 128)
 	d1, d2 := newDeployment(t, s, app), newDeployment(t, s, app)
 	for _, d := range []store.Deployment{d1, d2} {
 		if err := s.ActivateDeployment(ctx, app.ID, d.ID); err != nil {
@@ -128,7 +128,7 @@ func TestUsedHostPorts(t *testing.T) {
 	ctx := context.Background()
 	s := newStore(t)
 	u := mustUser(t, s, "andi", store.RoleUser)
-	app := newApp(t, s, u, "one", 20000, 128, 100)
+	app := newApp(t, s, u, "one", 20000, 128)
 	for i, st := range []store.DeployStatus{store.DeployPending, store.DeployRunning, store.DeployActive, store.DeploySuperseded, store.DeployFailed} {
 		d := newDeployment(t, s, app)
 		port := 30000 + i
@@ -153,12 +153,12 @@ func TestUserUsage(t *testing.T) {
 	s := newStore(t)
 	u := mustUser(t, s, "andi", store.RoleUser)
 	other := mustUser(t, s, "budi", store.RoleUser)
-	newApp(t, s, u, "one", 20000, 256, 500)
-	newApp(t, s, u, "two", 20001, 512, 250)
-	newApp(t, s, other, "three", 20002, 1024, 1000)
+	newApp(t, s, u, "one", 20000, 256)
+	newApp(t, s, u, "two", 20001, 512)
+	newApp(t, s, other, "three", 20002, 1024)
 	got, err := s.UserUsage(context.Background(), u.ID)
-	if err != nil || got.Apps != 2 || got.MemoryMB != 768 || got.CPUMilli != 750 {
-		t.Fatalf("usage = %+v, %v; want 2, 768, 750", got, err)
+	if err != nil || got.Apps != 2 || got.MemoryMB != 768 {
+		t.Fatalf("usage = %+v, %v; want 2, 768", got, err)
 	}
 	got, err = s.UserUsage(context.Background(), 999)
 	if err != nil || got != (store.AppUsage{}) {
@@ -171,7 +171,7 @@ func TestCascadeOnUserDelete(t *testing.T) {
 	s := newStore(t)
 	mustUser(t, s, "admin", store.RoleAdmin)
 	u := mustUser(t, s, "andi", store.RoleUser)
-	app := newApp(t, s, u, "one", 20000, 128, 100)
+	app := newApp(t, s, u, "one", 20000, 128)
 	d := newDeployment(t, s, app)
 	if err := s.ReplaceEnv(ctx, app.ID, []store.EnvEntry{{Name: "A", Value: "1"}}); err != nil {
 		t.Fatal(err)
@@ -229,7 +229,7 @@ func TestEnvReplace(t *testing.T) {
 	ctx := context.Background()
 	s := newStore(t)
 	u := mustUser(t, s, "andi", store.RoleUser)
-	app := newApp(t, s, u, "one", 20000, 128, 100)
+	app := newApp(t, s, u, "one", 20000, 128)
 	s.ReplaceEnv(ctx, app.ID, []store.EnvEntry{{Name: "B", Value: "2"}, {Name: "A", Value: "sealed", Secret: true}})
 	s.ReplaceEnv(ctx, app.ID, []store.EnvEntry{{Name: "C", Value: "3"}, {Name: "A", Value: "sealed2", Secret: true}})
 	env, err := s.Env(ctx, app.ID)

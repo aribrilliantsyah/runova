@@ -39,6 +39,8 @@ type Engine interface {
 	Events(ctx context.Context, labelFilter map[string]string) (<-chan Event, <-chan error)
 	Exec(ctx context.Context, id string, user string, cmd []string) (ExecSession, error)
 	Stats(ctx context.Context, id string) (Stats, error)
+	// ClearCPULimit removes a CPU cap set on a container by an older Runova.
+	ClearCPULimit(ctx context.Context, id string) error
 }
 
 // ContainerSpec describes a container. The client always applies the security
@@ -57,7 +59,6 @@ type ContainerSpec struct {
 	Binds        []string
 	Tmpfs        map[string]string
 	MemoryBytes  int64
-	NanoCPUs     int64
 	ReadOnly     bool
 	ExtraHosts   []string
 }
@@ -98,9 +99,12 @@ type Event struct {
 }
 
 type Stats struct {
-	MemoryBytes uint64  `json:"memory_bytes"`
-	MemoryLimit uint64  `json:"memory_limit"`
-	CPUPercent  float64 `json:"cpu_percent"`
+	MemoryBytes uint64 `json:"memory_bytes"`
+	MemoryLimit uint64 `json:"memory_limit"`
+	// CPUPercent is percent of one core (200 = two cores busy). CPU is shared,
+	// so the ceiling is OnlineCPUs × 100, the whole server.
+	CPUPercent float64 `json:"cpu_percent"`
+	OnlineCPUs int     `json:"online_cpus"`
 }
 
 // ExecSession is an interactive TTY attached to an exec instance.

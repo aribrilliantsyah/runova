@@ -223,7 +223,8 @@ type (
 
 // ErrInsecureSpec is returned (wrapped) by CreateContainer for a spec that
 // lacks what every Runova container must have: a non-root numeric user, a
-// memory and CPU limit, and a read-only root filesystem.
+// memory limit, and a read-only root filesystem. CPU is shared by all apps
+// with the engine's default weight, so there is no CPU limit to require.
 var ErrInsecureSpec = errors.New("docker: insecure container spec")
 
 // checkSpec refuses specs that would weaken the isolation policy. The client
@@ -235,8 +236,6 @@ func checkSpec(spec ContainerSpec) error {
 		return fmt.Errorf("%w: user %q is not a non-root uid[:gid]", ErrInsecureSpec, spec.User)
 	case spec.MemoryBytes <= 0:
 		return fmt.Errorf("%w: no memory limit", ErrInsecureSpec)
-	case spec.NanoCPUs <= 0:
-		return fmt.Errorf("%w: no cpu limit", ErrInsecureSpec)
 	case !spec.ReadOnly:
 		return fmt.Errorf("%w: root filesystem must be read-only", ErrInsecureSpec)
 	}
@@ -280,7 +279,6 @@ func (c *Client) CreateContainer(ctx context.Context, name string, spec Containe
 		"ReadonlyRootfs": spec.ReadOnly,
 		"Memory":         spec.MemoryBytes,
 		"MemorySwap":     spec.MemoryBytes,
-		"NanoCpus":       spec.NanoCPUs,
 		"PidsLimit":      512,
 		"Init":           true,
 		"CapDrop":        []string{"ALL"},
@@ -307,6 +305,14 @@ func (c *Client) CreateContainer(ctx context.Context, name string, spec Containe
 		return "", err
 	}
 	return out.Id, nil
+}
+
+// ClearCPULimit lifts the CPU cap of a container created by a Runova that still
+// limited CPU per app; the container keeps running. The Engine ignores a zero
+// NanoCpus in an update (zero means "unchanged"), so the cap is removed through
+// CpuQuota -1, which the Engine stores and reapplies on every restart.
+func (c *Client) ClearCPULimit(ctx context.Context, id string) error {
+	return c.call(ctx, http.MethodPost, "/containers/"+id+"/update", nil, map[string]int{"CpuQuota": -1}, nil)
 }
 
 func (c *Client) StartContainer(ctx context.Context, id string) error {
@@ -565,12 +571,12 @@ func (c *Client) Stats(ctx context.Context, id string) (Stats, error) {
 	st := Stats{MemoryBytes: mem, MemoryLimit: out.MemoryStats.Limit}
 	cpuDelta := float64(out.CPUStats.Usage.Total) - float64(out.PreCPUStats.Usage.Total)
 	sysDelta := float64(out.CPUStats.System) - float64(out.PreCPUStats.System)
+	st.OnlineCPUs = int(out.CPUStats.Online)
+	if st.OnlineCPUs == 0 {
+		st.OnlineCPUs = 1
+	}
 	if cpuDelta > 0 && sysDelta > 0 {
-		cpus := float64(out.CPUStats.Online)
-		if cpus == 0 {
-			cpus = 1
-		}
-		st.CPUPercent = cpuDelta * cpus * 100 / sysDelta
+		st.CPUPercent = cpuDelta * float64(st.OnlineCPUs) * 100 / sysDelta
 	}
 	return st, nil
 }

@@ -4,7 +4,7 @@
 <body>
 <script type="module">
 import { test, assert, eq, run } from "/test/harness.js";
-import { h, icon, fmtBytes, fmtMB, fmtCPU, fmtTime, pct } from "/assets/js/dom.js";
+import { h, icon, fmtBytes, fmtMB, fmtSize, fmtTime, pct } from "/assets/js/dom.js";
 import { labelError, hostingNameError, parseDotenv, suggestName, appNameError, envError, uploadError, memoryChoices, diskChoices, folderError, workspaceLabel } from "/assets/js/validate.js";
 import { splitHost } from "/assets/js/components/guide.js";
 import { kindLogo, runtimeSub } from "/assets/js/kinds.js";
@@ -69,9 +69,19 @@ test("format helpers use Indonesian decimal comma", () => {
   eq(fmtBytes(44668928), "42,6 MB");
   eq(fmtMB(512), "512 MB");
   eq(fmtMB(1536), "1,5 GB");
-  eq(fmtCPU(500), "0,5 core");
+  eq(fmtMB(30064), "29,4 GB");
+  eq(fmtMB(1024), "1 GB");
   eq(pct(1, 4), 25);
   eq(pct(5, 0), 0);
+});
+
+test("fmtSize: MB or GB with one decimal, never bytes", () => {
+  eq(fmtSize(0), "0 MB");
+  eq(fmtSize(612), "< 1 MB");
+  eq(fmtSize(44668928), "43 MB");
+  eq(fmtSize(8.04 * 1024 ** 3), "8,0 GB");
+  eq(fmtSize(29.36 * 1024 ** 3), "29,4 GB");
+  eq(fmtSize(-1), "–");
 });
 
 test("fmtTime is relative then absolute", () => {

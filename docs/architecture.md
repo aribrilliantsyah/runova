@@ -9,7 +9,7 @@ Technical background: what runs where, how isolation, quotas, databases and file
 Platforms like Vercel or Railway build applications from source code and run them in their cloud. Many internal teams already have finished build artifacts from their own pipelines (`.jar` files from Maven, Go or Rust binaries from CI) and simply need a single place on their office server to run them cleanly:
 
 - **Upload, don't build.** Runova does not touch source code. It inspects uploaded files: file type, minimum required Java version, port, and referenced environment variables.
-- **Isolated per user.** Each application runs in its own Docker container with memory and CPU limits. Users cannot see or touch applications belonging to other users.
+- **Isolated per user.** Each application runs in its own Docker container with a memory limit; all apps share the server's CPU cores with equal weight. Users cannot see or touch applications belonging to other users.
 - **Test via IP first, then assign a domain.** Applications can be accessed at `server-IP:port` for testing. An admin registers a wildcard domain once, after which users can assign their application an address like `name.registered-domain` without managing DNS; Caddy automatically provisions HTTPS certificates, and IP access can be closed.
 
 ## What can run
@@ -32,7 +32,7 @@ Deployment is divided into four steps:
 1. **Upload.** Drag and drop the file onto the page. Inspection results appear as a checklist.
 2. **Runtime.** Select Java version (for `.jar`), JVM options, and the port the application listens on.
 3. **Environment.** Variables referenced by the application appear as a form. Secret values are stored encrypted.
-4. **Resources & access.** Allocate memory and CPU from remaining account quota. Enable IP access for testing, and set a domain when ready.
+4. **Resources & access.** Give the app memory and disk from the remaining account quota (CPU is shared, not chosen). Enable IP access for testing, and set a domain when ready.
 
 The **Deploy** button is only enabled after all required fields are satisfied. The summary panel indicates what is still missing.
 
@@ -50,7 +50,7 @@ Every application has a **workspace**, shown in the panel as `<app>/` (for examp
 
 - **Admin** registers users. There is no self-registration.
 - Each user only sees and manages their own applications.
-- Admins configure quotas per user: **number of applications, memory, CPU, number of databases** (default 3) **and disk** (default 1 GB). Users allocate that quota across their applications; each app gets a disk size at deploy (256 MB by default, changeable in **Lanjutan**).
+- Admins configure quotas per user: **number of applications, memory, number of databases** (default 3) **and disk** (default 1 GB). Users share that quota out across their applications; CPU is not part of the quota, every app uses all cores; each app gets a disk size at deploy (256 MB by default, changeable in **Lanjutan**).
 - Disk counts everything in an app's workspace (its saved folders included); artifacts, logs and PostgreSQL databases do not count. Runova measures every workspace every 5 minutes and before each deploy. At 80% the owner is warned; at 100% the app shows **Disk penuh**, the owner gets an error notification and new deploys of that app are refused until files are deleted or the size is raised. The running app is **not** stopped, so no data is lost. This is a soft limit: an app can write past it until the next measurement. A hard limit needs a filesystem with project quotas (XFS `prjquota`), which stock Ubuntu installs do not have; that is future work. Admins see server disk use and the apps' share on the **Server** page.
 - Applications exceeding their memory limit are killed and restarted by Docker without affecting other applications.
 
@@ -70,7 +70,7 @@ Runova installs **PostgreSQL 18** on the same server (official Ubuntu 26.04 pack
 |---|---|
 | Target server | Ubuntu Server 26.04 LTS, `linux/amd64` |
 | Runova | Single Go binary, embedded frontend |
-| App isolation | Docker, one container per application, memory and CPU limits |
+| App isolation | Docker, one container per application, memory limit, shared CPU with equal weight |
 | Domains & HTTPS | Caddy, automated certificates |
 | Database | PostgreSQL 18 from Ubuntu apt, systemd service on the host. Only accepts connections from Docker networks and networks allowed by admin |
 | IP access | Containers only bind to `127.0.0.1`. On: Caddy opens the application IP access port and forwards traffic. Off: the port is closed |

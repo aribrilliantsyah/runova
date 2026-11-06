@@ -20,9 +20,9 @@ func TestListUsersPagingFilterSort(t *testing.T) {
 	e.addUser("sari", "sari-password-1", store.RoleUser)
 	e.addUser("tono", "tono-password-1", store.RoleAdmin)
 	budi := e.login("budi", "budi-password-1")
-	id, _ := budi.createApp("billing", obj{"memory_mb": 256, "cpu_milli": 250})
+	id, _ := budi.createApp("billing", obj{"memory_mb": 256})
 	budi.waitStatus(id, "running")
-	budi.createApp("worker", obj{"memory_mb": 128, "cpu_milli": 100})
+	budi.createApp("worker", obj{"memory_mb": 128})
 	admin := e.login("admin", adminPassword)
 
 	get := func(query string) userPage {
@@ -47,7 +47,7 @@ func TestListUsersPagingFilterSort(t *testing.T) {
 	if p.Total != 4 || p.Limit != 25 || p.Roles.Admin != 2 || p.Roles.User != 2 {
 		t.Fatalf("default page = total %d limit %d roles %+v", p.Total, p.Limit, p.Roles)
 	}
-	if b := p.Items[1]; b.Username != "budi" || b.Usage.Apps != 2 || b.Usage.MemoryMB != 384 || b.Usage.CPUMilli != 350 || b.LastLoginAt == 0 {
+	if b := p.Items[1]; b.Username != "budi" || b.Usage.Apps != 2 || b.Usage.MemoryMB != 384 || b.LastLoginAt == 0 {
 		t.Fatalf("budi row = %+v", b)
 	}
 	if s := p.Items[2]; s.Username != "sari" || s.Usage != (store.Usage{}) || s.LastLoginAt != 0 {

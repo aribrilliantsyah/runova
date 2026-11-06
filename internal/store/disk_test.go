@@ -15,7 +15,7 @@ func TestAppDiskAndFoldersRoundTrip(t *testing.T) {
 	s := newStore(t)
 	u := mustUser(t, s, "andi", store.RoleUser)
 	a, err := s.CreateApp(ctx, store.App{
-		UserID: u.ID, Name: "starboom", Kind: artifact.KindJar, InternalPort: 8080, IPPort: 20000, MemoryMB: 256, CPUMilli: 250,
+		UserID: u.ID, Name: "starboom", Kind: artifact.KindJar, InternalPort: 8080, IPPort: 20000, MemoryMB: 256,
 		DiskMB: 512, Folders: []folders.Folder{{Path: "storage", Dir: "storage"}, {Path: "/app/media", Dir: "media"}},
 		Status: store.AppStopped, DeployMode: "zero", CreatedAt: 1,
 	})
@@ -58,7 +58,7 @@ func TestAppDiskAndFoldersRoundTrip(t *testing.T) {
 func TestNewAppFoldersAreEmptyList(t *testing.T) {
 	s := newStore(t)
 	u := mustUser(t, s, "andi", store.RoleUser)
-	a := newApp(t, s, u, "one", 20000, 128, 100)
+	a := newApp(t, s, u, "one", 20000, 128)
 	got, _ := s.App(context.Background(), a.ID)
 	if got.Folders == nil || len(got.Folders) != 0 {
 		t.Fatalf("folders = %#v, want []", got.Folders)
@@ -71,7 +71,7 @@ func TestUserUsageCountsDisk(t *testing.T) {
 	u := mustUser(t, s, "andi", store.RoleUser)
 	for i, mb := range []int{256, 512} {
 		a, err := s.CreateApp(ctx, store.App{UserID: u.ID, Name: []string{"one", "two"}[i], Kind: artifact.KindStatic, IPPort: 20000 + i,
-			MemoryMB: 128, CPUMilli: 100, DiskMB: mb, Status: store.AppStopped, DeployMode: "zero"})
+			MemoryMB: 128, DiskMB: mb, Status: store.AppStopped, DeployMode: "zero"})
 		if err != nil {
 			t.Fatal(err)
 		}

@@ -91,7 +91,7 @@ scenario "4 deploy-jar"
 upload "$BUDI_JAR" "$SPRING_JAR"; up=$UP
 [[ $(jq -r .report.kind <<<"$BODY") == jar ]] || fail "laporan unggahan: $BODY"
 req "$BUDI_JAR" POST /api/apps "$(jq -nc --arg up "$up" \
-	'{upload_id: $up, name: "spring", java_version: 21, jvm_opts: "", internal_port: 8080, memory_mb: 512, cpu_milli: 500, ip_access: true,
+	'{upload_id: $up, name: "spring", java_version: 21, jvm_opts: "", internal_port: 8080, memory_mb: 512, ip_access: true,
 	  env: [{name: "DB_URL", value: "jdbc:postgresql://host.docker.internal/none", secret: false}]}')"
 expect 201
 SPRING_ID=$(jq -r .app.id <<<"$BODY")

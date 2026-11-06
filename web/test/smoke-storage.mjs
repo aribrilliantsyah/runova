@@ -324,8 +324,12 @@ try {
   await page.waitForSelector("tr[data-user='admin']");
   check((await page.locator("thead").innerText()).includes("Disk"), "users table has a Disk column");
   await page.goto(`${srv.url}/#/server`);
-  await page.waitForSelector(".stat:has-text('Disk server')");
-  check((await page.locator(".stat:has-text('Disk server')").innerText()).includes("dialokasikan"), "server disk names the apps' share");
+  await page.waitForSelector("[data-stat=disk-server]");
+  const serverDisk = await page.locator("[data-stat=disk-server]").innerText();
+  const appDisk = await page.locator("[data-stat=disk-apps]").innerText();
+  check(/terpakai dari \d+(,\d)? GB/.test(serverDisk) && !serverDisk.includes("aplikasi"), `server disk tile is only the server's disk: ${serverDisk}`);
+  check(/dibagikan ke \d+ aplikasi/.test(appDisk) && /terisi/.test(appDisk) && !/\d B\b/.test(appDisk), `app disk tile: shared, filled, no bare bytes: ${appDisk}`);
+  check(await page.locator("[data-stat=cpu]:has-text('CPU server')").isVisible(), "CPU tile is the server's CPU, not an allocation");
 } finally {
   await browser.close();
   const logs = srv.logs();
