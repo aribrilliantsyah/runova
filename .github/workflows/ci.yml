@@ -28,6 +28,7 @@ jobs:
           RUNOVA_DOCKER_TEST: "1"
           RUNOVA_PG_TEST: "1"
           RUNOVA_CADDY_TEST: "1"
-        run: go test -count=1 ./internal/docker ./internal/apps ./internal/pg ./internal/dbs ./internal/caddy
+        # -p 1: these packages share one Docker engine, and apps' Reconcile removes Runova-labelled containers it does not own.
+        run: go test -count=1 -p 1 ./internal/docker ./internal/apps ./internal/pg ./internal/dbs ./internal/caddy
       - name: installer tests (bats, shellcheck)
         run: test/bats.sh
