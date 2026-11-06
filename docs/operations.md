@@ -66,6 +66,20 @@ The database schema is also migrated automatically when Runova starts. Prior to 
 sudo -u runova env RUNOVA_DATA=/var/lib/runova runova db version
 ```
 
+## After a server reboot
+
+Nothing needs to be done by hand. The installer enables `docker`, `containerd` (when present), `caddy`, `postgresql` and `runova` with `systemctl enable`, so they start at boot, and `runova.service` starts after Docker.
+
+| What | Who brings it back |
+|---|---|
+| Panel, Caddy, PostgreSQL | systemd |
+| Applications whose status was **running** or **starting** | Runova, at start-up |
+| Applications **stopped** by a user, or **failed** (crash loop, did not become ready) | nobody: they stay down until someone presses Jalankan |
+
+Docker stops the containers at shutdown with SIGTERM. Most servers (Spring Boot, a Go server with signal handling) exit with code 0, and the `on-failure` restart policy never restarts an exit 0, so Docker alone does not bring them back. When Runova starts it looks at every app that ought to run whose container is stopped and starts it again: status `starting`, then `running` once its port opens, with the same wait as Jalankan (JAR time limits, OOM and restart detection). Apps are started one every 5 seconds, not all at once, so many JVMs do not fight for the CPU. Each revived app raises one notification ("Aplikasi … dinyalakan lagi setelah server dimulai ulang") and one Activity entry; an app that cannot be started ends up `failed` with an error notification. Containers are never recreated: a deleted container still marks the app failed ("deploy ulang").
+
+This happens once per start of Runova. A container that exits 0 while Runova is running is still treated as the app's own decision and marked stopped.
+
 ## Manual uninstall
 
 There is no uninstall command yet. Manual procedure (removes **all** Runova data, including applications and user databases):

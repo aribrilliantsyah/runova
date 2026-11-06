@@ -3,7 +3,9 @@ package apps_test
 import (
 	"context"
 	"errors"
+	"slices"
 	"strconv"
+	"sync"
 	"testing"
 	"time"
 
@@ -262,7 +264,7 @@ func TestReconcileOnStart(t *testing.T) {
 	}
 
 	want := map[int64]store.AppStatus{
-		live.ID: store.AppRunning, exited.ID: store.AppStopped, missing.ID: store.AppFailed,
+		live.ID: store.AppRunning, exited.ID: store.AppRunning, missing.ID: store.AppFailed,
 		failed.ID: store.AppFailed, userStopped.ID: store.AppStopped, never.ID: store.AppStopped,
 	}
 	for id, status := range want {
@@ -276,8 +278,8 @@ func TestReconcileOnStart(t *testing.T) {
 	if c, ok := e.engine.Container(liveID); !ok || !c.State.Running {
 		t.Error("the running container was disturbed")
 	}
-	if c, _ := e.engine.Container(activeContainer(t, e, exited)); c.State.Running {
-		t.Error("an exited container was started again; Docker's restart policy owns that")
+	if c, _ := e.engine.Container(activeContainer(t, e, exited)); !c.State.Running {
+		t.Error("an exited container of a running app was not started again")
 	}
 	for _, gone := range []dockertest.Container{orphan, stale} {
 		if _, ok := e.engine.Container(gone.ID); ok {
@@ -293,7 +295,8 @@ func TestReconcileOnStart(t *testing.T) {
 	for _, n := range list {
 		titles = append(titles, n.Title)
 	}
-	if len(titles) != 1 || titles[0] != "Container missing hilang; deploy ulang" {
+	slices.Sort(titles)
+	if len(titles) != 2 || titles[0] != "Aplikasi exited dinyalakan lagi setelah server dimulai ulang" || titles[1] != "Container missing hilang; deploy ulang" {
 		t.Fatalf("notifications = %v", titles)
 	}
 	if got, _ := e.store.App(ctx, missing.ID); got.CurrentDeploymentID != nil {
@@ -304,8 +307,8 @@ func TestReconcileOnStart(t *testing.T) {
 	if err := e.svc.Reconcile(ctx); err != nil {
 		t.Fatal(err)
 	}
-	if n, _ := e.store.UnreadCount(ctx, u.ID); n != 1 {
-		t.Errorf("second Reconcile notifications = %d, want 1", n)
+	if n, _ := e.store.UnreadCount(ctx, u.ID); n != 2 {
+		t.Errorf("second Reconcile notifications = %d, want 2", n)
 	}
 }
 
@@ -458,5 +461,158 @@ func TestReconcileSkipsBusyApp(t *testing.T) {
 	}
 	if got := len(e.engine.Containers()); got != 1 {
 		t.Errorf("containers after deploy = %d, want 1", got)
+	}
+}
+
+func exitContainer(t *testing.T, e *testEnv, app store.App, code int) string {
+	t.Helper()
+	cid := activeContainer(t, e, app)
+	e.engine.Update(cid, func(c *dockertest.Container) {
+		c.State.Running, c.State.Status, c.State.ExitCode = false, "exited", code
+	})
+	return cid
+}
+
+// The server rebooted: Docker stopped the containers (a clean exit on SIGTERM
+// is not restarted by on-failure). Apps that ought to run are started again;
+// an app the user stopped and one that crash-looped stay down.
+func TestReconcileStartsAppsThatShouldRun(t *testing.T) {
+	ctx := context.Background()
+	e := newTestEnv(t)
+	u := e.addUser("budi", store.RoleUser, store.Quota{Apps: 10, MemoryMB: 4096, CPUMilli: 4000, Databases: 3, PGConnections: 20, DiskMB: 4096})
+
+	running, _ := deployFirst(t, e, u, "running")
+	starting, _ := deployFirst(t, e, u, "starting")
+	userStopped, _ := deployFirst(t, e, u, "userstopped")
+	failed, _ := deployFirst(t, e, u, "failed")
+	untouched, _ := deployFirst(t, e, u, "untouched")
+	if err := e.svc.Stop(ctx, u, userStopped.ID); err != nil {
+		t.Fatal(err)
+	}
+	if err := e.store.SetAppStatus(ctx, starting.ID, store.AppStarting); err != nil {
+		t.Fatal(err)
+	}
+	if err := e.store.SetAppStatus(ctx, failed.ID, store.AppFailed); err != nil {
+		t.Fatal(err)
+	}
+	runningCID := exitContainer(t, e, running, 0)
+	startingCID := exitContainer(t, e, starting, 0)
+	stoppedCID := exitContainer(t, e, userStopped, 0)
+	failedCID := exitContainer(t, e, failed, 0)
+	creates := len(e.engine.CallsWithPrefix("create "))
+	starts := len(e.engine.CallsWithPrefix("start "))
+
+	if err := e.svc.Reconcile(ctx); err != nil {
+		t.Fatal(err)
+	}
+
+	for _, id := range []string{runningCID, startingCID} {
+		if c, _ := e.engine.Container(id); !c.State.Running {
+			t.Errorf("container %s should have been started again", c.Name)
+		}
+	}
+	for _, id := range []string{stoppedCID, failedCID} {
+		if c, _ := e.engine.Container(id); c.State.Running {
+			t.Errorf("container %s was started although the app must stay down", c.Name)
+		}
+	}
+	if c, _ := e.engine.Container(activeContainer(t, e, untouched)); !c.State.Running {
+		t.Error("a running container was disturbed")
+	}
+	want := map[int64]store.AppStatus{
+		running.ID: store.AppRunning, starting.ID: store.AppRunning, userStopped.ID: store.AppStopped,
+		failed.ID: store.AppFailed, untouched.ID: store.AppRunning,
+	}
+	for id, status := range want {
+		if got, _ := e.store.App(ctx, id); got.Status != status {
+			t.Errorf("app %s status = %s, want %s", got.Name, got.Status, status)
+		}
+	}
+	if n := len(e.engine.CallsWithPrefix("create ")); n != creates {
+		t.Errorf("Reconcile created %d containers; it must only start existing ones", n-creates)
+	}
+	if n := len(e.engine.CallsWithPrefix("start ")) - starts; n != 2 {
+		t.Errorf("start calls = %d, want 2 (running, starting)", n)
+	}
+
+	list, _ := e.store.Notifications(ctx, u.ID, 20)
+	var titles []string
+	for _, n := range list {
+		titles = append(titles, n.Title)
+	}
+	slices.Sort(titles)
+	wantTitles := []string{
+		"Aplikasi running dinyalakan lagi setelah server dimulai ulang",
+		"Aplikasi starting dinyalakan lagi setelah server dimulai ulang",
+	}
+	if !slices.Equal(titles, wantTitles) {
+		t.Errorf("notifications = %v, want %v", titles, wantTitles)
+	}
+
+	// Everything runs now: another Reconcile starts nothing and notifies nobody.
+	if err := e.svc.Reconcile(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if n := len(e.engine.CallsWithPrefix("start ")) - starts; n != 2 {
+		t.Errorf("second Reconcile started containers: %d calls", n-2)
+	}
+	if n, _ := e.store.UnreadCount(ctx, u.ID); n != 2 {
+		t.Errorf("notifications after second Reconcile = %d, want 2", n)
+	}
+}
+
+// A container whose start fails ends up failed with a notification, not stuck "starting".
+func TestReconcileStartFailureMarksFailed(t *testing.T) {
+	ctx := context.Background()
+	e := newTestEnv(t)
+	u := e.addUser("budi", store.RoleUser, roomyQuota)
+	app, _ := deployFirst(t, e, u, "billing")
+	exitContainer(t, e, app, 0)
+	e.engine.StartErr = errors.New("port is already allocated")
+
+	if err := e.svc.Reconcile(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if got, _ := e.store.App(ctx, app.ID); got.Status != store.AppFailed {
+		t.Fatalf("status = %s, want failed", got.Status)
+	}
+	list, _ := e.store.Notifications(ctx, u.ID, 5)
+	if len(list) != 1 || list[0].Level != store.LevelError {
+		t.Fatalf("notifications = %+v, want one error", list)
+	}
+}
+
+// Many JVMs started together fight for the CPU: the revive starts one app
+// every ReviveGap, not all at once.
+func TestReconcileStaggersStarts(t *testing.T) {
+	ctx := context.Background()
+	e := newTestEnv(t)
+	u := e.addUser("budi", store.RoleUser, store.Quota{Apps: 10, MemoryMB: 4096, CPUMilli: 4000, Databases: 3, PGConnections: 20, DiskMB: 4096})
+	const gap = 60 * time.Millisecond
+	e.svc.ReviveGap = gap
+	for _, name := range []string{"aaa", "bbb", "ccc"} {
+		app, _ := deployFirst(t, e, u, name)
+		exitContainer(t, e, app, 0)
+	}
+	var mu sync.Mutex
+	var at []time.Time
+	e.engine.OnStart = func(dockertest.Container) {
+		mu.Lock()
+		defer mu.Unlock()
+		at = append(at, time.Now())
+	}
+
+	if err := e.svc.Reconcile(ctx); err != nil {
+		t.Fatal(err)
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	if len(at) != 3 {
+		t.Fatalf("started %d containers, want 3", len(at))
+	}
+	for i := 1; i < len(at); i++ {
+		if d := at[i].Sub(at[i-1]); d < gap-10*time.Millisecond {
+			t.Errorf("start %d came %v after the previous one, want at least %v", i, d, gap)
+		}
 	}
 }

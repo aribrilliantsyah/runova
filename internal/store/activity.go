@@ -24,6 +24,7 @@ const (
 	ActRestart         = "restart"
 	ActStop            = "stop"
 	ActStart           = "start"
+	ActAutostart       = "autostart"
 	ActTerminal        = "terminal.open"
 	ActEnvUpdate       = "env.update"
 	ActEnvReveal       = "env.reveal"

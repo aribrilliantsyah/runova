@@ -14,6 +14,8 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"os/signal"
+	"syscall"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -37,7 +39,21 @@ func main() {
 		port = "8080"
 	}
 	log.Printf("hello %s listening on :%s", version, port)
-	log.Fatal(http.ListenAndServe(":"+port, mux))
+	// Like a Spring Boot or Go server with signal handling: SIGTERM ends the
+	// process with exit code 0, which Docker's on-failure policy never restarts.
+	srv := &http.Server{Addr: ":" + port, Handler: mux}
+	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGTERM, os.Interrupt)
+	defer stop()
+	go func() {
+		<-ctx.Done()
+		shutdown, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		srv.Shutdown(shutdown)
+	}()
+	if err := srv.ListenAndServe(); err != http.ErrServerClosed {
+		log.Fatal(err)
+	}
+	log.Print("stopped by signal")
 }
 
 func db(w http.ResponseWriter, r *http.Request) {

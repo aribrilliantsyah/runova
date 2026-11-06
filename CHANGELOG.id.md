@@ -4,6 +4,13 @@ Semua perubahan penting Runova. Versi mengikuti [semantic versioning](https://se
 
 Perbarui server dengan `sudo runova update` (server 0.2.0 atau lebih lama: jalankan perintah `curl … get.sh | sudo bash` sekali). Perubahan skema database dimigrasikan otomatis setelah cadangan (`runova.db.bak-v<N>-*`); `sudo runova rollback` kembali ke versi sebelumnya beserta database-nya.
 
+## [Unreleased]
+
+### Ditambahkan
+- **Aplikasi hidup lagi setelah server reboot.** Saat Runova start, ia menyalakan lagi setiap aplikasi yang semestinya jalan (status running atau starting) yang container-nya dibiarkan berhenti oleh Docker. Kebanyakan server (Spring Boot, Go dengan signal handling) keluar 0 pada SIGTERM shutdown Docker, yang tidak pernah dinyalakan lagi oleh restart policy `on-failure`, jadi sebelumnya mereka tetap mati sampai ada yang menekan Jalankan. Aplikasi melewati penantian yang sama seperti Jalankan (status starting, lalu running saat port terbuka, batas waktu JAR, deteksi OOM dan restart), satu per 5 detik supaya banyak JVM tidak berebut CPU. Aplikasi yang dihentikan pengguna atau ditandai gagal tidak disentuh. Tiap aplikasi yang dinyalakan lagi memunculkan satu notifikasi ("Aplikasi … dinyalakan lagi setelah server dimulai ulang") dan satu entri Aktivitas, sekali setiap Runova start.
+- Installer mengaktifkan `docker` dan `containerd` saat boot secara eksplisit (idempoten), tidak lagi mengandalkan paket apt.
+- `docs/operations.id.md`: apa yang naik sendiri setelah reboot. `test/system/run.sh` me-reboot seluruh server systemd dan memeriksa panel dan aplikasi menjawab lagi.
+
 ## [0.3.12] - 2026-11-06
 
 ### Diperbaiki

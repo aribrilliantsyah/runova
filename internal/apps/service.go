@@ -14,6 +14,7 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"runova/internal/artifact"
@@ -72,6 +73,8 @@ type Service struct {
 	HealthReadWait time.Duration
 	// ReconnectDelay is the pause before Monitor resubscribes to Docker events; 0 means 2 s.
 	ReconnectDelay time.Duration
+	// ReviveGap is the pause between two apps Reconcile starts after the server restarted; 0 means 5 s.
+	ReviveGap time.Duration
 	// DrainDelay is how long a zero-downtime deploy keeps the old container after Caddy switched; 0 means 5 s.
 	DrainDelay time.Duration
 	// Caddy is told to reload after anything that changes what is served; nil means no Caddy.
@@ -94,6 +97,7 @@ type Service struct {
 	portMu    sync.Mutex
 	randStart func(n int) int // test hook for host port selection
 
+	revived atomic.Bool // the start-up reconcile has run: later ones never start containers
 	monMu   sync.Mutex
 	crashes map[int64][]time.Time // app ID → recent die events
 	stopped map[int64]time.Time   // app ID → last stop requested by Runova

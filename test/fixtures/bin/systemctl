@@ -1,2 +1,9 @@
 #!/usr/bin/env bash
 echo "systemctl $*" >> "$CALLS"
+# SYSTEMCTL_MISSING="unit1 unit2": `systemctl cat` fails for these units.
+if [[ ${1:-} == cat ]]; then
+	for u in ${SYSTEMCTL_MISSING:-}; do
+		[[ $2 == "$u" ]] && exit 1
+	done
+fi
+exit 0
