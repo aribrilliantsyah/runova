@@ -133,8 +133,11 @@ func (f *fakeLoader) Config(context.Context) ([]byte, error) {
 // fakeFail is the failure a fake container simulates, chosen with the app's
 // environment variable RUNOVA_FAKE_FAIL (see docs/superpowers/notes/ui-polish-logs-ip.md):
 // health (never opens its port), slow (opens it after 8 s), exit (stops with
-// a Spring start-up error), oom (killed for memory) and crash (crash-loops
-// after it started).
+// a Spring start-up error), oom (killed for memory), crash (crash-loops
+// after it started), restartloop (OOM-killed during start and started again
+// by the restart policy, over and over, without opening its port) and
+// restartlive (the same loop after a healthy deploy, until the crash monitor
+// stops it).
 func fakeFail(spec docker.ContainerSpec) string {
 	for _, e := range spec.Env {
 		if v, ok := strings.CutPrefix(e, "RUNOVA_FAKE_FAIL="); ok {
@@ -197,6 +200,8 @@ func newFakeEngine() *dockertest.Fake {
 			)
 		case "oom":
 			lines = append(lines, docker.LogLine{Stream: "stderr", Time: now, Text: "Terminating due to java.lang.OutOfMemoryError: Java heap space"})
+		case "restartloop":
+			lines = append(lines, hibernateLines(now)...)
 		case "health":
 			if jar {
 				// The app listens on a port of its own: what a wrong server.port looks like.
@@ -223,8 +228,17 @@ func newFakeEngine() *dockertest.Fake {
 				ct.State.Running, ct.State.Status, ct.State.ExitCode, ct.State.OOMKilled = false, "exited", 137, true
 			}
 		})
-		if fail == "crash" {
+		switch fail {
+		case "crash":
 			go fakeCrashLoop(f, c)
+		case "restartloop", "restartlive":
+			go fakeRestartLoop(f, c)
+		}
+		for _, e := range c.Spec.Env {
+			if v, ok := strings.CutPrefix(e, "LOG_FLOOD="); ok {
+				n, _ := strconv.Atoi(v)
+				go fakeFlood(f, c, n)
+			}
 		}
 	}
 	f.ExecHandler = func(_ string, _ []string, conn io.ReadWriteCloser) {
@@ -261,6 +275,82 @@ func fakeCrashLoop(f *dockertest.Fake, c dockertest.Container) {
 	}
 }
 
+// hibernateLines is where the reported JVM died: right after Hibernate starts.
+func hibernateLines(now time.Time) []docker.LogLine {
+	ts := func(i int) string { return now.Add(time.Duration(i) * time.Second).UTC().Format("2006-01-02T15:04:05.000Z") }
+	text := []string{
+		ts(1) + "  INFO 7 --- [starboom] [           main] .s.d.r.c.RepositoryConfigurationDelegate : Bootstrapping Spring Data JPA repositories in DEFAULT mode.",
+		ts(2) + "  INFO 7 --- [starboom] [           main] w.s.c.ServletWebServerApplicationContext : Root WebApplicationContext: initialization completed in 11514 ms",
+		ts(3) + "  INFO 7 --- [starboom] [           main] o.hibernate.jpa.internal.util.LogHelper  : HHH008540: Processing PersistenceUnitInfo [name: default]",
+		ts(3) + "  INFO 7 --- [starboom] [           main] org.hibernate.Version                    : HHH000001: Hibernate ORM core version 7.4.13.Final",
+	}
+	out := make([]docker.LogLine, len(text))
+	for i, t := range text {
+		out[i] = docker.LogLine{Stream: "stdout", Time: now.Add(time.Duration(i) * 40 * time.Millisecond), Text: t}
+	}
+	return out
+}
+
+// fakeRestartLoop kills the container for memory every few seconds and starts
+// it again, as Docker's on-failure policy does: oom and die events, a new
+// StartedAt and RestartCount, and the Spring start-up log again from the top.
+func fakeRestartLoop(f *dockertest.Fake, c dockertest.Container) {
+	for i := 1; i <= 40; i++ {
+		time.Sleep(4 * time.Second)
+		ct, ok := f.Container(c.ID)
+		if !ok || !ct.State.Running {
+			return
+		}
+		labels := maps.Clone(c.Spec.Labels)
+		f.Emit(docker.Event{ContainerID: c.ID, Action: "oom", Labels: labels, Time: time.Now()})
+		die := maps.Clone(labels)
+		die["exitCode"] = "137"
+		f.Emit(docker.Event{ContainerID: c.ID, Action: "die", Labels: die, Time: time.Now()})
+		now := time.Now()
+		lines := append(springLines(now, c.Spec.InternalPort), hibernateLines(now)...)
+		if !f.Update(c.ID, func(ct *dockertest.Container) {
+			ct.State.RestartCount = i
+			ct.State.StartedAt = now
+			ct.Logs = append(ct.Logs, lines...)
+		}) {
+			return
+		}
+		f.Emit(docker.Event{ContainerID: c.ID, Action: "start", Labels: labels, Time: now})
+	}
+}
+
+// fakeFlood appends n log lines quickly (LOG_FLOOD=n): a busy app, for the log
+// viewer's performance. Every 40th line is a stack trace, every 7th a warning.
+func fakeFlood(f *dockertest.Fake, c dockertest.Container, n int) {
+	time.Sleep(time.Second)
+	const batch = 200
+	for i := 0; i < n; i += batch {
+		now := time.Now()
+		lines := make([]docker.LogLine, 0, batch)
+		for j := i; j < i+batch && j < n; j++ {
+			ts := now.UTC().Format("2006-01-02T15:04:05.000Z")
+			text := fmt.Sprintf("%s  INFO 7 --- [starboom] [nio-8080-exec-%d] c.d.s.web.RequestLog                     : GET /api/items/%d 200 %d ms", ts, j%10, j, j%37)
+			switch {
+			case j%40 == 39:
+				lines = append(lines,
+					docker.LogLine{Stream: "stdout", Time: now, Text: ts + " ERROR 7 --- [starboom] [nio-8080-exec-1] o.a.c.c.C.[.[.[/].[dispatcherServlet]    : Servlet.service() threw exception"},
+					docker.LogLine{Stream: "stdout", Time: now, Text: "java.lang.IllegalStateException: item " + strconv.Itoa(j) + " not found"},
+					docker.LogLine{Stream: "stdout", Time: now, Text: "\tat c.d.s.web.ItemController.get(ItemController.java:42)"},
+					docker.LogLine{Stream: "stdout", Time: now, Text: "\tat java.base/jdk.internal.reflect.DirectMethodHandleAccessor.invoke(DirectMethodHandleAccessor.java:103)"},
+				)
+				continue
+			case j%7 == 6:
+				text = fmt.Sprintf("%s  WARN 7 --- [starboom] [nio-8080-exec-%d] o.h.engine.jdbc.spi.SqlExceptionHelper   : SQL Warning Code: 0, SQLState: 00000 (%d)", ts, j%10, j)
+			}
+			lines = append(lines, docker.LogLine{Stream: "stdout", Time: now, Text: text})
+		}
+		if !f.Update(c.ID, func(ct *dockertest.Container) { ct.Logs = append(ct.Logs, lines...) }) {
+			return
+		}
+		time.Sleep(25 * time.Millisecond)
+	}
+}
+
 // fakeApps adjusts the app service so deploys against the fake engine finish:
 // health probes succeed (except for containers simulating a failure, see
 // fakeFail), ownership changes are skipped and domains starting with
@@ -277,7 +367,7 @@ func fakeApps(svc *apps.Service, engine docker.Engine) {
 					continue
 				}
 				switch fakeFail(c.Spec) {
-				case "health":
+				case "health", "restartloop":
 					return nil, errors.New("connection refused")
 				case "slow":
 					if time.Since(c.State.StartedAt) < 8*time.Second {
