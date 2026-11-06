@@ -474,8 +474,20 @@ EOF
 	chmod 0640 "$ENV_FILE"
 }
 
+# enable_docker makes Docker start at boot: the app containers and Runova
+# (which starts what the reboot stopped) depend on it. The apt package enables
+# it on Ubuntu, but nothing here may rely on that. containerd is enabled only
+# when its unit exists. `systemctl enable` is idempotent.
+enable_docker() {
+	systemctl enable docker
+	if systemctl cat containerd.service >/dev/null 2>&1; then
+		systemctl enable containerd
+	fi
+}
+
 step_docker_daemon() {
 	local merged
+	enable_docker
 	install -d -m 0755 "$(dirname "$DOCKER_DAEMON_JSON")"
 	if [[ -s $DOCKER_DAEMON_JSON ]]; then
 		jq -e 'type == "object"' "$DOCKER_DAEMON_JSON" >/dev/null 2>&1 ||

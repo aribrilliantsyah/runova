@@ -135,6 +135,29 @@ line_of() { grep -n -m1 -- "$1" "$CALLS" | cut -d: -f1; }
 	grep -q 'systemctl restart docker' "$CALLS"
 }
 
+@test "docker and containerd are enabled at boot, again on rerun without restarts" {
+	step_docker_daemon
+	step_docker_daemon
+	[ "$(grep -c '^systemctl enable docker$' "$CALLS")" -eq 2 ]
+	[ "$(grep -c '^systemctl enable containerd$' "$CALLS")" -eq 2 ]
+	[ "$(grep -c 'systemctl restart docker' "$CALLS")" -eq 1 ]
+}
+
+@test "docker is enabled before it is restarted, even with its own address pools" {
+	mkdir -p "$RUNOVA_ROOT/etc/docker"
+	echo '{"default-address-pools":[{"base":"10.200.0.0/16","size":24}]}' >"$RUNOVA_ROOT/etc/docker/daemon.json"
+	run step_docker_daemon
+	[ "$status" -eq 0 ]
+	grep -q '^systemctl enable docker$' "$CALLS"
+	! grep -q 'systemctl restart docker' "$CALLS"
+}
+
+@test "containerd is not enabled when the system has no containerd unit" {
+	SYSTEMCTL_MISSING=containerd.service step_docker_daemon
+	grep -q '^systemctl enable docker$' "$CALLS"
+	! grep -q 'systemctl enable containerd' "$CALLS"
+}
+
 @test "daemon.json created when missing and left alone on rerun" {
 	step_docker_daemon
 	jq -e '."default-address-pools"[0].base=="172.31.0.0/16"' "$RUNOVA_ROOT/etc/docker/daemon.json"
