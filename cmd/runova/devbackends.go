@@ -277,7 +277,9 @@ func fakeCrashLoop(f *dockertest.Fake, c dockertest.Container) {
 
 // hibernateLines is where the reported JVM died: right after Hibernate starts.
 func hibernateLines(now time.Time) []docker.LogLine {
-	ts := func(i int) string { return now.Add(time.Duration(i) * time.Second).UTC().Format("2006-01-02T15:04:05.000Z") }
+	ts := func(i int) string {
+		return now.Add(time.Duration(i) * time.Second).UTC().Format("2006-01-02T15:04:05.000Z")
+	}
 	text := []string{
 		ts(1) + "  INFO 7 --- [starboom] [           main] .s.d.r.c.RepositoryConfigurationDelegate : Bootstrapping Spring Data JPA repositories in DEFAULT mode.",
 		ts(2) + "  INFO 7 --- [starboom] [           main] w.s.c.ServletWebServerApplicationContext : Root WebApplicationContext: initialization completed in 11514 ms",
