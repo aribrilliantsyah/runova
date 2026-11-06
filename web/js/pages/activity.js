@@ -28,6 +28,7 @@ const ACTIONS = {
   restart: ["rotate-cw", "Restart", () => "Restart"],
   stop: ["square", "Dihentikan", () => "Dihentikan"],
   start: ["play", "Dijalankan", () => "Dijalankan"],
+  autostart: ["power", "Dinyalakan otomatis", () => "Dinyalakan lagi setelah server dimulai ulang"],
   "terminal.open": ["square-terminal", "Terminal", () => "Terminal dibuka"],
   "env.update": ["key-round", "Environment diubah", () => "Environment diubah"],
   "env.reveal": ["eye", "Environment dilihat", (a) => `Nilai ${a.detail || "environment"} dilihat`],

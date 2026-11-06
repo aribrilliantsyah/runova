@@ -22,6 +22,8 @@ const (
 	defaultReconn  = 2 * time.Second
 	appLabel       = "runova.app"
 	interruptedLog = "Runova berhenti saat deploy berjalan"
+	// defaultReviveGap is the pause between two apps started after a server restart.
+	defaultReviveGap = 5 * time.Second
 )
 
 // noteStop records that Runova is stopping the app's container on purpose.
@@ -202,24 +204,92 @@ func (s *Service) giveUp(ctx context.Context, app store.App, d store.Deployment,
 // Reconcile aligns the database with Docker. It runs when Runova starts and
 // after every reconnect of Monitor, so it is safe next to deploys: an app
 // whose change lock is taken is skipped together with all of its containers.
-// It never creates or starts containers: a running container stays as it is,
-// a stopped one is left to Docker's restart policy, and a missing one marks
-// the app failed. Containers of Runova that no active deployment owns are
-// removed.
+// It never creates containers: a running container stays as it is and a
+// missing one marks the app failed. Containers of Runova that no active
+// deployment owns are removed.
+//
+// A stopped container whose app is running or starting is what a server
+// reboot leaves behind (an app that exits 0 on SIGTERM is not restarted by
+// the on-failure policy). The first complete pass after Runova starts starts
+// those containers again, one every ReviveGap; later passes (after a
+// reconnect) only mark them stopped, as a clean exit while Runova watches is
+// the app's own decision. Apps stopped by the user or failed stay down.
 func (s *Service) Reconcile(ctx context.Context) error {
+	revive, err := s.reconcilePass(ctx, !s.revived.Load())
+	if err != nil {
+		return err
+	}
+	if !s.revived.Swap(true) && len(revive) > 0 {
+		s.background(func() { s.reviveApps(context.WithoutCancel(ctx), revive) })
+	}
+	return nil
+}
+
+// reviveApps starts the stopped containers of apps that ought to run, one
+// every ReviveGap so that many JVMs do not fight for the CPU at once. Each
+// app goes through the same wait for its port as Start (awaitStart), which
+// runs on while the next one is started. An app whose lock is taken or whose
+// state changed since the pass (the user stopped or redeployed it) is skipped.
+func (s *Service) reviveApps(ctx context.Context, list []store.App) {
+	gap := s.ReviveGap
+	if gap <= 0 {
+		gap = defaultReviveGap
+	}
+	for i, app := range list {
+		if i > 0 {
+			time.Sleep(gap)
+		}
+		s.reviveApp(ctx, app)
+	}
+}
+
+func (s *Service) reviveApp(ctx context.Context, app store.App) {
+	unlock, ok := s.lockApp(app.ID)
+	if !ok {
+		return
+	}
+	defer unlock()
+	cur, err := s.Store.App(ctx, app.ID)
+	if err != nil || cur.Status != store.AppStarting || cur.CurrentDeploymentID == nil ||
+		app.CurrentDeploymentID == nil || *cur.CurrentDeploymentID != *app.CurrentDeploymentID {
+		return
+	}
+	id, err := s.activeContainer(ctx, cur)
+	if err == nil {
+		err = s.startContainer(ctx, cur, id)
+	}
+	if err != nil {
+		slog.Error("start app after server restart", "app", cur.Name, "err", err)
+		if err := s.Store.SetAppStatus(ctx, cur.ID, store.AppFailed); err != nil {
+			slog.Error("set app failed", "app", cur.Name, "err", err)
+		}
+		s.markActive(ctx, cur, store.Problem{Kind: "start_failed", Title: "Aplikasi gagal dinyalakan setelah server dimulai ulang", Detail: err.Error(), At: s.now().UnixMilli()})
+		s.notify(ctx, cur, store.LevelError, fmt.Sprintf("Aplikasi %s gagal dinyalakan setelah server dimulai ulang", cur.Name), err.Error())
+		return
+	}
+	s.logActivity(ctx, store.User{}, store.ActAutostart, cur.Name, "")
+	s.notify(ctx, cur, store.LevelInfo, fmt.Sprintf("Aplikasi %s dinyalakan lagi setelah server dimulai ulang", cur.Name), "")
+	s.awaitStart(ctx, cur)
+}
+
+// reconcilePass is one reconcile under the apps' locks, which are released
+// when it returns. With reviveStopped, the apps that ought to run but whose
+// container is stopped are marked starting and returned.
+func (s *Service) reconcilePass(ctx context.Context, reviveStopped bool) ([]store.App, error) {
 	// Containers first: one created after this list belongs to an app whose
 	// row exists by then, so the apps read below always cover the list.
 	containers, err := s.Engine.ListContainers(ctx, map[string]string{appLabel: ""})
 	if err != nil {
-		return fmt.Errorf("list containers: %w", err)
+		return nil, fmt.Errorf("list containers: %w", err)
 	}
 	list, err := s.Store.AllApps(ctx)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	keep := map[string]bool{}
 	busy := map[string]bool{}
 	var errs []error
+	var revive []store.App
 	var unlocks []func()
 	defer func() {
 		for _, unlock := range unlocks {
@@ -233,7 +303,7 @@ func (s *Service) Reconcile(ctx context.Context) error {
 			continue
 		}
 		unlocks = append(unlocks, unlock)
-		id, err := s.reconcileApp(ctx, app)
+		id, again, err := s.reconcileApp(ctx, app, reviveStopped)
 		if err != nil {
 			errs = append(errs, fmt.Errorf("reconcile %s: %w", app.Name, err))
 			continue
@@ -241,10 +311,14 @@ func (s *Service) Reconcile(ctx context.Context) error {
 		if id != "" {
 			keep[id] = true
 		}
+		if again {
+			app.Status = store.AppStarting
+			revive = append(revive, app)
+		}
 	}
 	if len(errs) > 0 {
 		// Without knowing every app's state, removing "orphans" could kill live containers.
-		return errors.Join(errs...)
+		return nil, errors.Join(errs...)
 	}
 	for _, c := range containers {
 		if keep[c.ID] || busy[c.Labels[appLabel]] {
@@ -255,15 +329,20 @@ func (s *Service) Reconcile(ctx context.Context) error {
 			errs = append(errs, fmt.Errorf("remove orphan %s: %w", c.ID, err))
 		}
 	}
-	return errors.Join(errs...)
+	if len(errs) > 0 {
+		return nil, errors.Join(errs...)
+	}
+	return revive, nil
 }
 
 // reconcileApp fixes one app's state and returns the ID of the container that
-// belongs to its active deployment, if there is one.
-func (s *Service) reconcileApp(ctx context.Context, app store.App) (string, error) {
+// belongs to its active deployment, if there is one. revive reports that the
+// container is stopped but the app ought to run: it was marked starting and
+// the caller starts the container once the app's lock is released.
+func (s *Service) reconcileApp(ctx context.Context, app store.App, reviveStopped bool) (id string, revive bool, err error) {
 	ds, err := s.Store.Deployments(ctx, app.ID)
 	if err != nil {
-		return "", err
+		return "", false, err
 	}
 	for _, d := range ds {
 		if d.Status != store.DeployRunning {
@@ -272,20 +351,20 @@ func (s *Service) reconcileApp(ctx context.Context, app store.App) (string, erro
 		// The process that was deploying is gone; the deployment cannot finish.
 		failed, finished, log := store.DeployFailed, s.now().UnixMilli(), interruptedLog
 		if err := s.Store.UpdateDeployment(ctx, d.ID, store.DeploymentPatch{Status: &failed, FailureLog: &log, FinishedAt: &finished}); err != nil {
-			return "", err
+			return "", false, err
 		}
 		s.notify(ctx, app, store.LevelError, fmt.Sprintf("Deploy %s #%d gagal", app.Name, d.Number), interruptedLog)
 	}
 
 	if app.CurrentDeploymentID == nil {
 		if app.Status == store.AppDeploying {
-			return "", s.Store.SetAppStatus(ctx, app.ID, store.AppFailed)
+			return "", false, s.Store.SetAppStatus(ctx, app.ID, store.AppFailed)
 		}
-		return "", nil
+		return "", false, nil
 	}
 	cur, err := s.Store.Deployment(ctx, *app.CurrentDeploymentID)
 	if err != nil && !errors.Is(err, store.ErrNotFound) {
-		return "", err
+		return "", false, err
 	}
 	var st docker.ContainerState
 	missing := errors.Is(err, store.ErrNotFound) || cur.ContainerID == ""
@@ -294,7 +373,7 @@ func (s *Service) reconcileApp(ctx context.Context, app store.App) (string, erro
 		if errors.Is(err, docker.ErrNotFound) {
 			missing = true
 		} else if err != nil {
-			return "", fmt.Errorf("inspect container: %w", err)
+			return "", false, fmt.Errorf("inspect container: %w", err)
 		}
 	}
 	if missing {
@@ -302,16 +381,24 @@ func (s *Service) reconcileApp(ctx context.Context, app store.App) (string, erro
 			superseded := store.DeploySuperseded
 			lost := store.Problem{Kind: "container_lost", Title: "Container aplikasi hilang dari Docker", Hint: "Container dihapus di luar Runova atau Docker direset. Deploy ulang untuk membuatnya lagi.", At: s.now().UnixMilli()}
 			if err := s.Store.UpdateDeployment(ctx, cur.ID, store.DeploymentPatch{Status: &superseded, Problem: &lost}); err != nil {
-				return "", err
+				return "", false, err
 			}
 		}
 		if err := s.Store.ClearCurrentDeployment(ctx, app.ID, store.AppFailed); err != nil {
-			return "", err
+			return "", false, err
 		}
 		s.notify(ctx, app, store.LevelError, fmt.Sprintf("Container %s hilang; deploy ulang", app.Name), "")
-		return "", nil
+		return "", false, nil
 	}
 
+	if !st.Running && reviveStopped && app.Status.Up() {
+		if app.Status != store.AppStarting {
+			if err := s.Store.SetAppStatus(ctx, app.ID, store.AppStarting); err != nil {
+				return "", false, err
+			}
+		}
+		return st.ID, true, nil
+	}
 	want := store.AppRunning
 	if !st.Running {
 		want = store.AppStopped
@@ -321,8 +408,8 @@ func (s *Service) reconcileApp(ctx context.Context, app store.App) (string, erro
 	}
 	if app.Status != want {
 		if err := s.Store.SetAppStatus(ctx, app.ID, want); err != nil {
-			return "", err
+			return "", false, err
 		}
 	}
-	return st.ID, nil
+	return st.ID, false, nil
 }
