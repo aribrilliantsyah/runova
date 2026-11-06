@@ -279,3 +279,71 @@ func TestIntegrationEngine(t *testing.T) {
 	}
 	t.Logf("PID 1 = %q, stop took %s", strings.TrimSpace(cmdline.String()), time.Since(begin).Round(time.Millisecond))
 }
+
+// cpuMax reads the container's cgroup v2 cpu.max ("max 100000" = no cap).
+func cpuMax(t *testing.T, ctx context.Context, c *Client, id string) string {
+	t.Helper()
+	sess, err := c.Exec(ctx, id, "100001:100001", []string{"cat", "/sys/fs/cgroup/cpu.max"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer sess.Close()
+	var out bytes.Buffer
+	io.Copy(&out, sess)
+	return strings.TrimSpace(out.String())
+}
+
+// CPU is shared: a Runova container has no CPU cap, and a container capped by
+// an older Runova loses its cap in place through ClearCPULimit, also after a restart.
+func TestIntegrationSharedCPU(t *testing.T) {
+	if os.Getenv("RUNOVA_DOCKER_TEST") != "1" {
+		t.Skip("set RUNOVA_DOCKER_TEST=1 to run against a real Docker Engine")
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
+	defer cancel()
+	c := New(os.Getenv("RUNOVA_DOCKER_HOST"))
+	const img = "ubuntu:26.04"
+	if err := c.PullImage(ctx, img); err != nil {
+		t.Fatal(err)
+	}
+	if out, err := exec.Command("docker", "info", "--format", "{{.CgroupVersion}}").Output(); err != nil || strings.TrimSpace(string(out)) != "2" {
+		t.Skipf("needs cgroup v2 (got %q, %v)", out, err)
+	}
+	t.Cleanup(func() { exec.Command("docker", "rm", "-f", "runova-cpuitest-new", "runova-cpuitest-old").Run() })
+
+	id, err := c.CreateContainer(ctx, "runova-cpuitest-new", ContainerSpec{
+		Image: img, Cmd: []string{"sleep", "300"}, User: "100001:100001", MemoryBytes: 64 << 20, ReadOnly: true,
+		Labels: map[string]string{"runova.app": "cpuitest"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := c.StartContainer(ctx, id); err != nil {
+		t.Fatal(err)
+	}
+	if got := cpuMax(t, ctx, c, id); !strings.HasPrefix(got, "max ") {
+		t.Fatalf("new container cpu.max = %q, want no cap", got)
+	}
+
+	// A container as Runova 0.3.12 created it: half a core.
+	out, err := exec.Command("docker", "run", "-d", "--name", "runova-cpuitest-old", "--cpus", "0.5", "--user", "100001:100001", img, "sleep", "300").Output()
+	if err != nil {
+		t.Fatal(err)
+	}
+	old := strings.TrimSpace(string(out))
+	if got := cpuMax(t, ctx, c, old); got != "50000 100000" {
+		t.Fatalf("old container cpu.max = %q, want the 0.5 core cap", got)
+	}
+	if err := c.ClearCPULimit(ctx, old); err != nil {
+		t.Fatal(err)
+	}
+	if got := cpuMax(t, ctx, c, old); !strings.HasPrefix(got, "max ") {
+		t.Fatalf("after ClearCPULimit cpu.max = %q, want no cap", got)
+	}
+	if err := exec.Command("docker", "restart", "-t", "0", old).Run(); err != nil {
+		t.Fatal(err)
+	}
+	if got := cpuMax(t, ctx, c, old); !strings.HasPrefix(got, "max ") {
+		t.Fatalf("after restart cpu.max = %q, the cap came back", got)
+	}
+}
