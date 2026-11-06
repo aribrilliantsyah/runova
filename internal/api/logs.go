@@ -52,8 +52,11 @@ func (s *server) watchSession(ctx context.Context, r *http.Request, owner int64,
 	}
 }
 
-// logs streams the app's container log as JSON docker.LogLine messages, then
-// follows it until the client leaves.
+// logs streams the app's container log over a WebSocket: first
+// {"type":"start","started_at":…} (when the container last started, so a
+// client that reconnects after the stream ended can mark a restart), then
+// every line as a JSON docker.LogLine, following it until the client leaves
+// or the container stops.
 func (s *server) logs(w http.ResponseWriter, r *http.Request) {
 	u := auth.FromContext(r.Context())
 	id, ok := appID(w, r)
@@ -73,7 +76,7 @@ func (s *server) logs(w http.ResponseWriter, r *http.Request) {
 	// Errors surface as plain HTTP responses: nothing is upgraded yet.
 	ctx, cancel := context.WithCancel(r.Context())
 	defer cancel()
-	rc, err := s.apps.Logs(ctx, u, id, tail, true)
+	rc, started, err := s.apps.Logs(ctx, u, id, tail, true)
 	if err != nil {
 		appError(w, r, err)
 		return
@@ -98,6 +101,16 @@ func (s *server) logs(w http.ResponseWriter, r *http.Request) {
 		rc.Close()
 	}()
 
+	start := struct {
+		Type      string    `json:"type"`
+		StartedAt time.Time `json:"started_at"`
+	}{"start", started}
+	wctx, wcancel := context.WithTimeout(ctx, wsWriteTimeout)
+	err = wsjson.Write(wctx, conn, start)
+	wcancel()
+	if err != nil {
+		return
+	}
 	err = docker.ReadLogs(rc, func(l docker.LogLine) error {
 		wctx, wcancel := context.WithTimeout(ctx, wsWriteTimeout)
 		defer wcancel()

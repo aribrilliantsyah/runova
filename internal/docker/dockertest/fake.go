@@ -299,8 +299,9 @@ func (f *Fake) ListContainers(_ context.Context, filter map[string]string) ([]do
 	return out, nil
 }
 
-// Logs returns the container's lines as a multiplexed stream; with follow the
-// stream stays open until it is closed or ctx ends.
+// Logs returns the container's lines as a multiplexed stream. With follow the
+// stream then delivers lines appended later, and ends (as Docker's does) when
+// the container stops or starts again, or when it is closed or ctx ends.
 func (f *Fake) Logs(ctx context.Context, id string, tail int, follow bool) (io.ReadCloser, error) {
 	f.mu.Lock()
 	c := f.find(id)
@@ -309,12 +310,13 @@ func (f *Fake) Logs(ctx context.Context, id string, tail int, follow bool) (io.R
 		return nil, notFound(id)
 	}
 	lines := slices.Clone(c.Logs)
+	started, cid := c.State.StartedAt, c.ID
 	f.mu.Unlock()
+	sent := len(lines)
 	if tail >= 0 && len(lines) > tail {
 		lines = lines[len(lines)-tail:]
 	}
-	var buf bytes.Buffer
-	for _, l := range lines {
+	frame := func(buf *bytes.Buffer, l docker.LogLine) {
 		stream := byte(1)
 		if l.Stream == "stderr" {
 			stream = 2
@@ -326,14 +328,50 @@ func (f *Fake) Logs(ctx context.Context, id string, tail int, follow bool) (io.R
 		buf.Write(hdr)
 		buf.WriteString(text)
 	}
+	var buf bytes.Buffer
+	for _, l := range lines {
+		frame(&buf, l)
+	}
 	if !follow {
 		return io.NopCloser(&buf), nil
 	}
 	pr, pw := io.Pipe()
 	go func() {
-		pw.Write(buf.Bytes())
-		<-ctx.Done()
-		pw.CloseWithError(ctx.Err())
+		if _, err := pw.Write(buf.Bytes()); err != nil {
+			return
+		}
+		t := time.NewTicker(20 * time.Millisecond)
+		defer t.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				pw.CloseWithError(ctx.Err())
+				return
+			case <-t.C:
+			}
+			f.mu.Lock()
+			c := f.containers[cid]
+			var fresh []docker.LogLine
+			end := c == nil || !c.State.Running || !c.State.StartedAt.Equal(started)
+			if c != nil && len(c.Logs) > sent {
+				fresh = slices.Clone(c.Logs[sent:])
+				sent = len(c.Logs)
+			}
+			f.mu.Unlock()
+			if len(fresh) > 0 && !end {
+				var b bytes.Buffer
+				for _, l := range fresh {
+					frame(&b, l)
+				}
+				if _, err := pw.Write(b.Bytes()); err != nil {
+					return
+				}
+			}
+			if end {
+				pw.Close()
+				return
+			}
+		}
 	}()
 	return pr, nil
 }

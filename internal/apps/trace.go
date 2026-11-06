@@ -154,6 +154,9 @@ type stepError struct {
 	step  string
 	err   error
 	state *docker.ContainerState // the container's state when it stopped during start or health
+	// restarted: Docker's restart policy started the container again after it
+	// died; state then carries the exit code from the die event (-1 when unknown).
+	restarted bool
 	// waited and port describe a health timeout: how long and which container port.
 	waited time.Duration
 	port   int
@@ -262,9 +265,11 @@ func diagnose(app store.App, d store.Deployment, err error, lines []docker.LogLi
 		return p
 	}
 	if se != nil && se.state != nil {
-		code := se.state.ExitCode
-		p.ExitCode = &code
-		return exitProblem(p, app, *se.state, lines)
+		if se.state.ExitCode >= 0 {
+			code := se.state.ExitCode
+			p.ExitCode = &code
+		}
+		return exitProblem(p, app, *se.state, lines, se.restarted)
 	}
 	switch p.Step {
 	case stepImage:
@@ -341,15 +346,28 @@ func fmtCores(milli int) string {
 	return strings.Replace(strconv.FormatFloat(float64(milli)/1000, 'f', -1, 64), ".", ",", 1)
 }
 
-// exitProblem explains a container that exited on its own.
-func exitProblem(p store.Problem, app store.App, st docker.ContainerState, lines []docker.LogLine) store.Problem {
+// exitProblem explains a container that exited on its own. restarted means
+// Docker's restart policy started it again (its exit code may then be -1,
+// unknown).
+func exitProblem(p store.Problem, app store.App, st docker.ContainerState, lines []docker.LogLine, restarted bool) store.Problem {
 	if p.Kind == "deploy" {
 		p.Kind = "exited"
 	}
 	switch {
 	case st.OOMKilled || st.ExitCode == 137:
 		p.Title = "Memori habis (OOMKilled)"
-		p.Hint = fmt.Sprintf("Aplikasi memakai lebih dari %d MB yang diberikan. Naikkan memori di tab Lanjutan, atau batasi heap Java dengan -Xmx.", app.MemoryMB)
+		p.Hint = fmt.Sprintf("Aplikasi memakai lebih dari %d MB yang diberikan, lalu dimatikan sistem tanpa pesan di log.", app.MemoryMB)
+		if restarted {
+			p.Hint += " Docker menyalakannya lagi, dan ia mati lagi di titik yang sama."
+		}
+		if app.Kind == artifact.KindJar {
+			p.Hint += " Naikkan memori di tab Lanjutan; Spring Boot dengan JPA butuh lebih dari 192 MB saat start, 512 MB memberi ruang. Membatasi heap saja sering tidak cukup karena yang membengkak saat start adalah memori native JVM (compiler, metaspace, thread). Bila memori harus kecil, Opsi JVM -XX:TieredStopAtLevel=1 memangkasnya dengan kinerja puncak sedikit lebih rendah."
+		} else {
+			p.Hint += " Naikkan memori di tab Lanjutan."
+		}
+	case logContains(lines, "java.lang.OutOfMemoryError") != "":
+		p.Title = "Memori Java habis (OutOfMemoryError)"
+		p.Hint = fmt.Sprintf("Heap atau metaspace JVM penuh di dalam batas %d MB. Naikkan memori di tab Lanjutan, atau atur ukuran heap lewat Opsi JVM.", app.MemoryMB)
 	case logContains(lines, "UnsupportedClassVersionError") != "":
 		p.Title = "Versi Java terlalu lama untuk aplikasi ini"
 		if m := unsupportedClassRE.FindStringSubmatch(logContains(lines, "UnsupportedClassVersionError")); m != nil {
@@ -364,6 +382,12 @@ func exitProblem(p store.Problem, app store.App, st docker.ContainerState, lines
 	case logContains(lines, "Could not resolve placeholder", "APPLICATION FAILED TO START") != "":
 		p.Title = "Aplikasi gagal start karena konfigurasi"
 		p.Hint = "Biasanya ada variabel environment yang belum diisi. Lihat baris ERROR di log, lengkapi di tab Environment, lalu deploy ulang."
+	case restarted:
+		p.Title = "Aplikasi berhenti dan dinyalakan ulang"
+		if st.ExitCode >= 0 {
+			p.Title += fmt.Sprintf(" (exit code %d)", st.ExitCode)
+		}
+		p.Hint = "Container mati saat start lalu dinyalakan ulang oleh Docker, sebelum membuka port. Penyebabnya ada di baris log tepat sebelum penanda \"Container dimulai ulang\"."
 	default:
 		p.Title = fmt.Sprintf("Aplikasi berhenti sendiri (exit code %d)", st.ExitCode)
 		p.Hint = "Lihat baris terakhir log di bawah untuk penyebabnya."

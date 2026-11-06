@@ -187,7 +187,7 @@ func (s *Service) giveUp(ctx context.Context, app store.App, d store.Deployment,
 		st.ExitCode = n
 	}
 	code := st.ExitCode
-	p := exitProblem(store.Problem{Kind: "crash_loop", ExitCode: &code, At: s.now().UnixMilli()}, app, st, lines)
+	p := exitProblem(store.Problem{Kind: "crash_loop", ExitCode: &code, At: s.now().UnixMilli()}, app, st, lines, true)
 	p.Detail = fmt.Sprintf("Crash %d kali dalam 10 menit; terakhir exit code %d", crashLimit, st.ExitCode)
 	if st.OOMKilled {
 		p.Detail += " (OOMKilled)"

@@ -571,6 +571,16 @@ func TestLogsWebSocket(t *testing.T) {
 	defer conn.CloseNow()
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
+	var start struct {
+		Type      string    `json:"type"`
+		StartedAt time.Time `json:"started_at"`
+	}
+	if err := wsjson.Read(ctx, conn, &start); err != nil {
+		t.Fatalf("read start: %v", err)
+	}
+	if ct := e.engine.Containers()[0]; start.Type != "start" || !start.StartedAt.Equal(ct.State.StartedAt) {
+		t.Fatalf("first message = %+v, want the container's start time %v", start, ct.State.StartedAt)
+	}
 	var got []docker.LogLine
 	for range 2 {
 		var l docker.LogLine

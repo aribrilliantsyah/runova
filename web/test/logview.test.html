@@ -1,0 +1,186 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>logparse.js, logmodel.js</title>
+<body>
+<script type="module">
+import { test, assert, eq, run } from "/test/harness.js";
+import { parseLine, stripAnsi, ansiSegments, findAll } from "/assets/js/components/logparse.js";
+import { logModel } from "/assets/js/components/logmodel.js";
+
+const SPRING = "2026-11-05T23:12:01.123Z  INFO 7 --- [starboom] [           main] demo.GalleryApplication : Starting GalleryApplication v0.0.1 using Java 21.0.5 with PID 7";
+
+test("Spring line: own timestamp split off, level INFO, start of a run", () => {
+  const p = parseLine(SPRING);
+  eq(p.own, "2026-11-05T23:12:01.123Z");
+  eq(p.level, "info");
+  assert(p.text.startsWith("7 --- [starboom]"), `the level word moves into the badge: ${p.text}`);
+  eq(parseLine("2026-11-05 23:12:01,532 WARN  [main] o.h.Foo - slow").text, "[main] o.h.Foo - slow");
+  assert(parseLine("WARN  slow connection acquire 812ms").text.startsWith("WARN"), "without a timestamp the line stays as written");
+  assert(p.start, "the Spring 'Starting … using Java' line marks a new run");
+});
+
+test("levels of logback, log4j, logrus, zap text and Go slog", () => {
+  eq(parseLine("2026-11-05 23:12:01,532 WARN  [main] o.h.Foo - slow").level, "warn");
+  eq(parseLine("2026-11-05 23:12:01.532 ERROR 1 --- x").level, "error");
+  eq(parseLine("time=\"2026-11-05T23:12:01Z\" level=warning msg=x").level, "warn");
+  eq(parseLine("time=2026-11-05T23:12:01Z level=DEBUG msg=hi").level, "debug");
+  eq(parseLine("2026-11-05T23:12:01.000+0700\tERROR\tmain.go:12\tboom").level, "error");
+  eq(parseLine("[2026-11-05 23:12:01] TRACE x").level, "trace");
+  eq(parseLine("WARN  slow connection acquire 812ms").level, "warn");
+  eq(parseLine("panic: runtime error: index out of range").level, "error");
+  eq(parseLine("Listening on port 8080").level, "");
+});
+
+test("a level word deep in the message does not set the level", () => {
+  eq(parseLine("2026-11-05T23:12:01Z  INFO 7 --- user typed ERROR in a form").level, "info");
+});
+
+test("JSON logs: level, message, timestamp and the other fields", () => {
+  const p = parseLine('{"level":"error","time":"2026-11-05T23:12:01Z","msg":"db down","attempt":3}');
+  eq(p.level, "error");
+  eq(p.text, "db down");
+  eq(p.own, "2026-11-05T23:12:01Z");
+  eq(p.fields, "attempt=3");
+  eq(parseLine('{"level":40,"msg":"pino warn"}').level, "warn");
+  eq(parseLine('{"severity":"INFO","message":"gcp"}').level, "info");
+  eq(parseLine("{not json}").level, "");
+});
+
+test("stack trace continuation lines", () => {
+  for (const l of ["\tat org.foo.Bar.baz(Bar.java:12)", "    at com.x.Y.z(Y.java:1)", "Caused by: java.lang.IllegalStateException: x", "\t... 42 common frames omitted", "\t... 3 more", '  File "/app/x.py", line 3, in <module>', "goroutine 1 [running]:"]) {
+    assert(parseLine(l).frame, `frame: ${l}`);
+  }
+  for (const l of [SPRING, "Listening on port 8080", "", "  .   ____          _            __ _ _"]) assert(!parseLine(l).frame, `not a frame: ${JSON.stringify(l)}`);
+  assert(parseLine("org.springframework.beans.factory.BeanCreationException: Error creating bean").exc);
+  assert(parseLine("java.lang.OutOfMemoryError: Java heap space").exc);
+});
+
+test("ANSI: stripped for parsing, colors kept as segments", () => {
+  const raw = "\x1b[32m2026-11-05T23:12:01Z\x1b[0m \x1b[1;31mERROR\x1b[0m \x1b[36mdb\x1b[0m boom";
+  eq(stripAnsi(raw), "2026-11-05T23:12:01Z ERROR db boom");
+  const p = parseLine(raw);
+  eq(p.level, "error");
+  eq(p.own, "2026-11-05T23:12:01Z");
+  eq(stripAnsi(p.text), "db boom");
+  const seg = ansiSegments(p.text);
+  const db = seg.find((s) => s.text === "db");
+  assert(db && db.fg === 6, JSON.stringify(seg));
+  const bold = ansiSegments("\x1b[1;31mERROR\x1b[0m x")[0];
+  assert(bold.fg === 1 && bold.bold, JSON.stringify(bold));
+  eq(ansiSegments("\x1b[93mhi\x1b[39m!").map((s) => [s.text, s.fg]), [["hi", 11], ["!", null]]);
+  eq(ansiSegments("\x1b[38;5;4mblue\x1b[0m")[0].fg, 4);
+  eq(ansiSegments("\x1b[2K\x1b[1Gdone").map((s) => s.text).join(""), "done");
+});
+
+test("banner lines keep every space", () => {
+  const b = " /\\\\ / ___'_ __ _ _(_)_ __  __ _ \\ \\ \\ \\";
+  const p = parseLine(b);
+  eq(p.text, b);
+  eq(p.own, "");
+  eq(parseLine("").text, "");
+});
+
+test("findAll finds every case-insensitive match", () => {
+  eq(findAll("Error error ERROR", "error"), [0, 6, 12]);
+  eq(findAll("aaaa", "aa"), [0, 2]);
+  eq(findAll("x", ""), []);
+});
+
+// --- logModel: buffer, groups, restarts, filters, search ---
+
+const line = (text, time = 1000) => ({ time, text, stream: "stdout" });
+
+test("model groups an error with its stack frames", () => {
+  const m = logModel({ max: 100 });
+  m.push([
+    line("2026-11-05T23:12:01Z ERROR 7 --- run failed"),
+    line("org.foo.BarException: nope"),
+    line("\tat a.B.c(B.java:1)"),
+    line("Caused by: java.io.IOException: x"),
+    line("\t... 4 more"),
+    line("2026-11-05T23:12:02Z  INFO 7 --- next"),
+  ]);
+  const rows = m.rows();
+  eq(rows.filter((r) => r.kind === "line").length, 3, "head, exception header and next");
+  const exc = rows.find((r) => r.kind === "line" && r.entry.parsed.exc);
+  eq(exc.frames, 3);
+  eq(exc.open, false);
+  m.toggle(exc.entry.n);
+  eq(m.rows().filter((r) => r.kind === "line").length, 6, "unfolded");
+});
+
+test("model inserts a restart marker when a second run starts", () => {
+  const m = logModel({ max: 100 });
+  m.push([line("", 1), line(SPRING, Date.parse("2026-11-05T23:12:01Z")), line("2026-11-05T23:12:17Z  INFO 7 --- HHH000001: Hibernate ORM core version 7.4.13.Final", 2)]);
+  m.push([line("", 3), line(SPRING.replace("23:12:01", "23:12:25"), Date.parse("2026-11-05T23:12:25Z"))]);
+  const marks = m.rows().filter((r) => r.kind === "restart");
+  eq(marks.length, 1, "the first run is not a restart");
+  eq(marks[0].time, Date.parse("2026-11-05T23:12:25Z"));
+  eq(m.restarts(), 1);
+  // The marker sits before the blank line and banner that open the new run.
+  const rows = m.rows();
+  const i = rows.indexOf(marks[0]);
+  eq(rows[i + 1].entry.text, "");
+});
+
+test("model marks a restart reported by the server (start event)", () => {
+  const m = logModel({ max: 100 });
+  m.push([line("a"), line("b")]);
+  m.markRestart(5000);
+  m.push([line("c")]);
+  const rows = m.rows();
+  eq(rows.map((r) => r.kind), ["line", "line", "restart", "line"]);
+});
+
+test("model bounds the buffer and counts what it dropped", () => {
+  const m = logModel({ max: 5 });
+  m.push(Array.from({ length: 12 }, (_, i) => line(`l${i}`)));
+  eq(m.size(), 5);
+  eq(m.dropped(), 7);
+  eq(m.rows()[0].kind, "dropped");
+  eq(m.rows()[1].entry.text, "l7");
+});
+
+test("model filters by level and by search, counts matches", () => {
+  const m = logModel({ max: 100 });
+  m.push([line("2026-11-05T23:12:01Z  INFO 7 --- hello db"), line("2026-11-05T23:12:01Z  WARN 7 --- db slow"), line("2026-11-05T23:12:01Z ERROR 7 --- DB down db")]);
+  m.setLevels(new Set(["warn", "error"]));
+  eq(m.rows().filter((r) => r.kind === "line").length, 2);
+  m.setLevels(null);
+  m.setQuery("db");
+  eq(m.matches().length, 4);
+  m.setOnlyMatches(true);
+  eq(m.rows().filter((r) => r.kind === "line").length, 3);
+  m.setQuery("slow");
+  eq(m.rows().filter((r) => r.kind === "line").length, 1);
+});
+
+test("search inside a folded stack trace opens it", () => {
+  const m = logModel({ max: 100 });
+  m.push([line("org.foo.BarException: nope"), line("\tat a.Needle.c(B.java:1)")]);
+  m.setQuery("needle");
+  eq(m.matches().length, 1);
+  assert(m.rows().some((r) => r.kind === "line" && r.entry.text.includes("Needle")), "frame shown while it matches");
+});
+
+test("model counts by level for the filter", () => {
+  const m = logModel({ max: 100 });
+  m.push([line("2026-11-05T23:12:01Z ERROR 7 --- x"), line("2026-11-05T23:12:01Z ERROR 7 --- y"), line("plain")]);
+  eq(m.counts().error, 2);
+  eq(m.counts().none, 1);
+});
+
+test("50 000 lines are grouped quickly", () => {
+  const m = logModel({ max: 50000 });
+  const lines = [];
+  for (let i = 0; i < 50000; i++) lines.push(line(i % 50 === 0 ? "org.x.FooException: y" : i % 50 < 6 ? "\tat a.b.C(D.java:1)" : `2026-11-05T23:12:01Z  INFO 7 --- line ${i}`));
+  const t0 = performance.now();
+  m.push(lines);
+  const n = m.rows().length;
+  const took = performance.now() - t0;
+  assert(n > 40000, `rows ${n}`);
+  assert(took < 1500, `took ${took} ms`);
+});
+
+run();
+</script>
