@@ -406,9 +406,9 @@ func TestStats(t *testing.T) {
 	if st.MemoryBytes != 96<<20 || st.MemoryLimit != 256<<20 {
 		t.Errorf("memory = %d / %d", st.MemoryBytes, st.MemoryLimit)
 	}
-	// (300-100)/(2000-1000) * 4 cpus * 100
-	if st.CPUPercent != 80 {
-		t.Errorf("cpu = %v, want 80", st.CPUPercent)
+	// (300-100)/(2000-1000) * 4 cpus * 100: percent of one core.
+	if st.CPUPercent != 80 || st.OnlineCPUs != 4 {
+		t.Errorf("cpu = %v on %d cpus, want 80 on 4", st.CPUPercent, st.OnlineCPUs)
 	}
 }
 

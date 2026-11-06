@@ -34,6 +34,7 @@ type serverBody struct {
 		CPUs        int        `json:"cpus"`
 		LoadAvg     *[]float64 `json:"load_avg"`
 		MemTotalMB  int        `json:"mem_total_mb"`
+		MemUsedMB   int        `json:"mem_used_mb"`
 		MemAllocMB  int        `json:"mem_alloc_mb"`
 		DiskTotalMB int        `json:"disk_total_mb"`
 		DiskUsedMB  int        `json:"disk_used_mb"`
@@ -76,6 +77,9 @@ func TestServerStatus(t *testing.T) {
 	}
 	if b.Host.CPUs < 1 || b.Host.MemTotalMB < 1 || b.Host.DiskTotalMB < 1 || b.Host.DiskUsedMB > b.Host.DiskTotalMB {
 		t.Errorf("host = %+v", b.Host)
+	}
+	if b.Host.MemUsedMB < 1 || b.Host.MemUsedMB > b.Host.MemTotalMB {
+		t.Errorf("mem_used_mb = %d of %d", b.Host.MemUsedMB, b.Host.MemTotalMB)
 	}
 	// CPU is shared: the host reports its load (1, 5, 15 minutes), not what apps were given.
 	if b.Host.LoadAvg == nil || len(*b.Host.LoadAvg) != 3 || (*b.Host.LoadAvg)[0] < 0 {

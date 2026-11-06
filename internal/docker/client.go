@@ -571,12 +571,12 @@ func (c *Client) Stats(ctx context.Context, id string) (Stats, error) {
 	st := Stats{MemoryBytes: mem, MemoryLimit: out.MemoryStats.Limit}
 	cpuDelta := float64(out.CPUStats.Usage.Total) - float64(out.PreCPUStats.Usage.Total)
 	sysDelta := float64(out.CPUStats.System) - float64(out.PreCPUStats.System)
+	st.OnlineCPUs = int(out.CPUStats.Online)
+	if st.OnlineCPUs == 0 {
+		st.OnlineCPUs = 1
+	}
 	if cpuDelta > 0 && sysDelta > 0 {
-		cpus := float64(out.CPUStats.Online)
-		if cpus == 0 {
-			cpus = 1
-		}
-		st.CPUPercent = cpuDelta * cpus * 100 / sysDelta
+		st.CPUPercent = cpuDelta * float64(st.OnlineCPUs) * 100 / sysDelta
 	}
 	return st, nil
 }

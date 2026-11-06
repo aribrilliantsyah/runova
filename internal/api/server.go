@@ -61,12 +61,14 @@ type serverStatus struct {
 		CPUs     int    `json:"cpus"`
 		// LoadAvg is /proc/loadavg's 1, 5 and 15 minute run-queue averages; null when unreadable.
 		// CPU is shared by every app, so this is the CPU figure, not an allocation.
-		LoadAvg     []float64 `json:"load_avg"`
-		MemTotalMB  int       `json:"mem_total_mb"`
-		MemAllocMB  int       `json:"mem_alloc_mb"`
-		DiskTotalMB int       `json:"disk_total_mb"`
-		DiskUsedMB  int       `json:"disk_used_mb"`
-		// AppDiskAllocMB is the disk allocated to apps; AppDiskUsedBytes what their workspaces held at the last scans.
+		LoadAvg []float64 `json:"load_avg"`
+		// MemUsedMB is what the host uses (MemTotal − MemAvailable); MemAllocMB what apps were given.
+		MemTotalMB  int `json:"mem_total_mb"`
+		MemUsedMB   int `json:"mem_used_mb"`
+		MemAllocMB  int `json:"mem_alloc_mb"`
+		DiskTotalMB int `json:"disk_total_mb"`
+		DiskUsedMB  int `json:"disk_used_mb"`
+		// AppDiskAllocMB is the disk given to apps; AppDiskUsedBytes what their workspaces held at the last scans.
 		AppDiskAllocMB   int   `json:"app_disk_alloc_mb"`
 		AppDiskUsedBytes int64 `json:"app_disk_used_bytes"`
 		// LocalIP is the machine's LAN address; IPAccess where app IP ports are linked.
@@ -135,7 +137,7 @@ func (s *server) serverStatus(w http.ResponseWriter, r *http.Request) {
 	out.Host.OS = osName()
 	out.Host.Arch = runtime.GOOS + "/" + runtime.GOARCH
 	out.Host.CPUs = runtime.NumCPU()
-	out.Host.MemTotalMB = memTotalMB()
+	out.Host.MemTotalMB, out.Host.MemUsedMB = memInfoMB()
 	out.Host.LoadAvg = loadAvg()
 	var fs syscall.Statfs_t
 	if err := syscall.Statfs(s.dataDir, &fs); err == nil {
@@ -162,25 +164,38 @@ func osName() string {
 	return runtime.GOOS
 }
 
-// memTotalMB reads MemTotal from /proc/meminfo; 0 when unavailable.
-func memTotalMB() int {
+// memInfoMB reads MemTotal and MemTotal − MemAvailable from /proc/meminfo; zeros when unavailable.
+func memInfoMB() (total, used int) {
 	f, err := os.Open("/proc/meminfo")
 	if err != nil {
-		return 0
+		return 0, 0
 	}
 	defer f.Close()
+	var avail int
 	sc := bufio.NewScanner(f)
 	for sc.Scan() {
-		if rest, ok := strings.CutPrefix(sc.Text(), "MemTotal:"); ok {
-			fields := strings.Fields(rest)
-			if len(fields) > 0 {
-				if kb, err := strconv.Atoi(fields[0]); err == nil {
-					return kb >> 10
-				}
-			}
+		key, rest, ok := strings.Cut(sc.Text(), ":")
+		if !ok || (key != "MemTotal" && key != "MemAvailable") {
+			continue
+		}
+		fields := strings.Fields(rest)
+		if len(fields) == 0 {
+			continue
+		}
+		kb, err := strconv.Atoi(fields[0])
+		if err != nil {
+			continue
+		}
+		if key == "MemTotal" {
+			total = kb >> 10
+		} else {
+			avail = kb >> 10
 		}
 	}
-	return 0
+	if total == 0 {
+		return 0, 0
+	}
+	return total, max(total-avail, 0)
 }
 
 // loadAvg reads the 1, 5 and 15 minute load averages from /proc/loadavg; nil when unavailable.

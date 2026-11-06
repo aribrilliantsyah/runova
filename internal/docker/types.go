@@ -99,9 +99,12 @@ type Event struct {
 }
 
 type Stats struct {
-	MemoryBytes uint64  `json:"memory_bytes"`
-	MemoryLimit uint64  `json:"memory_limit"`
-	CPUPercent  float64 `json:"cpu_percent"`
+	MemoryBytes uint64 `json:"memory_bytes"`
+	MemoryLimit uint64 `json:"memory_limit"`
+	// CPUPercent is percent of one core (200 = two cores busy). CPU is shared,
+	// so the ceiling is OnlineCPUs × 100, the whole server.
+	CPUPercent float64 `json:"cpu_percent"`
+	OnlineCPUs int     `json:"online_cpus"`
 }
 
 // ExecSession is an interactive TTY attached to an exec instance.
