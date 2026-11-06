@@ -72,13 +72,15 @@ export async function renderServer(root) {
   function diskStats(host, apps) {
     const shared = host.app_disk_alloc_mb || 0;
     const filled = host.app_disk_used_bytes || 0;
+    const sized = host.app_disk_apps ?? apps.total;
     const free = Math.max(host.disk_total_mb - host.disk_used_mb, 0);
     // What apps may still write, against what the server has left: their filled part is already in disk_used_mb.
     const room = Math.max(shared - filled / MB, 0);
     return [
       stat("hard-drive", "Disk server", size(host.disk_used_mb), `terpakai dari ${size(host.disk_total_mb)}`, pct(host.disk_used_mb, host.disk_total_mb), { id: "disk-server" }),
-      stat("hard-drive", "Disk aplikasi", fmtMB(shared), `dibagikan ke ${apps.total} aplikasi, ${fmtSize(filled)} terisi`, pct(filled, shared * MB), {
+      stat("hard-drive", "Disk aplikasi", fmtMB(shared), `dibagikan ke ${sized} aplikasi, ${fmtSize(filled)} terisi`, pct(filled, shared * MB), {
         id: "disk-apps",
+        title: sized < apps.total ? `${apps.total - sized} aplikasi lama belum punya ukuran disk: isinya diukur dan ikut "terisi", tetapi belum dibatasi.` : null,
         note: room > free ? `Sisa disk server ${size(free)}, lebih kecil dari ${size(room)} yang masih boleh diisi aplikasi. Disk server bisa penuh sebelum aplikasi mencapai batasnya.` : null,
       }),
     ];

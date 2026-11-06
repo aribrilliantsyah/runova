@@ -33,3 +33,7 @@ Satu kata untuk tiap konsep, di semua halaman:
 ## Halaman Server
 
 Grid 3×2 di desktop: baris atas kapasitas server (CPU server, Memori server, Disk server), baris bawah yang dibagikan ke aplikasi (Aplikasi, Memori aplikasi, Disk aplikasi), tiap kartu aplikasi tepat di bawah kartu server yang sesuai. Di ponsel 2 kolom: kartu server di kiri, kartu aplikasinya di kanan. Peringatan Disk aplikasi: sisa yang masih boleh diisi aplikasi (`dibagikan − terisi`) > sisa disk server. Peringatan Memori aplikasi: dibagikan > total memori server.
+
+`app_disk_apps` di `/api/server` menghitung aplikasi yang punya ukuran disk (`disk_mb > 0`). Aplikasi dari sebelum migrasi `0005` (ukuran 0) diukur dan ikut "terisi", tetapi tidak disebut "dibagikan"; tooltip kartu Disk aplikasi menyebut jumlahnya.
+
+`preview-dashboard.html` (pratinjau desain statis lama, tidak di-embed) dibiarkan apa adanya.

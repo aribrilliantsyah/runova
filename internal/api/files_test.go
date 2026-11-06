@@ -325,6 +325,12 @@ func TestServerStatusReportsAppDisk(t *testing.T) {
 	budi := e.login("budi", "budi-password-1")
 	id, _ := budi.createApp("starboom", obj{"disk_mb": 128})
 	budi.waitStatus(id, "running")
+	// An app from before disk sizes (disk_mb 0) is measured but not counted as given a share.
+	old, _ := budi.createApp("legacy", obj{"disk_mb": 64})
+	zero := 0
+	if _, err := e.store.UpdateApp(t.Context(), old, store.AppPatch{DiskMB: &zero}); err != nil {
+		t.Fatal(err)
+	}
 	if err := os.WriteFile(filepath.Join(e.dataDir, "data", "budi", "starboom", "x"), make([]byte, 3<<20), 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -335,11 +341,12 @@ func TestServerStatusReportsAppDisk(t *testing.T) {
 	var st struct {
 		Host struct {
 			AppDiskAllocMB  int   `json:"app_disk_alloc_mb"`
+			AppDiskApps     int   `json:"app_disk_apps"`
 			AppDiskUsedByte int64 `json:"app_disk_used_bytes"`
 		} `json:"host"`
 	}
 	admin.do("GET", "/api/server", nil).into(t, &st)
-	if st.Host.AppDiskAllocMB != 128 || st.Host.AppDiskUsedByte < 3<<20 {
+	if st.Host.AppDiskAllocMB != 128 || st.Host.AppDiskApps != 1 || st.Host.AppDiskUsedByte < 3<<20 {
 		t.Fatalf("server disk = %+v", st.Host)
 	}
 }
