@@ -4,7 +4,7 @@ All notable changes to Runova. Versions follow [semantic versioning](https://sem
 
 Upgrade any server with `sudo runova update` (servers on 0.2.0 or older: run the `curl … get.sh | sudo bash` command once). Database schema changes are migrated automatically after a backup (`runova.db.bak-v<N>-*`); `sudo runova rollback` returns to the previous version and its database.
 
-## [Unreleased]
+## [0.3.15] - 2026-11-18
 
 ### Added
 - **Admins can open another user's apps from Pengguna.** Each row links to a new user page (`#/users/<id>`): profile, quota and usage (apps, memory, disk, databases), the user's apps with status, active version, domain, memory and last deploy, and their databases with size. An app opens on its usual page (Umum, Deployment with the timeline, live Log, Monitoring, File, Domain, Lanjutan) under a banner "Milik <user> — kamu melihat sebagai admin". `GET /api/users/{id}`; `GET /api/apps?all=1` now names each app's owner, and **Aplikasi → Semua pengguna** shows it on the card (also on phones and when the admin has no apps).
@@ -197,6 +197,7 @@ First release.
 - Users with quotas (apps, memory, CPU, databases), login limit, activity log, notifications.
 - Versioned database migrations with automatic backups.
 
+[0.3.15]: https://github.com/aribrilliantsyah/runova/compare/v0.3.14...v0.3.15
 [0.3.14]: https://github.com/aribrilliantsyah/runova/compare/v0.3.13...v0.3.14
 [0.3.13]: https://github.com/aribrilliantsyah/runova/compare/v0.3.12...v0.3.13
 [0.3.12]: https://github.com/aribrilliantsyah/runova/compare/v0.3.11...v0.3.12
