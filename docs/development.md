@@ -51,6 +51,7 @@ node web/test/smoke-dbenv.mjs     # database variables filled automatically, ove
 node web/test/smoke-app.mjs       # app detail tabs, logs, terminal
 node web/test/smoke-logs.mjs      # log viewer: 20k lines (long tasks), follow, restart marker, OOM deploy; SHOTS=dir
 node web/test/smoke-admin.mjs     # users, databases, activity, server
+node web/test/smoke-admin-view.mjs # admin opens a user and their app (banner, log, deployments), owner-only controls; SHOTS=dir
 node web/test/smoke-layout.mjs    # 5 viewport widths, light and dark, accessibility
 node web/test/smoke-lifecycle.mjs # terminal, dialogs, and sockets do not outlive page/session
 node web/test/smoke-hosting.mjs   # domain hosting: admin registers, user picks address, subdomain quota
