@@ -83,6 +83,7 @@ route
 scroll-text
 search
 server
+shield-user
 sliders-horizontal
 square
 square-terminal
@@ -92,6 +93,7 @@ text-cursor-input
 trash-2
 triangle-alert
 upload
+user
 user-plus
 users
 wrap-text

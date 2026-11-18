@@ -266,3 +266,22 @@
   .fm-menu-why{max-width:none}
   .fm-info{grid-template-columns:84px minmax(0,1fr)}
 }
+@media (max-width: 760px){
+  .adminview{margin:12px 16px 0}
+  .adminview > .lucide{display:none}
+  .toolbar .r:has(#allusers){display:flex;margin-left:0}
+  .uacts .ulbl{display:none}
+  table.uapps thead{display:none}
+  table.uapps,table.uapps tbody,table.uapps tr{display:block}
+  table.uapps tr{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:6px 12px;padding:12px 14px;border-bottom:1px solid var(--line)}
+  table.uapps tr:last-child{border-bottom:0}
+  table.uapps td{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:0;border:0;white-space:normal}
+  table.uapps td[data-label]::before{content:attr(data-label);color:var(--muted);font-size:12px}
+  table.uapps td.u-app{grid-column:1}
+  table.uapps td.u-open{grid-column:2;grid-row:1;width:auto}
+  table.uapps td:nth-child(n+2):not(.u-open){grid-column:1 / -1}
+  table.uapps th:nth-child(4),table.uapps td:nth-child(4){display:flex}
+  table.uapps .u-dom{max-width:none}
+  .udbs li{grid-template-columns:minmax(0,1fr) auto}
+  .udbs li .muted{grid-column:1 / -1;grid-row:2}
+}

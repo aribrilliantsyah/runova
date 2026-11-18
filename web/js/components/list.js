@@ -145,7 +145,7 @@ export function chips(items, onRemove) {
 
 /** emptyState(icon, title, text, ...actions) for a list that has nothing to show. */
 export function emptyState(ic, title, text, ...actions) {
-  return h("div", { class: "empty lempty" }, h("span", { class: "ic" }, icon(ic)), h("b", {}, title), text ? h("span", {}, text) : null, actions.length ? h("div", { class: "rowflex lempty-acts" }, actions) : null);
+  return h("div", { class: "empty lempty" }, h("span", { class: "ic" }, icon(ic)), h("b", {}, title), text ? h("span", {}, text) : null, actions.some(Boolean) ? h("div", { class: "rowflex lempty-acts" }, actions) : null);
 }
 
 /** skeletonRows(n, cols) → table rows that hold the space while a page loads. */

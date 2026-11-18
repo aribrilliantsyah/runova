@@ -50,6 +50,8 @@ function hashPath() {
  */
 export function renderFiles(page) {
   const node = h("div", { class: "fm-wrap" });
+  // An admin in someone else's app browses and downloads; changing files stays with the owner.
+  const readOnly = !page.mine;
   let dir = page.sub ? page.sub : hashPath();
   if (page.sub) history.replaceState(history.state, "", filesHash(page.id, dir));
   let entries = null;
@@ -68,6 +70,7 @@ export function renderFiles(page) {
   const holdsSaved = (rel) => folders().some((f) => f.dir.startsWith(`${rel}/`));
   /** locked(e) → why the entry cannot be deleted, renamed or moved, or "". */
   const locked = (e) => {
+    if (readOnly) return `Hanya ${page.state.owner} yang bisa mengubah file aplikasi ini.`;
     const rel = join(dir, e.name);
     if (e.saved) return "Folder tersimpan: isinya tetap ada saat deploy ulang. Foldernya tidak bisa dihapus, diganti namanya, atau dipindah; atur di tab Lanjutan.";
     if (e.type === "dir" && holdsSaved(rel)) return "Berisi folder tersimpan, jadi tidak bisa dihapus, diganti namanya, atau dipindah.";
@@ -131,7 +134,7 @@ export function renderFiles(page) {
   const main = h(
     "section",
     { class: "card fm" },
-    h("header", { class: "fm-head" }, crumbsEl, h("div", { class: "r" }, newBtn, upBtn, fileInput)),
+    h("header", { class: "fm-head" }, crumbsEl, readOnly ? h("div", { class: "r" }, h("span", { class: "hint" }, icon("lock"), " Hanya baca")) : h("div", { class: "r" }, newBtn, upBtn, fileInput)),
     h("div", { class: "fm-tools" }, upDirBtn, h("label", { class: "filter fm-search" }, icon("search"), search), h("span", { class: "spacer" }), reloadBtn, viewSeg),
     selBar,
     upList,
@@ -143,7 +146,7 @@ export function renderFiles(page) {
 
   // Drag and drop onto the list.
   let dragDepth = 0;
-  const hasFiles = (e) => [...(e.dataTransfer?.types || [])].includes("Files");
+  const hasFiles = (e) => !readOnly && [...(e.dataTransfer?.types || [])].includes("Files");
   stage.addEventListener("dragenter", (e) => {
     if (!hasFiles(e)) return;
     e.preventDefault();
@@ -801,9 +804,9 @@ export function renderFiles(page) {
         emptyState(
           "folder-open",
           dir ? "Folder ini kosong" : "Belum ada file",
-          dir ? "Tarik file ke sini atau pakai Unggah. File yang ditulis aplikasi ke folder ini juga muncul di sini." : `File yang ditulis aplikasi ke ./ atau folder tersimpan muncul di ${page.app.name}/. Tarik file ke sini bila aplikasi membutuhkannya sejak awal.`,
-          h("button", { type: "button", class: "btn", onclick: () => fileInput.click() }, icon("upload"), "Unggah file"),
-          h("button", { type: "button", class: "btn", onclick: () => newFolder() }, icon("folder-plus"), "Folder baru"),
+          readOnly ? "File yang ditulis aplikasi muncul di sini." : dir ? "Tarik file ke sini atau pakai Unggah. File yang ditulis aplikasi ke folder ini juga muncul di sini." : `File yang ditulis aplikasi ke ./ atau folder tersimpan muncul di ${page.app.name}/. Tarik file ke sini bila aplikasi membutuhkannya sejak awal.`,
+          readOnly ? null : h("button", { type: "button", class: "btn", onclick: () => fileInput.click() }, icon("upload"), "Unggah file"),
+          readOnly ? null : h("button", { type: "button", class: "btn", onclick: () => newFolder() }, icon("folder-plus"), "Folder baru"),
         ),
       );
       return;

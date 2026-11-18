@@ -13,6 +13,7 @@ import { renderApp } from "/assets/js/pages/app.js";
 import { renderDatabases } from "/assets/js/pages/databases.js";
 import { renderActivity } from "/assets/js/pages/activity.js";
 import { renderUsers } from "/assets/js/pages/users.js";
+import { renderUser } from "/assets/js/pages/user.js";
 import { renderServer } from "/assets/js/pages/server.js";
 
 const root = document.getElementById("root");
@@ -27,6 +28,7 @@ route("/deploy", renderDeploy, { view: "new", crumb: [["package", "Aplikasi", "/
 route("/databases", renderDatabases, { view: "db", crumb: [["database", "Database", "/databases"]] });
 route("/activity", renderActivity, { view: "activity", crumb: [["history", "Aktivitas", "/activity"]] });
 route("/users", renderUsers, { view: "users", admin: true, crumb: [["users", "Pengguna", "/users"]] });
+route("/users/:id", renderUser, { view: "users", admin: true, crumb: [["users", "Pengguna", "/users"]] });
 route("/server", renderServer, { view: "server", admin: true, crumb: [["server", "Server", "/server"]] });
 
 let shell = null;
