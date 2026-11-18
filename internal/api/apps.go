@@ -126,7 +126,8 @@ func (s *server) listApps(w http.ResponseWriter, r *http.Request) {
 		list []store.App
 		err  error
 	)
-	if u.IsAdmin() && r.URL.Query().Get("all") == "1" {
+	all := u.IsAdmin() && r.URL.Query().Get("all") == "1"
+	if all {
 		list, err = s.store.AllApps(r.Context())
 	} else {
 		list, err = s.store.AppsByUser(r.Context(), u.ID)
@@ -145,11 +146,29 @@ func (s *server) listApps(w http.ResponseWriter, r *http.Request) {
 		serverError(w, r, err)
 		return
 	}
+	// owners names each app's owner by username; only with all=1, where apps of others appear.
+	var owners map[int64]string
+	if all {
+		users, err := s.store.Users(r.Context())
+		if err != nil {
+			serverError(w, r, err)
+			return
+		}
+		names := make(map[int64]string, len(users))
+		for _, x := range users {
+			names[x.ID] = x.Username
+		}
+		owners = make(map[int64]string, len(list))
+		for _, a := range list {
+			owners[a.ID] = names[a.UserID]
+		}
+	}
 	writeJSON(w, http.StatusOK, struct {
 		Apps    []store.App          `json:"apps"`
 		Usage   usageBody            `json:"usage"`
 		Summary map[int64]appSummary `json:"summary"`
-	}{list, usageBody{used.Apps, used.MemoryMB, used.DiskMB, used.DiskUsedBytes, u.Quota}, summary})
+		Owners  map[int64]string     `json:"owners,omitempty"`
+	}{list, usageBody{used.Apps, used.MemoryMB, used.DiskMB, used.DiskUsedBytes, u.Quota}, summary, owners})
 }
 
 func (s *server) createApp(w http.ResponseWriter, r *http.Request) {

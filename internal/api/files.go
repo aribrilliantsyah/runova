@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"runova/internal/apps"
 	"runova/internal/auth"
+	"runova/internal/store"
 	"strconv"
 )
 
@@ -61,6 +62,7 @@ func (s *server) downloadFile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer f.Close()
+	s.recordAdminView(r, u, id, store.ActFileDownload, r.URL.Query().Get("path"))
 	// Always a download, never rendered: an uploaded HTML file must not run in the panel's origin.
 	w.Header().Set("Content-Type", "application/octet-stream")
 	w.Header().Set("X-Content-Type-Options", "nosniff")
@@ -261,6 +263,7 @@ func (s *server) downloadZip(w http.ResponseWriter, r *http.Request) {
 		}{plan.Name, plan.Size})
 		return
 	}
+	s.recordAdminView(r, u, id, store.ActFileDownload, plan.Name)
 	w.Header().Set("Content-Type", "application/zip")
 	w.Header().Set("X-Content-Type-Options", "nosniff")
 	w.Header().Set("Content-Security-Policy", "default-src 'none'; sandbox")

@@ -20,7 +20,7 @@ func (s *Service) DeleteAllForUser(ctx context.Context, actor, owner store.User)
 		return err
 	}
 	for _, app := range list {
-		if err := s.Delete(ctx, actor, app.ID); err != nil {
+		if err := s.deleteApp(ctx, actor, owner, app); err != nil {
 			return fmt.Errorf("delete app %s: %w", app.Name, err)
 		}
 	}

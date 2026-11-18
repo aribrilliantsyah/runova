@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io/fs"
 	"log/slog"
 	"mime"
@@ -60,6 +61,7 @@ type server struct {
 	stats    statsCache
 	health   Health
 	update   *update.Checker
+	views    sync.Map // "actor/app" → time.Time of the last recorded admin log view
 }
 
 // New builds the API handler; every route lives under /api.
@@ -99,6 +101,7 @@ func New(cfg Config) http.Handler {
 
 	mux.HandleFunc("GET /api/users", admin(s.listUsers))
 	mux.HandleFunc("POST /api/users", admin(s.createUser))
+	mux.HandleFunc("GET /api/users/{id}", admin(s.userDetail))
 	mux.HandleFunc("PATCH /api/users/{id}", admin(s.updateUser))
 	mux.HandleFunc("POST /api/users/{id}/password", admin(s.resetPassword))
 	mux.HandleFunc("DELETE /api/users/{id}", admin(s.deleteUser))
@@ -235,4 +238,27 @@ func (s *server) record(r *http.Request, actor store.User, action, target, detai
 	if err := s.store.Log(context.WithoutCancel(r.Context()), a); err != nil {
 		slog.Error("record activity", "action", action, "err", err)
 	}
+}
+
+// adminViewEvery is how often viewing the same app's live log is recorded
+// per admin: the panel reopens the stream on every tab switch and restart.
+const adminViewEvery = 10 * time.Minute
+
+// recordAdminView records an admin reading someone else's app (live log,
+// file download) with the target "owner/app". The owner's own reads are not
+// recorded; repeated log views within adminViewEvery count once.
+func (s *server) recordAdminView(r *http.Request, actor store.User, appID int64, action, detail string) {
+	app, owner, err := s.apps.Get(r.Context(), actor, appID)
+	if err != nil || app.UserID == actor.ID {
+		return
+	}
+	if action == store.ActLogView {
+		key := fmt.Sprintf("%d/%d", actor.ID, appID)
+		now := s.now()
+		if last, ok := s.views.Load(key); ok && now.Sub(last.(time.Time)) < adminViewEvery {
+			return
+		}
+		s.views.Store(key, now)
+	}
+	s.record(r, actor, action, apps.Target(actor, owner, app), detail)
 }

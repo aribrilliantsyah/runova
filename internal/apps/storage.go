@@ -567,7 +567,7 @@ func (s *Service) openRegular(owner store.User, app store.App, rel string) (*os.
 // saved folders and the folders holding them stay; their contents can go.
 // A link is removed itself, never what it points to.
 func (s *Service) DeleteFiles(ctx context.Context, actor store.User, appID int64, paths []string) error {
-	app, owner, err := s.load(ctx, actor, appID)
+	app, owner, err := s.loadOwn(ctx, actor, appID)
 	if err != nil {
 		return err
 	}
@@ -615,7 +615,7 @@ func (s *Service) DeleteFiles(ctx context.Context, actor store.User, appID int64
 
 // MakeDir creates the folder dir/name, owned by the app's UID.
 func (s *Service) MakeDir(ctx context.Context, actor store.User, appID int64, dir, name string) error {
-	app, owner, err := s.load(ctx, actor, appID)
+	app, owner, err := s.loadOwn(ctx, actor, appID)
 	if err != nil {
 		return err
 	}
@@ -657,7 +657,7 @@ func (s *Service) MakeDir(ctx context.Context, actor store.User, appID int64, di
 // data folder and a mounted folder. It never replaces an existing file, never
 // moves a saved folder (or one holding it), and never moves through a link.
 func (s *Service) MoveFile(ctx context.Context, actor store.User, appID int64, from, to string) error {
-	app, owner, err := s.load(ctx, actor, appID)
+	app, owner, err := s.loadOwn(ctx, actor, appID)
 	if err != nil {
 		return err
 	}
@@ -749,7 +749,7 @@ func (s *Service) openParent(owner store.User, app store.App, rel string) (paren
 // UID. It may not grow the workspace past the app's disk size; an existing
 // file of that name is replaced only after the new one is complete.
 func (s *Service) SaveFile(ctx context.Context, actor store.User, appID int64, dir, name string, r io.Reader) error {
-	app, owner, err := s.load(ctx, actor, appID)
+	app, owner, err := s.loadOwn(ctx, actor, appID)
 	if err != nil {
 		return err
 	}

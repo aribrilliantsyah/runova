@@ -68,7 +68,7 @@ func (s *Service) AddDomain(ctx context.Context, user store.User, appID int64, i
 		}
 		return store.Domain{}, err
 	}
-	s.logActivity(ctx, user, store.ActDomainAdd, app.Name, d.Host)
+	s.logAppActivity(ctx, user, owner, app, store.ActDomainAdd, d.Host, "menambah alamat "+d.Host+" ke")
 	return d, nil
 }
 
@@ -96,7 +96,7 @@ func (s *Service) addFreeDomain(ctx context.Context, app store.App, host string)
 
 // RemoveDomain deletes the domain and its route.
 func (s *Service) RemoveDomain(ctx context.Context, user store.User, appID, domainID int64) error {
-	app, _, err := s.load(ctx, user, appID)
+	app, owner, err := s.load(ctx, user, appID)
 	if err != nil {
 		return err
 	}
@@ -110,7 +110,7 @@ func (s *Service) RemoveDomain(ctx context.Context, user store.User, appID, doma
 		}
 		return err
 	}
-	s.logActivity(ctx, user, store.ActDomainRemove, app.Name, d.Host)
+	s.logAppActivity(ctx, user, owner, app, store.ActDomainRemove, d.Host, "menghapus alamat "+d.Host+" dari")
 	return s.ApplyCaddy(ctx)
 }
 

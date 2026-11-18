@@ -49,6 +49,8 @@ const (
 	ActFileDelete      = "file.delete"
 	ActFileRename      = "file.rename"
 	ActFileMkdir       = "file.mkdir"
+	ActFileDownload    = "file.download"
+	ActLogView         = "log.view"
 )
 
 type Activity struct {

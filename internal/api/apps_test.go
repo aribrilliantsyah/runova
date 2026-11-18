@@ -347,8 +347,8 @@ func TestAppOwnership(t *testing.T) {
 	if r := admin.do("GET", appPath(id, ""), nil); r.status != 200 {
 		t.Errorf("admin GET = %d %s", r.status, r.body)
 	}
-	if r := admin.do("PATCH", appPath(id, ""), obj{"jvm_opts": nil, "ip_access": true}); r.status != 200 {
-		t.Errorf("admin PATCH = %d %s", r.status, r.body)
+	if r := admin.do("PATCH", appPath(id, ""), obj{"jvm_opts": nil, "ip_access": true}); r.status != 403 {
+		t.Errorf("admin PATCH = %d %s, want 403 (settings are the owner's)", r.status, r.body)
 	}
 	if r := admin.do("GET", "/api/apps?all=1", nil); r.status != 200 || !strings.Contains(string(r.body), "javaapp") {
 		t.Errorf("admin list all = %d %s", r.status, r.body)
@@ -673,7 +673,7 @@ func TestWebSocketsEndWithSession(t *testing.T) {
 	}
 }
 
-// Spec §5: a terminal opens only in the user's own container, admin included.
+// Spec §5: a terminal opens only in the user's own container; an admin is refused (403).
 func TestTerminalOnlyInOwnContainer(t *testing.T) {
 	e := newAppEnv(t, 0)
 	e.addUser("budi", "budi-password-1", store.RoleUser)
@@ -682,8 +682,8 @@ func TestTerminalOnlyInOwnContainer(t *testing.T) {
 	id := b.createJarApp("javaapp")
 	b.waitStatus(id, "running")
 
-	if _, resp, err := admin.dialWS(appPath(id, "/terminal")); err == nil || resp == nil || resp.StatusCode != 404 {
-		t.Fatalf("admin terminal in another user's app: err=%v resp=%v, want a 404 handshake rejection", err, resp)
+	if _, resp, err := admin.dialWS(appPath(id, "/terminal")); err == nil || resp == nil || resp.StatusCode != 403 {
+		t.Fatalf("admin terminal in another user's app: err=%v resp=%v, want a 403 handshake rejection", err, resp)
 	}
 	if got := e.engine.CallsWithPrefix("exec "); len(got) != 0 {
 		t.Errorf("exec calls = %v, want none", got)

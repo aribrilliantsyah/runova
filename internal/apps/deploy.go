@@ -510,7 +510,7 @@ func (s *Service) cloneDeployment(ctx context.Context, actor store.User, src sto
 // that copies the old one's artifact, environment snapshot, Java version, JVM
 // options and port. Run it with Deploy.
 func (s *Service) PrepareRollback(ctx context.Context, user store.User, appID, deploymentID int64) (store.Deployment, error) {
-	app, owner, err := s.load(ctx, user, appID)
+	app, owner, err := s.loadOwn(ctx, user, appID)
 	if err != nil {
 		return store.Deployment{}, err
 	}
@@ -551,7 +551,7 @@ func (s *Service) Rollback(ctx context.Context, user store.User, appID, deployme
 // newest one when it is still pending; otherwise a new deployment cloned from
 // it with the app's current settings and environment, so changes take effect.
 func (s *Service) PrepareRedeploy(ctx context.Context, user store.User, appID int64) (store.Deployment, error) {
-	app, owner, err := s.load(ctx, user, appID)
+	app, owner, err := s.loadOwn(ctx, user, appID)
 	if err != nil {
 		return store.Deployment{}, err
 	}
@@ -629,7 +629,7 @@ func (s *Service) startContainer(ctx context.Context, app store.App, id string) 
 // Restart stops and starts the active container; the app is "starting" until
 // its port opens (awaitStart).
 func (s *Service) Restart(ctx context.Context, user store.User, appID int64) error {
-	app, _, err := s.load(ctx, user, appID)
+	app, owner, err := s.load(ctx, user, appID)
 	if err != nil {
 		return err
 	}
@@ -651,7 +651,7 @@ func (s *Service) Restart(ctx context.Context, user store.User, appID int64) err
 	if err := s.Store.SetAppStatus(ctx, app.ID, store.AppStarting); err != nil {
 		return err
 	}
-	s.logActivity(ctx, user, store.ActRestart, app.Name, "")
+	s.logAppActivity(ctx, user, owner, app, store.ActRestart, "", "me-restart")
 	s.awaitStart(ctx, app)
 	return nil
 }
@@ -703,7 +703,7 @@ func (s *Service) awaitStart(ctx context.Context, app store.App) {
 
 // Stop stops the active container and marks the app stopped.
 func (s *Service) Stop(ctx context.Context, user store.User, appID int64) error {
-	app, _, err := s.load(ctx, user, appID)
+	app, owner, err := s.load(ctx, user, appID)
 	if err != nil {
 		return err
 	}
@@ -724,13 +724,13 @@ func (s *Service) Stop(ctx context.Context, user store.User, appID int64) error 
 	}
 	s.markActive(ctx, app, store.Problem{Kind: "stopped_user", Title: "Dihentikan oleh " + user.Username, At: s.now().UnixMilli()})
 	s.refreshCaddy(ctx, app)
-	s.logActivity(ctx, user, store.ActStop, app.Name, "")
+	s.logAppActivity(ctx, user, owner, app, store.ActStop, "", "menghentikan")
 	return nil
 }
 
 // Start starts the stopped active container again.
 func (s *Service) Start(ctx context.Context, user store.User, appID int64) error {
-	app, _, err := s.load(ctx, user, appID)
+	app, owner, err := s.load(ctx, user, appID)
 	if err != nil {
 		return err
 	}
@@ -750,19 +750,24 @@ func (s *Service) Start(ctx context.Context, user store.User, appID int64) error
 		return err
 	}
 	s.refreshCaddy(ctx, app)
-	s.logActivity(ctx, user, store.ActStart, app.Name, "")
+	s.logAppActivity(ctx, user, owner, app, store.ActStart, "", "menjalankan")
 	s.awaitStart(ctx, app)
 	return nil
 }
 
 // Delete removes the app: every container labelled with it, its artifacts,
-// its data folder and its rows.
+// its data folder and its rows. Only the owner may; an admin removes apps
+// only by deleting their user (DeleteAllForUser).
 func (s *Service) Delete(ctx context.Context, user store.User, appID int64) error {
-	app, owner, err := s.load(ctx, user, appID)
+	app, owner, err := s.loadOwn(ctx, user, appID)
 	if err != nil {
 		return err
 	}
-	unlock, err := s.lockOrBusy(appID)
+	return s.deleteApp(ctx, user, owner, app)
+}
+
+func (s *Service) deleteApp(ctx context.Context, user, owner store.User, app store.App) error {
+	unlock, err := s.lockOrBusy(app.ID)
 	if err != nil {
 		return err
 	}
@@ -788,7 +793,7 @@ func (s *Service) Delete(ctx context.Context, user store.User, appID int64) erro
 	}
 	s.forget(app.ID)
 	s.refreshCaddy(ctx, app)
-	s.logActivity(ctx, user, store.ActAppDelete, app.Name, "")
+	s.logActivity(ctx, user, store.ActAppDelete, Target(user, owner, app), "")
 	return nil
 }
 
