@@ -430,8 +430,11 @@ func TestAccessIsOwnerOrAdmin(t *testing.T) {
 	if c, ok := e.engine.Container("runova-andi-one-" + strconv.FormatInt(d.ID, 10)); !ok || c.Spec.User != uid+":"+uid {
 		t.Fatalf("admin-deployed container must run as the owner (%s): %+v", uid, c.Spec.User)
 	}
-	if err := e.svc.Delete(ctx, adm, app.ID); err != nil {
-		t.Fatalf("admin delete: %v", err)
+	if err := e.svc.Delete(ctx, adm, app.ID); !errors.Is(err, apps.ErrOwnerOnly) {
+		t.Fatalf("admin delete: %v, want ErrOwnerOnly (only the owner deletes an app)", err)
+	}
+	if err := e.svc.Delete(ctx, a, app.ID); err != nil {
+		t.Fatalf("owner delete: %v", err)
 	}
 }
 

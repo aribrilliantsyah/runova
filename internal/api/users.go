@@ -12,6 +12,7 @@ import (
 	"unicode/utf8"
 
 	"runova/internal/auth"
+	"runova/internal/dbs"
 	"runova/internal/store"
 )
 
@@ -58,6 +59,52 @@ func (s *server) listUsers(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, page)
+}
+
+// userDetail serves the admin's page of one user: profile with usage and
+// quota, their apps with what the app list shows beside each, and their
+// databases (empty when the database service is not configured).
+func (s *server) userDetail(w http.ResponseWriter, r *http.Request) {
+	id, ok := pathID(w, r)
+	if !ok {
+		return
+	}
+	row, err := s.store.UserRowByID(r.Context(), id)
+	if errors.Is(err, store.ErrNotFound) {
+		writeError(w, http.StatusNotFound, "Pengguna tidak ditemukan")
+		return
+	}
+	if err != nil {
+		serverError(w, r, err)
+		return
+	}
+	list := []store.App{}
+	summary := map[int64]appSummary{}
+	if s.apps != nil {
+		if list, err = s.store.AppsByUser(r.Context(), id); err == nil {
+			summary, err = s.summaries(r.Context(), list)
+		}
+		if err != nil {
+			serverError(w, r, err)
+			return
+		}
+	}
+	databases := []dbs.DBView{}
+	pgDown := false
+	if s.dbs != nil {
+		if databases, err = s.dbs.List(r.Context(), row.User); err != nil {
+			serverError(w, r, err)
+			return
+		}
+		pgDown = s.dbs.PGDown(r.Context())
+	}
+	writeJSON(w, http.StatusOK, struct {
+		User      store.UserRow        `json:"user"`
+		Apps      []store.App          `json:"apps"`
+		Summary   map[int64]appSummary `json:"summary"`
+		Databases []dbs.DBView         `json:"databases"`
+		PGDown    bool                 `json:"pg_down"`
+	}{row, list, summary, databases, pgDown})
 }
 
 func (s *server) createUser(w http.ResponseWriter, r *http.Request) {

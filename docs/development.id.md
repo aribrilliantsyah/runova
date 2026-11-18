@@ -51,6 +51,7 @@ node web/test/smoke-dbenv.mjs     # variabel database terisi otomatis, isi sendi
 node web/test/smoke-app.mjs       # tab detail aplikasi, log, terminal
 node web/test/smoke-logs.mjs      # log viewer: 20 ribu baris (long task), follow, penanda restart, deploy OOM; SHOTS=dir
 node web/test/smoke-admin.mjs     # pengguna, database, aktivitas, server
+node web/test/smoke-admin-view.mjs # admin membuka pengguna dan aplikasinya (banner, log, deployment), kontrol khusus pemilik; SHOTS=dir
 node web/test/smoke-layout.mjs    # 5 lebar layar, terang dan gelap, aksesibilitas
 node web/test/smoke-lifecycle.mjs # terminal, dialog, dan soket tidak melewati umur halaman/sesi
 node web/test/smoke-hosting.mjs   # domain hosting: admin mendaftarkan, pengguna memilih alamat, kuota subdomain

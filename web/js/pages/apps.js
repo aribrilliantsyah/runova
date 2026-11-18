@@ -20,7 +20,8 @@ export async function renderApps(root) {
   let text = "";
   let showAll = false;
 
-  const heading = h("div", {}, h("h1", {}, "Aplikasi"), h("p", {}, `Aplikasi milik ${u.username}. Pengguna lain tidak bisa melihat atau mengubahnya.`));
+  const intro = h("p", {}, `Aplikasi milik ${u.username}. Pengguna lain tidak bisa melihat atau mengubahnya.`);
+  const heading = h("div", {}, h("h1", {}, "Aplikasi"), intro);
   const deployBtn = h("a", { class: "btn pri", href: "#/deploy" }, icon("plus"), "Deploy aplikasi");
   const body = h("div", { class: "pb" }, h("div", { class: "loading" }, "Memuat…"));
   root.append(h("section", {}, h("div", { class: "ph" }, heading, h("div", { class: "acts" }, deployBtn)), body));
@@ -52,14 +53,16 @@ export async function renderApps(root) {
           h("span", { class: "ic" }, icon("cloud-upload")),
           h("b", {}, "Belum ada aplikasi"),
           h("span", {}, "Unggah .jar atau binary Linux hasil build, lalu Runova menjalankannya."),
-          h("a", { class: "btn pri", href: "#/deploy" }, icon("rocket"), "Deploy aplikasi pertama"),
+          h("div", { class: "rowflex" },
+            h("a", { class: "btn pri", href: "#/deploy" }, icon("rocket"), "Deploy aplikasi pertama"),
+            u.role === "admin" ? h("button", { class: "btn", type: "button", id: "allusers", "aria-pressed": "false", onclick: async () => { showAll = true; await load(); } }, icon("users"), "Lihat aplikasi semua pengguna") : null),
         ),
       );
       return;
     }
     const counts = Object.fromEntries(FILTERS.map(([k, , fn]) => [k, apps.filter(fn).length]));
     const fn = FILTERS.find(([k]) => k === filter)[2];
-    const shown = apps.filter((a) => fn(a) && a.name.includes(text));
+    const shown = apps.filter((a) => fn(a) && (a.name.includes(text) || (showAll && (data.owners?.[a.id] || "").includes(text))));
 
     const input = h("input", { class: "f", type: "search", placeholder: "Filter aplikasi", "aria-label": "Filter aplikasi", value: text });
     input.addEventListener(
@@ -77,11 +80,12 @@ export async function renderApps(root) {
       ),
     );
     const adminToggle = u.role === "admin"
-      ? h("button", { class: "btn sm", type: "button", "aria-pressed": String(showAll), onclick: async () => { showAll = !showAll; await load(); } }, icon("users"), showAll ? "Semua pengguna" : "Hanya milikku")
+      ? h("button", { class: "btn sm", type: "button", id: "allusers", "aria-pressed": String(showAll), onclick: async () => { showAll = !showAll; await load(); } }, icon("users"), "Semua pengguna")
       : null;
+    intro.textContent = showAll ? "Aplikasi semua pengguna. Aplikasi milik orang lain bisa kamu lihat dan jalankan; mengubahnya hanya pemiliknya." : `Aplikasi milik ${u.username}. Pengguna lain tidak bisa melihat atau mengubahnya.`;
 
     const grid = shown.length
-      ? h("div", { class: "apps", id: "apps" }, shown.map((a) => appCard(a, data.summary[a.id], info)))
+      ? h("div", { class: "apps", id: "apps" }, shown.map((a) => appCard(a, data.summary[a.id], info, showAll && a.user_id !== u.id ? data.owners?.[a.id] : "")))
       : h("div", { class: "empty" }, h("b", {}, "Tidak ada aplikasi yang cocok"), h("span", {}, "Ubah filter atau kata kunci."));
 
     body.replaceChildren(

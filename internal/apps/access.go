@@ -91,8 +91,13 @@ func (s *Service) Logs(ctx context.Context, user store.User, appID int64, tail i
 	return rc, st.StartedAt, err
 }
 
-// CheckTerminal verifies the actor may open a terminal in the app, without opening one.
+// CheckTerminal verifies the actor may open a terminal in the app, without
+// opening one. Only the owner may (spec §5): a shell runs with the owner's
+// UID inside the owner's container, which is not part of an admin's access.
 func (s *Service) CheckTerminal(ctx context.Context, user store.User, appID int64) error {
+	if _, _, err := s.loadOwn(ctx, user, appID); err != nil {
+		return err
+	}
 	app, _, _, err := s.runningContainer(ctx, user, appID)
 	if errors.Is(err, ErrNotRunning) {
 		// Distinguish the missing shell first: static apps never have one.

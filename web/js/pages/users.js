@@ -84,10 +84,19 @@ export async function renderUsers(root) {
   const columns = [
     {
       key: "user", label: "Pengguna", sort: "username", cls: "c-user",
-      cell: (u) => h("div", { class: "ucell", title: u.email || null }, h("span", { class: "av", "aria-hidden": "true" }, initials(u)), h("div", {}, h("b", {}, name(u), u.id === me.id ? h("span", { class: "faint you" }, " (kamu)") : null), h("small", {}, u.username), u.email ? h("small", { class: "umail" }, u.email) : null)),
+      cell: (u) => h("div", { class: "ucell", title: u.email || null }, h("span", { class: "av", "aria-hidden": "true" }, initials(u)), h("div", {}, h("a", { class: "ulink", href: `#/users/${u.id}` }, h("b", {}, name(u), u.id === me.id ? h("span", { class: "faint you" }, " (kamu)") : null)), h("small", {}, u.username), u.email ? h("small", { class: "umail" }, u.email) : null)),
     },
     { key: "role", label: "Peran", sort: "role", cls: "c-role", cell: (u) => (u.role === "admin" ? h("span", { class: "chip info" }, "Admin") : h("span", { class: "chip" }, "Pengguna")) },
-    { key: "apps", label: "Aplikasi", sort: "apps", firstOrder: "desc", cell: (u) => qcell(u.usage.apps, u.quota.apps, String, "") },
+    {
+      key: "apps", label: "Aplikasi", sort: "apps", firstOrder: "desc",
+      cell: (u) => {
+        const td = qcell(u.usage.apps, u.quota.apps, String, "");
+        const link = h("a", { class: "qlink", href: `#/users/${u.id}`, "aria-label": `${u.usage.apps} aplikasi milik ${u.username}` });
+        link.append(...td.childNodes);
+        td.append(link);
+        return td;
+      },
+    },
     { key: "memory", label: "Memori", sort: "memory", firstOrder: "desc", cell: (u) => qcell(u.usage.memory_mb, u.quota.memory_mb, (v) => fmtMB(v), "") },
     { key: "db", label: "Database", sort: "databases", firstOrder: "desc", cell: (u) => qcell(u.usage.databases, u.quota.databases, String, "") },
     {
@@ -105,9 +114,10 @@ export async function renderUsers(root) {
     {
       key: "acts", label: "", srLabel: "Aksi", hideLabel: true, cls: "c-acts num nowrap",
       cell: (u) => {
+        const view = h("a", { class: "btn sm", href: `#/users/${u.id}`, "aria-label": `Lihat aplikasi ${u.username}` }, icon("package"), h("span", { class: "ulbl" }, "Lihat aplikasi"));
         const quotaBtn = h("button", { class: "btn sm", type: "button", "aria-label": `Kuota ${u.username}`, onclick: () => quotaDialog(u) }, icon("sliders-horizontal"), "Kuota");
         const more = h("button", { class: "ibtn", type: "button", "aria-label": `Lainnya untuk ${u.username}`, "aria-haspopup": "menu", onclick: () => menu(u, more) }, icon("ellipsis"));
-        return h("td", {}, h("span", { class: "uacts" }, quotaBtn, more));
+        return h("td", {}, h("span", { class: "uacts" }, view, quotaBtn, more));
       },
     },
   ];

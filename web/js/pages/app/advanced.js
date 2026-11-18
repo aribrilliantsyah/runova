@@ -12,6 +12,7 @@ import { go } from "/assets/js/router.js";
 
 /** Advanced tab: deploy mode, resources, saved folders, runtime, port, bound database, delete. */
 export function renderAdvanced(page) {
+  if (!page.mine) return readOnlyAdvanced(page);
   const node = h("div");
   let usage = null;
   let dbs = null;
@@ -152,4 +153,39 @@ export function renderAdvanced(page) {
     })
     .catch((e) => toast(e.message, "err"));
   return { node };
+}
+
+/** An admin in someone else's app sees the settings; changing them stays with the owner. */
+function readOnlyAdvanced(page) {
+  const node = h("div");
+  const render = () => {
+    const app = page.app;
+    const kv = (k, v) => [h("dt", {}, k), h("dd", {}, v)];
+    const folders = (app.folders || []).map((f) => h("div", { class: "mono" }, f.path, " → ", `${app.name}/${f.dir}`));
+    fill(
+      node,
+      h(
+        "section",
+        { class: "card", id: "a-readonly" },
+        h("header", {}, h("div", { class: "hd" }, h("h3", {}, "Pengaturan"), h("p", {}, `Hanya ${page.state.owner} yang bisa mengubah pengaturan atau menghapus aplikasi ini.`))),
+        h(
+          "div",
+          { class: "bd" },
+          h(
+            "dl",
+            { class: "kv" },
+            kv("Mode deploy", app.deploy_mode === "stopstart" ? "Stop-start" : "Tanpa jeda"),
+            kv("Memori", fmtMB(app.memory_mb)),
+            kv("Disk", app.disk_mb ? fmtMB(app.disk_mb) : "belum dibatasi"),
+            app.kind === "jar" ? kv("Java", [`Java ${app.java_version}`, app.jvm_opts ? h("span", { class: "mono faint" }, ` ${app.jvm_opts}`) : null]) : null,
+            kv("Port aplikasi", h("span", { class: "mono" }, String(app.internal_port))),
+            kv("Database", page.state.db_env?.database ? h("span", { class: "mono" }, page.state.db_env.database) : "Tanpa database"),
+            kv("Folder tersimpan", folders.length ? folders : h("span", { class: "faint" }, "Tidak ada")),
+          ),
+        ),
+      ),
+    );
+  };
+  render();
+  return { node, update: render };
 }

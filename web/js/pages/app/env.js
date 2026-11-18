@@ -14,6 +14,7 @@ import { toast } from "/assets/js/toast.js";
  * gives one a value of the user's own, which wins until it is removed again.
  */
 export function renderEnv(page) {
+  if (!page.mine) return readOnlyEnv(page);
   const node = h("div");
   const base = page.state.env.map((e) => ({ name: e.name, value: e.value, secret: e.secret }));
   let draft = base.map((e) => ({ ...e, state: "same", revealed: false }));
@@ -197,4 +198,18 @@ export function renderEnv(page) {
   // The 5 s poll only matters here when the "deploy ulang" banner should appear or go away;
   // repainting anything else would drop keyboard focus.
   return { node, update: () => (bannerShown !== Boolean(redeployBanner(page)) ? render() : undefined) };
+}
+
+/** An admin in someone else's app sees the names and plain values; secrets stay masked, never revealed. */
+function readOnlyEnv(page) {
+  const node = h("div");
+  const render = () => {
+    const rows = page.state.env.map((e) =>
+      h("div", { class: "envrow", "data-env": e.name }, h("span", { class: "k" }, e.name, e.secret ? icon("key-round") : null), h("span", { class: `mono v ${e.secret ? "faint" : ""}`, title: e.secret ? "Rahasia: nilainya hanya bisa dilihat pemilik" : e.value }, e.secret ? "••••••••••••" : e.value), h("span", { class: "acts" })),
+    );
+    const db = page.state.db_env ? h("div", { class: "envedit-note" }, "Variabel database diisi otomatis dari ", h("b", { class: "mono" }, page.state.db_env.database), ".") : null;
+    fill(node, h("section", { class: "card" }, h("div", { class: "envhead" }, h("span", {}, `${rows.length} variabel`), h("div", { class: "r" }, h("span", { class: "hint" }, icon("lock"), " Hanya pemilik yang bisa mengubah atau melihat nilai rahasia"))), h("div", { id: "envlist" }, rows.length ? rows : h("div", { class: "envedit-note" }, "Aplikasi ini tidak punya variabel.")), db));
+  };
+  render();
+  return { node, update: render };
 }

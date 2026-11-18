@@ -33,6 +33,20 @@ type UserListFilter struct {
 	Order  string
 	Limit  int
 	Offset int
+	// ID, when set, selects that one user; Q is then ignored.
+	ID int64
+}
+
+// UserRowByID is one user with its usage and last login, as in the Users table.
+func (s *Store) UserRowByID(ctx context.Context, id int64) (UserRow, error) {
+	p, err := s.UserList(ctx, UserListFilter{ID: id})
+	if err != nil {
+		return UserRow{}, err
+	}
+	if len(p.Items) == 0 {
+		return UserRow{}, fmt.Errorf("user row: %w", ErrNotFound)
+	}
+	return p.Items[0], nil
 }
 
 type RoleCounts struct {
@@ -101,7 +115,11 @@ func (s *Store) UserList(ctx context.Context, f UserListFilter) (UserPage, error
 
 	match := "1"
 	var args []any
-	if q := strings.TrimSpace(f.Q); q != "" {
+	switch q := strings.TrimSpace(f.Q); {
+	case f.ID != 0:
+		match = `u.id = ?1`
+		args = append(args, f.ID)
+	case q != "":
 		match = `(LOWER(u.username) LIKE ?1 ESCAPE '\' OR LOWER(u.display_name) LIKE ?1 ESCAPE '\' OR LOWER(u.email) LIKE ?1 ESCAPE '\')`
 		args = append(args, "%"+likeEscape(strings.ToLower(q))+"%")
 	}

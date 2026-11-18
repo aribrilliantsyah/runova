@@ -59,6 +59,11 @@ Semua setelan lain (kuota bawaan, batas unggahan, rentang port, runtime yang dii
 - **Admin pertama** dibuat installer lewat `runova admin create <username>`; password acak 20 karakter ditampilkan sekali di terminal.
 - **Mutasi API** wajib `Content-Type: application/json` (atau multipart untuk unggahan) dan header `Origin` (bila ada) harus sama dengan host permintaan. Bersama `SameSite=Lax` ini menutup CSRF.
 - Admin tidak bisa menghapus atau menurunkan peran dirinya sendiri, dan admin terakhir tidak bisa dihapus/diturunkan.
+- **Hak admin atas aplikasi pengguna lain** (keputusan dan alasan: `docs/superpowers/notes/admin-view.md`). Pengguna biasa: aplikasi orang lain selalu 404 (termasuk WebSocket log dan terminal), keberadaannya tidak bocor. Admin:
+  - **melihat**: detail aplikasi (environment dengan nilai rahasia tetap kosong), deployment dan timeline, log deployment, log live (WebSocket), monitoring, daftar/info/pratinjau/unduh file dan zip, domain; `GET /api/apps?all=1` (dengan `owners`), `GET /api/users/{id}` (profil, pemakaian, kuota, aplikasi dengan ringkasan, database);
+  - **menjalankan**: restart, stop, jalankan; tambah/hapus/cek domain;
+  - **ditolak 403** "Hanya pemilik aplikasi yang bisa melakukan ini": ubah pengaturan (`PATCH`), hapus aplikasi, ubah environment, lihat nilai rahasia (`reveal`), unggah versi baru, deploy ulang, kembalikan versi, unggah/buat folder/pindah/hapus file, terminal web. Aplikasi pengguna lain hanya terhapus bila admin menghapus penggunanya.
+  - Setiap aksi admin di aplikasi orang lain tercatat di Aktivitas dengan pelaku admin dan target `pemilik/aplikasi` (`target:budi/billing`): restart/stop/start, `domain.add`/`domain.remove`, `log.view` (log live, paling sering sekali per 10 menit per admin per aplikasi), `file.download` (file dan zip). Restart/stop/start dan perubahan domain juga memberi pemilik notifikasi ("Admin <nama> menghentikan <aplikasi>").
 - 2FA tidak termasuk versi pertama.
 
 ### Kuota per pengguna
@@ -109,7 +114,7 @@ Deteksi:
   - glibc: `ubuntu:26.04`
 - Artefak di-mount read-only; folder kerja aplikasi di-mount ke `/data` (rw) dan menjadi `WorkingDir`; env `RUNOVA_DATA_DIR=/data`. Path relatif (`./storage`) jatuh ke folder kerja.
 - **Folder tersimpan** (per aplikasi, kolom `apps.folders`): daftar `{path, dir}`. `path` relatif (atau di bawah `/data`) = sudah di folder kerja, `dir` = path itu. `path` absolut = bind mount tambahan `mounts/<user>/<app>/<dir>` → `path` dan → `/data/<dir>` (supaya tampil di folder kerja dan di tab File). Ditolak: `..`, karakter selain `[A-Za-z0-9._/-]`, `/`, `/var`, `/opt`, `/srv`, `/home`, `/mnt`, `/media`, `/app`, `/data`, `/tmp` dan isinya, `/proc`, `/sys`, `/dev`, `/etc`, `/usr`, `/bin`, `/sbin`, `/lib*`, `/boot`, `/run`, `/root`, `/var/run`, `/opt/java` beserta isinya, path artefak (`/app/<file>`) atau induknya, path/folder yang saling bertumpuk, maksimal 20. Saat deploy Runova membuat foldernya milik UID pengguna lewat `os.Root` tanpa mengikuti link; komponen yang berupa link/bukan folder menggagalkan deploy di langkah persiapan. Mengubah folder tersimpan = deploy ulang (`redeploy_required`). Rootfs tetap read-only.
-- **Tab File** (pemilik/admin), pengelola file folder kerja. Path relatif terhadap folder kerja, dibuka lewat `os.Root` (`..`, path absolut, `\`, NUL, dan link keluar ditolak; link sendiri tidak pernah diikuti). Aplikasi orang lain → 404.
+- **Tab File** (pemilik; admin hanya melihat dan mengunduh), pengelola file folder kerja. Path relatif terhadap folder kerja, dibuka lewat `os.Root` (`..`, path absolut, `\`, NUL, dan link keluar ditolak; link sendiri tidak pernah diikuti). Aplikasi orang lain → 404; perubahan oleh admin → 403.
   - `GET /api/apps/{id}/files?path=` daftar isi (`items` = jumlah isi tiap folder).
   - `GET …/files/download?path=` selalu `attachment`, `application/octet-stream`, `nosniff`, CSP sandbox.
   - `GET …/files/info?path=` ukuran, waktu, tipe MIME hasil sniff (bukan dari nama; SVG dikenali), `preview` = `image`/`text`/kosong.
@@ -129,7 +134,7 @@ Deteksi:
 - **Server reboot:** Docker menghentikan container dengan SIGTERM; aplikasi yang keluar dengan kode 0 tidak dinyalakan lagi oleh `on-failure`. Saat Runova start, `Reconcile` menyalakan container yang berhenti bila status aplikasinya `running`/`starting` (satu per 5 detik, status `starting` lalu tunggu port seperti Jalankan, satu notifikasi dan satu entri aktivitas `autostart` per aplikasi). Aplikasi `stopped` (dihentikan pengguna atau keluar sendiri) dan `failed` tidak dinyalakan. Installer mengaktifkan `docker` dan `containerd` saat boot. Container tidak dibuat ulang; restart policy tetap `on-failure` (lihat `docs/superpowers/notes/reboot-autostart.md`).
 - **Crash:** Docker menjalankan ulang. Lebih dari 5 restart dalam 10 menit → status "Gagal", container dihentikan, notifikasi di panel (ikon lonceng). Email/Telegram tidak termasuk versi pertama.
 - **Log:** dari Docker (`json-file`, maks 3×10 MB per container), ditampilkan live di panel.
-- **Terminal web:** `docker exec` `/bin/sh` sebagai UID pengguna (bukan root) ke container milik pengguna sendiri lewat WebSocket. Hanya untuk JAR dan binary glibc; image distroless (binary statis) tidak punya shell, tombolnya nonaktif dengan alasan itu. Setiap sesi tercatat di Aktivitas.
+- **Terminal web:** `docker exec` `/bin/sh` sebagai UID pengguna (bukan root) ke container milik pengguna sendiri lewat WebSocket; admin di aplikasi orang lain ditolak 403 sebelum upgrade. Hanya untuk JAR dan binary glibc; image distroless (binary statis) tidak punya shell, tombolnya nonaktif dengan alasan itu. Setiap sesi tercatat di Aktivitas.
 
 ## 6. Domain dan HTTPS
 
@@ -159,7 +164,7 @@ Deteksi:
 
 ## 9. Aktivitas
 
-Dicatat dengan pelaku, target, dan waktu: login berhasil/gagal, pengguna dibuat/diubah/dihapus, kuota diubah, deploy, rollback, restart/stop, domain diubah, database dibuat/dihapus/di-restore, sesi terminal dibuka. Pengguna melihat aktivitasnya sendiri; admin melihat semua. Halaman Aktivitas mencari di server (kata, frasa, pengecualian, field `aksi:` `pelaku:` `target:` `ip:` `hasil:`), dengan rentang waktu, histogram, facet, dan paging; batas pengguna biasa berlaku untuk semua bagian itu (`GET /api/activity/search`, lihat `docs/superpowers/notes/list-pages.md`).
+Dicatat dengan pelaku, target, dan waktu: login berhasil/gagal, pengguna dibuat/diubah/dihapus, kuota diubah, deploy, rollback, restart/stop, domain diubah, database dibuat/dihapus/di-restore, sesi terminal dibuka, dan bacaan admin atas aplikasi orang lain (`log.view`, `file.download`). Aksi admin pada aplikasi orang lain bertarget `pemilik/aplikasi`. Pengguna melihat aktivitasnya sendiri; admin melihat semua. Halaman Aktivitas mencari di server (kata, frasa, pengecualian, field `aksi:` `pelaku:` `target:` `ip:` `hasil:`), dengan rentang waktu, histogram, facet, dan paging; batas pengguna biasa berlaku untuk semua bagian itu (`GET /api/activity/search`, lihat `docs/superpowers/notes/list-pages.md`).
 
 ## 10. Installer
 

@@ -948,3 +948,36 @@ pre.fm-code:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
 .acard .ep .adisk .bar{flex:1;min-width:40px;height:4px;margin-left:4px}
 a.chip,a.chip:hover{text-decoration:none}
 #diskfull{text-decoration:none}
+
+/* Admin in someone else's app (#adminview) and the admin's page of one user (#v-user). */
+.adminview{margin:14px 22px 0;border:1px solid var(--line)}
+.adminview > .lucide{flex:none}
+.adminview > span{flex:1 1 220px}
+.adminview b{font-weight:600}
+.acard .h .chip.owner{margin-left:auto;max-width:120px;overflow:hidden;text-overflow:ellipsis}
+.acard .h .chip.owner + .dot{margin-left:0}
+.acard .h .chip.owner .lucide{width:12px;height:12px;flex:none}
+.av.lg{width:40px;height:40px;font-size:14px}
+a.ulink{color:inherit;text-decoration:none}
+a.ulink:hover b{text-decoration:underline}
+a.qlink{display:block;color:inherit;text-decoration:none}
+a.qlink:hover b{text-decoration:underline}
+.stat.over .v{color:var(--err)}
+#v-user .card + .card{margin-top:12px}
+#v-user .card > header .faint{font-variant-numeric:tabular-nums}
+table.uapps td{white-space:nowrap}
+table.uapps .u-applink{display:flex;align-items:center;gap:10px;color:inherit;text-decoration:none;min-width:0}
+table.uapps .u-applink:hover b{text-decoration:underline}
+table.uapps .u-applink > span:last-child{display:grid;min-width:0}
+table.uapps .u-applink b{font-weight:600}
+table.uapps .u-applink small{color:var(--muted);font-size:12px}
+table.uapps .u-dom{max-width:240px;overflow:hidden;text-overflow:ellipsis}
+table.uapps .u-open{width:1%}
+.udbs{list-style:none;margin:0;padding:0}
+.udbs li{display:grid;grid-template-columns:minmax(0,max-content) minmax(0,1fr) auto;gap:14px;align-items:center;padding:9px 14px;border-top:1px solid var(--line);font-size:12.5px}
+.udbs li:first-child{border-top:0}
+.udbs .muted{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.udb-note{margin:10px 14px 0}
+@media (max-width: 1100px){
+  table.uapps th:nth-child(4),table.uapps td:nth-child(4){display:none}
+}

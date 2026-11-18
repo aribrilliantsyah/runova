@@ -4,6 +4,18 @@ All notable changes to Runova. Versions follow [semantic versioning](https://sem
 
 Upgrade any server with `sudo runova update` (servers on 0.2.0 or older: run the `curl … get.sh | sudo bash` command once). Database schema changes are migrated automatically after a backup (`runova.db.bak-v<N>-*`); `sudo runova rollback` returns to the previous version and its database.
 
+## [Unreleased]
+
+### Added
+- **Admins can open another user's apps from Pengguna.** Each row links to a new user page (`#/users/<id>`): profile, quota and usage (apps, memory, disk, databases), the user's apps with status, active version, domain, memory and last deploy, and their databases with size. An app opens on its usual page (Umum, Deployment with the timeline, live Log, Monitoring, File, Domain, Lanjutan) under a banner "Milik <user> — kamu melihat sebagai admin". `GET /api/users/{id}`; `GET /api/apps?all=1` now names each app's owner, and **Aplikasi → Semua pengguna** shows it on the card (also on phones and when the admin has no apps).
+- Every admin action on someone else's app is in Aktivitas with the target `owner/app` (`target:budi/billing`): restart, stop, start, domain changes, opening the live log (`log.view`, at most once per 10 minutes) and file downloads (`file.download`). The owner gets a notification when an admin restarts, stops or starts the app or changes its domains.
+
+### Changed
+- **What an admin may do in another user's app is now enforced by the server.** Admins see everything and run the app (restart, stop, start, domains). Deploying a new version, redeploying, rolling back, changing settings or environment, revealing secret values, changing files, the terminal and deleting the app answer 403 "Hanya pemilik aplikasi yang bisa melakukan ini"; before, the API allowed most of these to admins. Secret values are never shown to an admin. Other users still get 404 for every endpoint, WebSockets included. The matrix and the reasons are in `docs/superpowers/notes/admin-view.md`.
+
+### Fixed
+- Opening an app that does not exist (or another user's, for a normal user) shows "Aplikasi tidak ditemukan" with a way back instead of an empty page.
+
 ## [0.3.14] - 2026-11-06
 
 ### Fixed

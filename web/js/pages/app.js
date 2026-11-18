@@ -1,6 +1,7 @@
 import * as api from "/assets/js/api.js";
 import { h, icon, poll, fill } from "/assets/js/dom.js";
 import { ctx } from "/assets/js/ctx.js";
+import { emptyState } from "/assets/js/components/list.js";
 import * as session from "/assets/js/session.js";
 import { kindLogo, runtimeLabel, runtimeSub } from "/assets/js/kinds.js";
 import { appState } from "/assets/js/components/deploytrace.js";
@@ -33,7 +34,14 @@ export const tabFromSlug = (slug) => TABS.find((t) => t[1] === (slug || ""));
 export async function renderApp(root, params) {
   const id = Number(params.id);
   const me = session.current();
-  const [detail, info] = await Promise.all([api.get(`/api/apps/${id}`), api.get("/api/info")]);
+  let detail, info;
+  try {
+    [detail, info] = await Promise.all([api.get(`/api/apps/${id}`), api.get("/api/info")]);
+  } catch (e) {
+    // Another user's app looks exactly like one that does not exist (404).
+    root.append(h("section", { id: "v-noapp" }, h("div", { class: "pb" }, emptyState("circle-alert", e.status === 404 ? "Aplikasi tidak ditemukan" : "Aplikasi tidak bisa dimuat", e.status === 404 ? "Aplikasi ini tidak ada atau bukan milikmu." : e.message, h("a", { class: "btn", href: "#/apps" }, icon("arrow-left"), "Kembali ke Aplikasi")))));
+    return null;
+  }
 
   // page is what the tabs share: the latest detail, a few samples of usage, and helpers.
   const page = {
@@ -74,7 +82,7 @@ export async function renderApp(root, params) {
   const title = h("h1", { style: { display: "flex", "align-items": "center", gap: "8px", "flex-wrap": "wrap" } });
   const subline = h("p", { class: "mono" });
   const logoBox = h("span", { class: "lgbox" });
-  const deleteHeader = h("a", { class: "btn sm ghost danger", href: page.path("advanced"), "aria-label": "Hapus aplikasi" }, icon("trash-2"));
+  const deleteHeader = page.mine ? h("a", { class: "btn sm ghost danger", href: page.path("advanced"), "aria-label": "Hapus aplikasi" }, icon("trash-2")) : null;
   const links = h("div", { class: "links" });
   const why = h("div", { class: "appwhy", role: "status", "aria-live": "polite", hidden: true });
   const head = h("div", { class: "ph" }, h("div", { class: "dhead" }, logoBox, h("div", {}, title, subline)), h("div", { class: "acts" }, deleteHeader));
@@ -85,7 +93,17 @@ export async function renderApp(root, params) {
     TABS.map(([key, slug, label]) => h("a", { role: "tab", href: page.path(slug), "data-tab": key, "aria-selected": "false" }, label)),
   );
   const panel = h("div", { class: "tab", role: "tabpanel" });
-  root.append(h("section", { id: "v-app" }, head, why, links, tabsEl, panel));
+  // An admin in someone else's app: whose it is, and what the admin may do here.
+  const asAdmin = page.mine
+    ? null
+    : h(
+        "div",
+        { class: "banner info adminview", id: "adminview", role: "note" },
+        icon("shield-user"),
+        h("span", {}, h("b", {}, `Milik ${detail.owner}`), " — kamu melihat sebagai admin. Kamu bisa melihat semuanya, restart, stop, jalankan, dan mengatur domain; pemilik diberi tahu. Deploy, pengaturan, environment, file, dan terminal hanya untuk pemilik."),
+        h("div", { class: "r" }, h("a", { class: "btn sm", href: `#/users/${detail.app.user_id}` }, icon("user"), `Pengguna ${detail.owner}`)),
+      );
+  root.append(h("section", { id: "v-app" }, asAdmin, head, why, links, tabsEl, panel));
 
   let domainsCache = [];
   function paintHeader() {
@@ -121,7 +139,9 @@ export async function renderApp(root, params) {
         icon("external-link"),
       ),
     );
-    ctx.shell.setCrumb([["package", "Aplikasi", "/apps"], [kindLogo(app.kind, language), app.name, `/apps/${id}`]]);
+    ctx.shell.setCrumb(page.mine
+      ? [["package", "Aplikasi", "/apps"], [kindLogo(app.kind, language), app.name, `/apps/${id}`]]
+      : [["users", "Pengguna", "/users"], ["user", owner, `/users/${app.user_id}`], [kindLogo(app.kind, language), app.name, `/apps/${id}`]]);
   }
   page.setDomains = (list) => {
     domainsCache = list;

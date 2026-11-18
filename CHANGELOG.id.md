@@ -4,6 +4,18 @@ Semua perubahan penting Runova. Versi mengikuti [semantic versioning](https://se
 
 Perbarui server dengan `sudo runova update` (server 0.2.0 atau lebih lama: jalankan perintah `curl … get.sh | sudo bash` sekali). Perubahan skema database dimigrasikan otomatis setelah cadangan (`runova.db.bak-v<N>-*`); `sudo runova rollback` kembali ke versi sebelumnya beserta database-nya.
 
+## [Unreleased]
+
+### Ditambahkan
+- **Admin bisa membuka aplikasi pengguna lain dari Pengguna.** Setiap baris menaut ke halaman pengguna baru (`#/users/<id>`): profil, kuota dan pemakaian (aplikasi, memori, disk, database), aplikasinya dengan status, versi aktif, domain, memori, dan deploy terakhir, serta databasenya dengan ukuran. Aplikasi terbuka di halamannya yang biasa (Umum, Deployment dengan timeline, Log live, Monitoring, File, Domain, Lanjutan) di bawah banner "Milik <pengguna> — kamu melihat sebagai admin". `GET /api/users/{id}`; `GET /api/apps?all=1` kini menyebut pemilik tiap aplikasi, dan **Aplikasi → Semua pengguna** menampilkannya di kartu (juga di ponsel dan saat admin belum punya aplikasi).
+- Setiap aksi admin di aplikasi orang lain tercatat di Aktivitas dengan target `pemilik/aplikasi` (`target:budi/billing`): restart, stop, jalankan, perubahan domain, membuka log live (`log.view`, paling sering sekali per 10 menit), dan unduhan file (`file.download`). Pemilik mendapat notifikasi saat admin me-restart, menghentikan, atau menjalankan aplikasinya atau mengubah domainnya.
+
+### Diubah
+- **Apa yang boleh dilakukan admin di aplikasi pengguna lain kini ditegakkan server.** Admin melihat semuanya dan menjalankan aplikasi (restart, stop, jalankan, domain). Unggah versi baru, deploy ulang, kembalikan versi, ubah pengaturan atau environment, lihat nilai rahasia, ubah file, terminal, dan hapus aplikasi dijawab 403 "Hanya pemilik aplikasi yang bisa melakukan ini"; sebelumnya API mengizinkan sebagian besar itu untuk admin. Nilai rahasia tidak pernah ditampilkan ke admin. Pengguna lain tetap mendapat 404 di semua endpoint, termasuk WebSocket. Matriks dan alasannya di `docs/superpowers/notes/admin-view.md`.
+
+### Diperbaiki
+- Membuka aplikasi yang tidak ada (atau milik orang lain, bagi pengguna biasa) menampilkan "Aplikasi tidak ditemukan" dengan jalan kembali, bukan halaman kosong.
+
 ## [0.3.14] - 2026-11-06
 
 ### Diperbaiki

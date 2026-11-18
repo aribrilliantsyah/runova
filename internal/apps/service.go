@@ -185,9 +185,43 @@ func (s *Service) load(ctx context.Context, actor store.User, appID int64) (stor
 	}
 }
 
+// ErrOwnerOnly refuses an admin a change that belongs to the app's owner:
+// admins see every app and run it, but what the owner deployed, configured
+// or stored stays the owner's (docs/superpowers/notes/admin-view.md).
+var ErrOwnerOnly = forbidden("Hanya pemilik aplikasi yang bisa melakukan ini")
+
+// loadOwn is load for changes only the owner may make: an admin gets
+// ErrOwnerOnly, everyone else ErrAppNotFound as before.
+func (s *Service) loadOwn(ctx context.Context, actor store.User, appID int64) (store.App, store.User, error) {
+	app, owner, err := s.load(ctx, actor, appID)
+	if err == nil && app.UserID != actor.ID {
+		return store.App{}, store.User{}, ErrOwnerOnly
+	}
+	return app, owner, err
+}
+
 // Get returns an app the actor may access, with its owner.
 func (s *Service) Get(ctx context.Context, actor store.User, appID int64) (store.App, store.User, error) {
 	return s.load(ctx, actor, appID)
+}
+
+// Target names the app in the activity log: its name for the owner,
+// "owner/app" when an admin acts on someone else's app, so the entry can be
+// found by either.
+func Target(actor, owner store.User, app store.App) string {
+	if actor.ID == app.UserID {
+		return app.Name
+	}
+	return owner.Username + "/" + app.Name
+}
+
+// logAppActivity records an action on app; when an admin did it to someone
+// else's app and tell is not empty, the owner is notified with tell as what happened.
+func (s *Service) logAppActivity(ctx context.Context, actor, owner store.User, app store.App, action, detail, tell string) {
+	s.logActivity(ctx, actor, action, Target(actor, owner, app), detail)
+	if tell != "" && actor.ID != app.UserID {
+		s.notify(ctx, app, store.LevelInfo, fmt.Sprintf("Admin %s %s %s", actor.Username, tell, app.Name), "")
+	}
 }
 
 // UsageOf returns what the user's apps have allocated.
@@ -494,7 +528,7 @@ func (s *Service) adoptUpload(ctx context.Context, owner store.User, app store.A
 // NewVersion adds a pending deployment built from a new upload of the same
 // kind, with the app's current settings and environment.
 func (s *Service) NewVersion(ctx context.Context, user store.User, appID int64, uploadID string) (store.Deployment, error) {
-	app, owner, err := s.load(ctx, user, appID)
+	app, owner, err := s.loadOwn(ctx, user, appID)
 	if err != nil {
 		return store.Deployment{}, err
 	}
@@ -545,7 +579,7 @@ var deployModes = []string{store.DeployModeStopStart, store.DeployModeZero}
 // needs the extra amount to fit in the remaining quota; lowering is always
 // allowed, even when the owner is over quota.
 func (s *Service) UpdateSettings(ctx context.Context, user store.User, appID int64, in SettingsInput) (app store.App, redeploy bool, err error) {
-	app, owner, err := s.load(ctx, user, appID)
+	app, owner, err := s.loadOwn(ctx, user, appID)
 	if err != nil {
 		return store.App{}, false, err
 	}
@@ -676,7 +710,7 @@ func (s *Service) minJava(ctx context.Context, app store.App) (int, error) {
 // SetEnv replaces the app's environment. A secret entry with an empty value
 // keeps the stored value of the secret of the same name.
 func (s *Service) SetEnv(ctx context.Context, user store.User, appID int64, env []store.EnvEntry) error {
-	if _, _, err := s.load(ctx, user, appID); err != nil {
+	if _, _, err := s.loadOwn(ctx, user, appID); err != nil {
 		return err
 	}
 	if err := ValidateEnv(env); err != nil {
@@ -729,7 +763,7 @@ func (s *Service) TypedEnv(ctx context.Context, appID int64) (map[string]bool, e
 
 // RevealEnv returns the plain value of one stored variable.
 func (s *Service) RevealEnv(ctx context.Context, user store.User, appID int64, name string) (string, error) {
-	if _, _, err := s.load(ctx, user, appID); err != nil {
+	if _, _, err := s.loadOwn(ctx, user, appID); err != nil {
 		return "", err
 	}
 	env, err := s.Store.Env(ctx, appID)

@@ -162,6 +162,29 @@ req "$BUDI_JAR" GET "/api/apps/$ANDI_APP"
 expect 404
 pass "andi_app menolak budi (permission denied); $andi_ip tidak terjangkau dari jaringan budi; app andi 404 bagi budi"
 
+# Admin: sees andi's app and runs it; changes that belong to andi are refused.
+req "$ADMIN_JAR" GET "/api/apps/$ANDI_APP"
+expect 200
+[[ $(jq -r .owner <<<"$BODY") == andi ]] || fail "admin: pemilik bukan andi: $BODY"
+andi_id=$(jq -r .app.user_id <<<"$BODY")
+req "$ADMIN_JAR" PATCH "/api/apps/$ANDI_APP" '{"ip_access":false}'
+expect 403
+req "$ADMIN_JAR" GET "/api/apps/$ANDI_APP/terminal"
+expect 403
+req "$ADMIN_JAR" POST "/api/apps/$ANDI_APP/restart"
+expect 202
+wait_app "$ANDI_JAR" "$ANDI_APP"
+req "$ADMIN_JAR" GET "/api/activity/search?q=$(jq -rn '"target:andi/hello aksi:restart"|@uri')"
+expect 200
+[[ $(jq -r .total <<<"$BODY") -ge 1 ]] || fail "restart admin tidak tercatat dengan target andi/hello: $BODY"
+req "$ANDI_JAR" GET /api/notifications
+expect 200
+jq -e '.notifications | any(.title | test("Admin admin me-restart hello"))' <<<"$BODY" >/dev/null || fail "andi tidak diberi tahu: $BODY"
+req "$ADMIN_JAR" GET "/api/users/$andi_id"
+expect 200
+[[ $(jq -r '.apps[0].name' <<<"$BODY") == hello ]] || fail "detail pengguna andi: $BODY"
+pass "admin melihat app andi, restart tercatat (andi/hello) dan andi diberi tahu; PATCH dan terminal 403"
+
 # ---------------------------------------------------------------------------
 scenario "7 restart-runova"
 "$here/stack.sh" restart-runova >/dev/null || fail "Runova tidak naik lagi"

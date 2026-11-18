@@ -13,6 +13,7 @@ import (
 
 	"runova/internal/auth"
 	"runova/internal/docker"
+	"runova/internal/store"
 )
 
 const (
@@ -82,6 +83,7 @@ func (s *server) logs(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer rc.Close()
+	s.recordAdminView(r, u, id, store.ActLogView, "")
 
 	conn, err := acceptWebSocket(w, r)
 	if err != nil {

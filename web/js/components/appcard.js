@@ -2,8 +2,8 @@ import { h, icon, fmtTime, fmtMB, fmtSize, pct, bar } from "/assets/js/dom.js";
 import { kindLogo, runtimeSub, statusOf } from "/assets/js/kinds.js";
 import { ipHost } from "/assets/js/components/iphost.js";
 
-/** appCard(app, summary, info) → the clickable card of the app list; info is GET /api/info. */
-export function appCard(app, summary, info) {
+/** appCard(app, summary, info, owner) → the clickable card of the app list; info is GET /api/info; owner names another user's app. */
+export function appCard(app, summary, info, owner = "") {
   const ip = ipHost(info);
   const [cls, label] = statusOf(app.status);
   const logo = h("span", { class: "lgbox" }, kindLogo(app.kind, summary?.language));
@@ -28,12 +28,13 @@ export function appCard(app, summary, info) {
   const when = summary?.deployed_at ? fmtTime(summary.deployed_at) : "belum pernah";
   return h(
     "a",
-    { class: "acard", href: `#/apps/${app.id}`, "aria-label": `${app.name}, ${label}` },
+    { class: "acard", href: `#/apps/${app.id}`, "aria-label": `${app.name}, ${label}${owner ? `, milik ${owner}` : ""}` },
     h(
       "div",
       { class: "h" },
       logo,
       h("div", {}, h("b", {}, app.name), h("div", { class: "sub" }, runtimeSub(app, summary?.language))),
+      owner ? h("span", { class: "chip owner", title: `Milik ${owner}` }, icon("user"), owner) : null,
       h("span", { class: `dot ${cls}`, title: label }),
     ),
     h("div", { class: "ep" }, domainRow, ipRow, diskRow),

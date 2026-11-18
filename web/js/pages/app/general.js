@@ -58,10 +58,11 @@ export function renderGeneral(page) {
     const kill = running || app.status === "starting" || app.status === "deploying";
     const lock = busy || app.status === "deploying";
 
-    const upBtn = h("button", { class: "btn dark", type: "button", disabled: lock, onclick: newVersion }, icon("cloud-upload"), "Unggah versi baru");
-    const restart = h("button", { class: "btn", type: "button", disabled: lock || !running, onclick: (e) => confirm({ title: "Restart aplikasi?", message: "Aplikasi berhenti sebentar lalu jalan lagi dengan deployment yang sama.", submit: "Restart", onSubmit: async () => { await api.post(`/api/apps/${page.id}/restart`); toast("Restart dimulai"); await page.reload(); } }) }, icon("rotate-cw"), "Restart");
+    const upBtn = page.mine ? h("button", { class: "btn dark", type: "button", disabled: lock, onclick: newVersion }, icon("cloud-upload"), "Unggah versi baru") : null;
+    const told = page.mine ? "" : ` ${page.state.owner} diberi tahu lewat notifikasi.`;
+    const restart = h("button", { class: "btn", type: "button", disabled: lock || !running, onclick: (e) => confirm({ title: "Restart aplikasi?", message: `Aplikasi berhenti sebentar lalu jalan lagi dengan deployment yang sama.${told}`, submit: "Restart", onSubmit: async () => { await api.post(`/api/apps/${page.id}/restart`); toast("Restart dimulai"); await page.reload(); } }) }, icon("rotate-cw"), "Restart");
     const toggle = kill
-      ? h("button", { class: "btn danger", type: "button", disabled: lock, onclick: () => confirm({ title: "Hentikan aplikasi?", message: "Container dihentikan. Domain dan akses IP tidak melayani apa pun sampai aplikasi dijalankan lagi.", submit: "Stop", danger: true, onSubmit: async () => { await api.post(`/api/apps/${page.id}/stop`); toast("Aplikasi dihentikan"); await page.reload(); } }) }, icon("square"), "Stop")
+      ? h("button", { class: "btn danger", type: "button", disabled: lock, onclick: () => confirm({ title: "Hentikan aplikasi?", message: `Container dihentikan. Domain dan akses IP tidak melayani apa pun sampai aplikasi dijalankan lagi.${told}`, submit: "Stop", danger: true, onSubmit: async () => { await api.post(`/api/apps/${page.id}/stop`); toast("Aplikasi dihentikan"); await page.reload(); } }) }, icon("square"), "Stop")
       : h("button", { class: "btn", type: "button", disabled: lock || !deployment, title: deployment ? null : "Belum ada deployment", onclick: (e) => act(e.currentTarget, async () => { await api.post(`/api/apps/${page.id}/start`); await page.reload(); }, "Aplikasi dijalankan") }, icon("play"), "Jalankan");
     const term = h("button", { class: "btn", type: "button", disabled: Boolean(termWhy), title: termWhy || null, onclick: () => openTerminal({ id: page.id, name: app.name }) }, icon("square-terminal"), "Terminal");
     const why = termWhy && app.kind === "static" ? h("p", { class: "hint", style: { margin: "8px 0 0" } }, termWhy) : null;
@@ -86,10 +87,10 @@ export function renderGeneral(page) {
     const broken = !failedDeploy && deployment?.problem && app.status === "failed" ? deployment : null;
     const shown = failedDeploy || broken;
     const failCard = shown
-      ? h("div", { class: "genfail" }, problemCard(shown.problem, { failureLog: shown.failure_log }), h("div", { class: "actions" }, h("a", { class: "btn", href: page.path(`deployments/${shown.id}`) }, icon("scroll-text"), "Langkah & log"), h("a", { class: "btn ghost", href: page.path("advanced") }, icon("sliders-horizontal"), "Ubah pengaturan")))
+      ? h("div", { class: "genfail" }, problemCard(shown.problem, { failureLog: shown.failure_log }), h("div", { class: "actions" }, h("a", { class: "btn", href: page.path(`deployments/${shown.id}`) }, icon("scroll-text"), "Langkah & log"), h("a", { class: "btn ghost", href: page.path("advanced") }, icon("sliders-horizontal"), page.mine ? "Ubah pengaturan" : "Lihat pengaturan")))
       : null;
 
-    const ipSw = h("button", { class: "sw", type: "button", role: "switch", "aria-checked": String(app.ip_access), "aria-label": "Akses lewat IP", disabled: busy });
+    const ipSw = h("button", { class: "sw", type: "button", role: "switch", "aria-checked": String(app.ip_access), "aria-label": "Akses lewat IP", disabled: busy || !page.mine, title: page.mine ? null : "Hanya pemilik yang bisa mengubah akses IP" });
     ipSw.addEventListener("click", () =>
       act(ipSw, async () => {
         await api.patch(`/api/apps/${page.id}`, { ip_access: !app.ip_access });
@@ -135,7 +136,7 @@ export function renderGeneral(page) {
         h(
           "section",
           { class: "card" },
-          h("header", {}, h("h3", {}, "Resource"), h("div", { class: "r" }, h("a", { class: "btn sm ghost", href: page.path("advanced") }, "Ubah"))),
+          h("header", {}, h("h3", {}, "Resource"), h("div", { class: "r" }, h("a", { class: "btn sm ghost", href: page.path("advanced") }, page.mine ? "Ubah" : "Detail"))),
           h("div", { class: "bd meters" }, meter("memory-stick", "Memori", memLabel, mem), meter("cpu", "CPU", cpuLabel, cpu), diskRow, h("a", { class: "hint", href: page.path("files") }, `Lihat file di ${app.name}/`)),
         ),
       ),
